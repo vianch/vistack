@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f6f3f1">
+    <title>Run observer</title>
+    <style>
+      :root {
+        --color-parchment: #f6f3f1;
+        --color-lake-blue: #2b59d1;
+        --color-periwinkle-mist: #cfdaf5;
+        --color-sky-blue: #a0b5eb;
+        --color-mint: #a7fccd;
+        --color-coral: #ff9473;
+        --color-gold: #ecda98;
+        --color-crimson: #f37a0a;
+        --color-off-black: #242424;
+        --color-ink: #000000;
+        --color-graphite: #4e4d4d;
+        --color-smoke: #797776;
+        --color-ash: #cecac8;
+        --font-abc-diatype-mono: "ABC Diatype Mono", "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        --font-untitled-serif: "Untitled Serif", Georgia, Cambria, "Times New Roman", Times, serif;
+        --text-caption: 12px;
+        --text-body-sm: 14px;
+        --text-body: 16px;
+        --text-label: 18px;
+        --text-body-lg: 20px;
+        --text-subheading: 24px;
+        --text-heading-sm: 32px;
+        --text-heading: 40px;
+        --text-heading-lg: 48px;
+        --spacing-8: 8px;
+        --spacing-16: 16px;
+        --spacing-24: 24px;
+        --spacing-32: 32px;
+        --spacing-40: 40px;
+        --spacing-64: 64px;
+        --radius-card: 40px;
+        --radius-pill: 9999px;
+        --page-max-width: 1432px;
+      }
+
+      * { box-sizing: border-box; }
+
+      html { background: var(--color-parchment); }
+
+      body {
+        min-width: 320px;
+        margin: 0;
+        color: var(--color-off-black);
+        background: var(--color-parchment);
+        font-family: var(--font-abc-diatype-mono);
+        font-size: var(--text-body);
+        line-height: 1.35;
+        letter-spacing: -0.4px;
+      }
+
+      button, a { font: inherit; }
+
+      button { cursor: pointer; }
+
+      .announcement {
+        display: flex;
+        min-height: 40px;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--spacing-16);
+        padding: 8px max(24px, calc((100vw - var(--page-max-width)) / 2));
+        color: var(--color-parchment);
+        background: var(--color-ink);
+        font-size: var(--text-body-sm);
+        text-transform: uppercase;
+        letter-spacing: -0.28px;
+      }
+
+      .announcement strong { font-weight: 500; }
+
+      .announcement span:last-child { color: var(--color-mint); }
+
+      .shell {
+        position: relative;
+        width: min(100% - 48px, var(--page-max-width));
+        margin: 0 auto;
+        padding: var(--spacing-40) 0 80px;
+        overflow: hidden;
+      }
+
+      .wash {
+        position: absolute;
+        z-index: 0;
+        width: 420px;
+        height: 220px;
+        border-radius: 50%;
+        filter: blur(70px);
+        opacity: 0.34;
+        pointer-events: none;
+      }
+
+      .wash-one { top: 10px; right: 2%; background: linear-gradient(110deg, var(--color-coral), var(--color-sky-blue)); }
+      .wash-two { top: 520px; left: -180px; background: linear-gradient(110deg, var(--color-sky-blue), var(--color-mint)); }
+
+      .topbar, .metrics, .layout, .sources { position: relative; z-index: 1; }
+
+      .topbar {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: var(--spacing-32);
+        margin-bottom: var(--spacing-40);
+      }
+
+      .eyebrow {
+        margin: 0 0 var(--spacing-16);
+        color: var(--color-smoke);
+        font-size: var(--text-caption);
+        text-transform: uppercase;
+        letter-spacing: -0.4px;
+      }
+
+      h1, h2, h3, p { margin-top: 0; }
+
+      h1, h2, h3 { font-family: var(--font-untitled-serif); font-weight: 400; letter-spacing: -0.02em; }
+
+      h1 { max-width: 690px; margin-bottom: var(--spacing-16); font-size: clamp(40px, 6vw, 80px); line-height: 1.05; }
+
+      h2 { margin-bottom: 0; font-size: var(--text-heading-sm); line-height: 1.2; }
+
+      h3 { margin-bottom: 8px; font-size: var(--text-subheading); line-height: 1.2; }
+
+      .lede { max-width: 720px; margin-bottom: 0; color: var(--color-graphite); font-size: var(--text-body-lg); }
+
+      .actions { display: flex; flex-wrap: wrap; justify-content: end; gap: var(--spacing-8); }
+
+      .button {
+        min-height: 48px;
+        border: 1px solid var(--color-off-black);
+        border-radius: 100px;
+        padding: 12px 20px;
+        color: var(--color-off-black);
+        background: transparent;
+        font-size: var(--text-body-sm);
+        text-transform: uppercase;
+        letter-spacing: -0.28px;
+      }
+
+      .button:hover, .button:focus-visible { background: var(--color-periwinkle-mist); outline: none; }
+
+      .button-blue { border-color: var(--color-lake-blue); color: #fff; background: var(--color-lake-blue); }
+      .button-blue:hover, .button-blue:focus-visible { color: var(--color-off-black); background: var(--color-sky-blue); }
+      .button-dark { color: #fff; background: var(--color-off-black); }
+      .button-dark:hover, .button-dark:focus-visible { color: var(--color-off-black); }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: var(--spacing-16);
+        margin-bottom: var(--spacing-24);
+      }
+
+      .metric, .panel {
+        border: 1px solid var(--color-ash);
+        border-radius: var(--radius-card);
+        background: rgba(246, 243, 241, 0.8);
+      }
+
+      .metric { min-height: 134px; padding: var(--spacing-24); }
+
+      .metric-label, .meta-label {
+        display: block;
+        margin-bottom: var(--spacing-8);
+        color: var(--color-smoke);
+        font-size: var(--text-caption);
+        text-transform: uppercase;
+      }
+
+      .metric-value { font-family: var(--font-untitled-serif); font-size: var(--text-heading-lg); line-height: 1; }
+
+      .metric-note { margin: 12px 0 0; color: var(--color-graphite); font-size: var(--text-body-sm); }
+
+      .layout { display: grid; gap: var(--spacing-24); }
+
+      .panel { padding: var(--spacing-40); }
+
+      .panel-header {
+        display: flex;
+        align-items: start;
+        justify-content: space-between;
+        gap: var(--spacing-16);
+        margin-bottom: var(--spacing-24);
+      }
+
+      .panel-title { margin-bottom: 8px; }
+
+      .panel-kicker { margin: 0; color: var(--color-smoke); font-size: var(--text-body-sm); }
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid var(--color-ash);
+        border-radius: var(--radius-pill);
+        padding: 8px 12px;
+        color: var(--color-graphite);
+        background: var(--color-parchment);
+        font-size: var(--text-caption);
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+
+      .status::before { width: 7px; height: 7px; border-radius: 50%; background: var(--color-smoke); content: ""; }
+      .status-live::before, .status-pass::before { background: #22834b; }
+      .status-warn::before { background: var(--color-crimson); }
+      .status-fail::before { background: var(--color-coral); }
+
+      .run-summary {
+        display: grid;
+        grid-template-columns: 1.4fr 1fr 1fr;
+        gap: var(--spacing-16);
+        border-top: 1px solid var(--color-ash);
+        padding-top: var(--spacing-24);
+      }
+
+      .summary-value { margin: 0; color: var(--color-off-black); font-size: var(--text-label); }
+      .summary-value.serif { font-family: var(--font-untitled-serif); font-size: var(--text-subheading); }
+      .summary-value.muted { color: var(--color-smoke); }
+
+      .pipeline {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(120px, 1fr));
+        gap: 0;
+        overflow-x: auto;
+      }
+
+      .stage { position: relative; min-width: 120px; padding-right: var(--spacing-16); }
+      .stage:not(:last-child)::after { position: absolute; top: 22px; right: 0; width: 100%; border-top: 1px solid var(--color-ash); content: ""; }
+      .stage-dot { position: relative; z-index: 1; width: 44px; height: 44px; margin-bottom: 12px; border: 1px solid var(--color-ash); border-radius: 50%; background: var(--color-parchment); }
+      .stage-dot::after { position: absolute; top: 50%; left: 50%; width: 8px; height: 8px; border-radius: 50%; background: var(--color-ash); content: ""; transform: translate(-50%, -50%); }
+      .stage.is-current .stage-dot { border-color: var(--color-lake-blue); background: var(--color-periwinkle-mist); }
+      .stage.is-current .stage-dot::after { background: var(--color-lake-blue); }
+      .stage.is-done .stage-dot::after { background: #22834b; }
+      .stage-label { margin: 0 0 4px; font-size: var(--text-body-sm); text-transform: uppercase; }
+      .stage-detail { margin: 0; color: var(--color-smoke); font-size: var(--text-caption); }
+
+      .split { display: grid; grid-template-columns: minmax(250px, 0.85fr) minmax(0, 2fr); gap: var(--spacing-24); }
+
+      .coordinator-card { min-height: 100%; border-radius: 24px; padding: var(--spacing-24); background: var(--color-periwinkle-mist); }
+      .coordinator-card h3 { margin-bottom: var(--spacing-24); }
+      .coordinator-card .meta-label { color: var(--color-graphite); }
+      .monitor-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid rgba(36, 36, 36, 0.2); padding: 12px 0; font-size: var(--text-body-sm); }
+      .monitor-row:last-child { padding-bottom: 0; }
+      .monitor-row strong { font-weight: 500; text-align: right; }
+
+      .agent-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--spacing-16); }
+      .agent-card { border: 1px solid var(--color-ash); border-radius: 24px; padding: var(--spacing-24); background: rgba(246, 243, 241, 0.72); }
+      .agent-top { display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: var(--spacing-16); }
+      .agent-role { margin: 0; font-family: var(--font-untitled-serif); font-size: var(--text-subheading); }
+      .agent-model { color: var(--color-smoke); font-size: var(--text-caption); text-transform: uppercase; }
+      .agent-meta { display: grid; gap: 8px; margin: 0; }
+      .agent-meta div { display: flex; justify-content: space-between; gap: var(--spacing-16); font-size: var(--text-body-sm); }
+      .agent-meta dt { color: var(--color-smoke); text-transform: uppercase; }
+      .agent-meta dd { max-width: 68%; margin: 0; overflow: hidden; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+
+      .surface-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); gap: var(--spacing-24); }
+      .chip-list { display: flex; flex-wrap: wrap; gap: 8px; }
+      .chip { border: 1px solid var(--color-ash); border-radius: var(--radius-pill); padding: 8px 12px; color: var(--color-graphite); background: var(--color-parchment); font-size: var(--text-caption); }
+      .chip.active { border-color: var(--color-lake-blue); color: var(--color-off-black); background: var(--color-periwinkle-mist); }
+      .surface-note { margin: var(--spacing-16) 0 0; color: var(--color-smoke); font-size: var(--text-body-sm); }
+
+      .pr-list { display: grid; gap: var(--spacing-16); }
+      .pr-card { border: 1px solid var(--color-ash); border-radius: 24px; padding: var(--spacing-24); background: rgba(246, 243, 241, 0.72); }
+      .pr-head { display: flex; align-items: start; justify-content: space-between; gap: var(--spacing-16); margin-bottom: var(--spacing-16); }
+      .pr-title { margin: 0; font-family: var(--font-untitled-serif); font-size: var(--text-subheading); line-height: 1.2; }
+      .pr-title a { color: inherit; text-decoration: none; }
+      .pr-title a:hover { text-decoration: underline; }
+      .pr-number { color: var(--color-smoke); font-family: var(--font-abc-diatype-mono); font-size: var(--text-body-sm); }
+      .pr-meta { display: flex; flex-wrap: wrap; gap: 8px 16px; color: var(--color-graphite); font-size: var(--text-body-sm); }
+      .pr-meta span { display: inline-flex; align-items: center; gap: 6px; }
+      .comment-count { border-radius: var(--radius-pill); padding: 6px 10px; font-size: var(--text-caption); text-transform: uppercase; }
+      .comment-count.addressed { background: var(--color-mint); }
+      .comment-count.open { background: var(--color-coral); }
+      .thread-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: var(--spacing-16); }
+      .thread { border: 1px solid var(--color-ash); border-radius: var(--radius-pill); padding: 6px 10px; color: var(--color-smoke); font-size: var(--text-caption); }
+      .thread.is-open { border-color: var(--color-coral); color: var(--color-off-black); }
+
+      .activity { width: 100%; border-collapse: collapse; font-size: var(--text-body-sm); }
+      .activity th { padding: 0 12px 12px 0; color: var(--color-smoke); font-size: var(--text-caption); font-weight: 400; text-align: left; text-transform: uppercase; }
+      .activity td { border-top: 1px solid var(--color-ash); padding: 12px 12px 12px 0; vertical-align: top; }
+      .activity td:first-child { width: 150px; color: var(--color-smoke); white-space: nowrap; }
+      .activity td:nth-child(2) { width: 100px; text-transform: uppercase; }
+      .activity td:last-child { color: var(--color-graphite); }
+      .result-pass { color: #22834b; }
+      .result-fail { color: var(--color-crimson); }
+
+      .map { display: grid; grid-template-columns: repeat(7, minmax(150px, 1fr)); gap: 12px; overflow-x: auto; }
+      .map-column { min-width: 150px; }
+      .map-column-title { min-height: 38px; border-bottom: 1px solid var(--color-ash); color: var(--color-smoke); font-size: var(--text-caption); text-transform: uppercase; }
+      .map-items { display: grid; gap: 8px; padding-top: 12px; }
+      .map-item { border: 1px solid var(--color-ash); border-radius: var(--radius-pill); padding: 10px 12px; background: var(--color-parchment); font-size: var(--text-caption); }
+      .map-item small { display: block; margin-top: 4px; color: var(--color-smoke); font-size: 10px; }
+
+      .empty { border: 1px dashed var(--color-ash); border-radius: 24px; padding: var(--spacing-24); color: var(--color-smoke); }
+      .empty p:last-child { margin-bottom: 0; }
+
+      .sources { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--spacing-16); margin-top: var(--spacing-24); color: var(--color-smoke); font-size: var(--text-caption); }
+      .sources span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+      .view-disabled .metrics, .view-disabled .layout, .view-disabled .sources { display: none; }
+      .view-disabled .shell { min-height: calc(100vh - 40px); }
+      .view-disabled .topbar { opacity: 0.55; }
+      .view-disabled .topbar:has(#view-toggle:focus-visible) { opacity: 1; }
+
+      @media (max-width: 920px) {
+        .topbar, .split, .surface-grid { grid-template-columns: 1fr; }
+        .topbar { align-items: start; flex-direction: column; }
+        .actions { justify-content: start; }
+        .metrics { grid-template-columns: repeat(2, 1fr); }
+        .run-summary { grid-template-columns: 1fr 1fr; }
+        .run-summary > :first-child { grid-column: 1 / -1; }
+      }
+
+      @media (max-width: 620px) {
+        .announcement { padding: 8px 16px; }
+        .shell { width: min(100% - 32px, var(--page-max-width)); padding-top: var(--spacing-24); }
+        .panel { padding: var(--spacing-24); }
+        .metrics, .agent-grid { grid-template-columns: 1fr; }
+        .run-summary { grid-template-columns: 1fr; }
+        .run-summary > :first-child { grid-column: auto; }
+        .panel-header { flex-direction: column; }
+        .activity th:nth-child(3), .activity td:nth-child(3) { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="announcement">
+      <strong>LOCAL RUN OBSERVER</strong>
+      <span id="connection-status">STARTING</span>
+    </div>
+
+    <main class="shell">
+      <div class="wash wash-one"></div>
+      <div class="wash wash-two"></div>
+
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Coordinator / agents / project services</p>
+          <h1>See the work move.</h1>
+          <p class="lede">A live, evidence-first view of the run: who owns each lane, which playbook is active, where the pull requests are, and which review threads still need attention.</p>
+        </div>
+        <div class="actions" aria-label="Observer controls">
+          <button class="button" id="view-toggle" type="button" aria-pressed="true">HTML VIEW: ON</button>
+          <button class="button button-dark" id="sync-toggle" type="button" aria-pressed="true">LIVE SYNC: ON</button>
+          <button class="button button-blue" id="refresh-now" type="button">REFRESH →</button>
+          <button class="button" id="server-stop" type="button">STOP SERVER</button>
+        </div>
+      </header>
+
+      <section class="metrics" aria-label="Run metrics">
+        <article class="metric"><span class="metric-label">Active runs</span><strong class="metric-value" id="metric-runs">0</strong><p class="metric-note" id="metric-run-note">No state loaded</p></article>
+        <article class="metric"><span class="metric-label">Agent lanes</span><strong class="metric-value" id="metric-agents">0</strong><p class="metric-note">Coordinator included in map</p></article>
+        <article class="metric"><span class="metric-label">Open pull requests</span><strong class="metric-value" id="metric-prs">0</strong><p class="metric-note">Drafts and active reviews</p></article>
+        <article class="metric"><span class="metric-label">Open threads</span><strong class="metric-value" id="metric-threads">0</strong><p class="metric-note">Addressed threads stay visible</p></article>
+      </section>
+
+      <div class="layout">
+        <section class="panel" aria-labelledby="run-heading">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">01 / Run pulse</p>
+              <h2 class="panel-title" id="run-heading">Coordinator view</h2>
+              <p class="panel-kicker" id="run-kicker">Waiting for a state file.</p>
+            </div>
+            <span class="status" id="run-status">NO RUN</span>
+          </div>
+          <div class="run-summary" id="run-summary"></div>
+          <div class="pipeline" id="pipeline" aria-label="Run phases"></div>
+        </section>
+
+        <section class="panel" aria-labelledby="agents-heading">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">02 / Ownership</p>
+              <h2 class="panel-title" id="agents-heading">Coordinator and agent lanes</h2>
+              <p class="panel-kicker">Every lane shows its phase, branch, worktree, and last evidence.</p>
+            </div>
+          </div>
+          <div class="split">
+            <div id="coordinator-slot"></div>
+            <div class="agent-grid" id="agent-grid"></div>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="surfaces-heading">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">03 / Control surface</p>
+              <h2 class="panel-title" id="surfaces-heading">Skills and playbooks</h2>
+              <p class="panel-kicker">The local inventory and the source workflow graph remain visible beside live state.</p>
+            </div>
+          </div>
+          <div class="surface-grid">
+            <div>
+              <span class="meta-label">Skills</span>
+              <div class="chip-list" id="skill-list"></div>
+              <p class="surface-note" id="skill-note"></p>
+            </div>
+            <div>
+              <span class="meta-label">Playbooks</span>
+              <div class="chip-list" id="playbook-list"></div>
+              <p class="surface-note" id="playbook-note"></p>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="map-heading">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">04 / Architecture</p>
+              <h2 class="panel-title" id="map-heading">System map</h2>
+              <p class="panel-kicker" id="map-kicker">Workflow graph source is optional; the built-in map keeps the view useful offline.</p>
+            </div>
+          </div>
+          <div class="map" id="system-map"></div>
+        </section>
+
+        <section class="panel" aria-labelledby="prs-heading">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">05 / Review surface</p>
+              <h2 class="panel-title" id="prs-heading">Pull requests and comments</h2>
+              <p class="panel-kicker">Resolved and unresolved review threads stay side by side until the PR is ready.</p>
+            </div>
+          </div>
+          <div class="pr-list" id="pr-list"></div>
+        </section>
+
+        <section class="panel" aria-labelledby="activity-heading">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">06 / Evidence</p>
+              <h2 class="panel-title" id="activity-heading">Decision ledger</h2>
+              <p class="panel-kicker">The newest state and evidence rows appear first.</p>
+            </div>
+          </div>
+          <div id="activity-slot"></div>
+        </section>
+      </div>
+
+      <footer class="sources">
+        <span id="source-state">State: waiting</span>
+        <span id="source-prs">PRs: waiting</span>
+        <span id="last-refresh">Last refresh: never</span>
+      </footer>
+    </main>
+
+    <script>
+      (() => {
+        const phases = [
+          ["intake", "INTAKE"],
+          ["plan", "PLAN"],
+          ["implement", "IMPLEMENT"],
+          ["pr", "PULL REQUEST"],
+          ["qa", "QA"],
+          ["ready", "READY"],
+        ];
+        const phaseRank = { intake: 0, grooming: 0, planned: 1, plan: 1, dispatched: 2, implementing: 2, implement: 2, "pr-open": 3, pr: 3, qa: 4, audit: 4, "merge-ready": 5, ready: 5 };
+        const demo = {
+          generatedAt: null,
+          repo: { branch: "-", dirty: false, statusCount: 0 },
+          source: { flows: "built-in", inventory: "repository", prs: "offline", state: "no state file found" },
+          run: null,
+          runs: [],
+          agents: [],
+          ledger: [],
+          pullRequests: [],
+          inventory: { skills: [], playbooks: [] },
+          flow: { columns: [], components: [], flows: [] },
+        };
+        let current = demo;
+        let viewEnabled = localStorage.getItem("run-observer-view") !== "off";
+        let liveSync = localStorage.getItem("run-observer-sync") !== "off";
+        let fetchInFlight = false;
+
+        const $ = (id) => document.getElementById(id);
+        const escapeHtml = (value) => String(value ?? "-").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
+        const safeUrl = (value) => /^https?:\/\//i.test(String(value ?? "")) ? String(value) : "#";
+        const compact = (value, fallback = "-") => String(value ?? fallback);
+        const dateText = (value) => value ? new Date(value).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "-";
+        const statusClass = (value) => String(value ?? "").toLowerCase().includes("fail") ? "status-fail" : String(value ?? "").toLowerCase().includes("block") ? "status-warn" : "status-pass";
+
+        function setConnection(label, className = "") {
+          $("connection-status").textContent = label;
+          $("connection-status").className = className;
+        }
+
+        function renderMetrics(data) {
+          const openPrs = (data.pullRequests ?? []).filter((pr) => String(pr.state).toUpperCase() === "OPEN");
+          const openThreads = openPrs.reduce((total, pr) => total + (pr.comments?.unaddressed ?? 0), 0);
+          $("metric-runs").textContent = String((data.runs ?? []).length);
+          $("metric-run-note").textContent = data.run ? compact(data.run.slug, "Active run") : "No active state";
+          $("metric-agents").textContent = String((data.agents ?? []).filter((agent) => agent.role !== "coordinator").length);
+          $("metric-prs").textContent = String(openPrs.length);
+          $("metric-threads").textContent = String(openThreads);
+        }
+
+        function renderRun(data) {
+          const run = data.run;
+          if (!run) {
+            $("run-status").className = "status";
+            $("run-status").textContent = "NO RUN";
+            $("run-kicker").textContent = "Start a run or point the server at a consuming repository with state.";
+            $("run-summary").innerHTML = `<div class="empty" style="grid-column: 1 / -1"><p>No coordinator state is available yet.</p><p>Run state is read from <code>.claude/state</code> or <code>.codex/vistack/state</code> in the observed repository.</p></div>`;
+          } else {
+            $("run-status").className = `status ${statusClass(run.phase)}`;
+            $("run-status").textContent = compact(run.phase, "UNKNOWN");
+            $("run-kicker").textContent = compact(run.objective, "Run objective not recorded");
+            const monitor = run.monitor ?? {};
+            $("run-summary").innerHTML = [
+              ["Run", compact(run.slug, "unnamed"), "serif"],
+              ["Playbook", compact(run.playbook, "-"), ""],
+              ["Head / branch", compact(run.base_branch ?? run.baseBranch, "-"), ""],
+              ["Last progress", dateText(monitor.last_progress_at ?? monitor.lastProgressAt), ""],
+            ].map(([label, value, className]) => `<div><span class="meta-label">${escapeHtml(label)}</span><p class="summary-value ${className}">${escapeHtml(value)}</p></div>`).join("");
+          }
+
+          const rank = phaseRank[String(run?.phase ?? "").toLowerCase()] ?? 0;
+          $("pipeline").innerHTML = phases.map(([key, label], index) => {
+            const state = index < rank ? "is-done" : index === rank && run ? "is-current" : "";
+            const detail = index < rank ? "complete" : index === rank && run ? compact(run.phase, "active") : "waiting";
+            return `<div class="stage ${state}"><div class="stage-dot" aria-hidden="true"></div><p class="stage-label">${label}</p><p class="stage-detail">${escapeHtml(detail)}</p></div>`;
+          }).join("");
+        }
+
+        function renderAgents(data) {
+          const coordinator = (data.agents ?? []).find((agent) => agent.role === "coordinator");
+          const agents = (data.agents ?? []).filter((agent) => agent.role !== "coordinator");
+          $("coordinator-slot").innerHTML = coordinator ? `<article class="coordinator-card"><p class="eyebrow">Run owner</p><h3>Coordinator</h3><div class="monitor-row"><span>Phase</span><strong>${escapeHtml(coordinator.phase)}</strong></div><div class="monitor-row"><span>Monitor</span><strong>${escapeHtml(coordinator.monitor?.status ?? "not recorded")}</strong></div><div class="monitor-row"><span>Branch</span><strong title="${escapeHtml(coordinator.branch)}">${escapeHtml(coordinator.branch)}</strong></div><div class="monitor-row"><span>Evidence</span><strong title="${escapeHtml(coordinator.lastEvidence)}">${escapeHtml(coordinator.lastEvidence)}</strong></div></article>` : `<div class="empty"><p>No coordinator lane.</p><p>The observer will add one when a state file appears.</p></div>`;
+          $("agent-grid").innerHTML = agents.length ? agents.map((agent) => `<article class="agent-card"><div class="agent-top"><div><p class="agent-role">${escapeHtml(agent.role)}</p><span class="agent-model">${escapeHtml(agent.model)} / ${escapeHtml(agent.slice)}</span></div><span class="status ${statusClass(agent.phase)}">${escapeHtml(agent.phase)}</span></div><dl class="agent-meta"><div><dt>Branch</dt><dd title="${escapeHtml(agent.branch)}">${escapeHtml(agent.branch)}</dd></div><div><dt>Worktree</dt><dd title="${escapeHtml(agent.worktree)}">${escapeHtml(agent.worktree)}</dd></div><div><dt>Evidence</dt><dd title="${escapeHtml(agent.lastEvidence)}">${escapeHtml(agent.lastEvidence)}</dd></div></dl></article>`).join("") : `<div class="empty" style="grid-column: 1 / -1"><p>No agent lanes are active.</p><p>Dispatch a slice and refresh to see ownership appear here.</p></div>`;
+        }
+
+        function renderInventory(data) {
+          const skills = data.inventory?.skills ?? [];
+          const playbooks = data.inventory?.playbooks ?? [];
+          const activePlaybook = data.run?.playbook;
+          $("skill-list").innerHTML = skills.length ? skills.slice(0, 24).map((skill) => `<span class="chip ${skill === "vistack" ? "active" : ""}">${escapeHtml(skill)}</span>`).join("") : `<span class="chip">No local skills found</span>`;
+          $("playbook-list").innerHTML = playbooks.length ? playbooks.map((playbook) => `<span class="chip ${playbook === activePlaybook ? "active" : ""}">${escapeHtml(playbook)}</span>`).join("") : `<span class="chip">No playbooks found</span>`;
+          $("skill-note").textContent = skills.length > 24 ? `${skills.length - 24} more skills in the repository` : `${skills.length} skill${skills.length === 1 ? "" : "s"} discovered`;
+          $("playbook-note").textContent = `${playbooks.length} playbook${playbooks.length === 1 ? "" : "s"} discovered`;
+        }
+
+        function renderMap(data) {
+          const columns = data.flow?.columns ?? [];
+          const components = data.flow?.components ?? [];
+          $("map-kicker").textContent = `Workflow graph source: ${compact(data.source?.flows, "built-in")}`;
+          $("system-map").innerHTML = columns.length ? columns.map((column) => {
+            const items = components.filter((component) => component.column === column.id);
+            return `<div class="map-column"><div class="map-column-title">${escapeHtml(column.label)}</div><div class="map-items">${items.length ? items.map((item) => `<div class="map-item">${escapeHtml(item.name)}<small>${escapeHtml(item.subtitle)}</small></div>`).join("") : `<div class="map-item">Waiting<small>No component data</small></div>`}</div></div>`;
+          }).join("") : `<div class="empty" style="grid-column: 1 / -1"><p>No workflow graph loaded.</p><p>Pass <code>--flows /path/to/flows.json</code> to the server to add the architecture map.</p></div>`;
+        }
+
+        function renderPullRequests(data) {
+          const prs = data.pullRequests ?? [];
+          $("pr-list").innerHTML = prs.length ? prs.map((pr) => {
+            const comments = pr.comments ?? {};
+            const state = pr.state === "OPEN" && pr.draft ? "DRAFT" : compact(pr.state, "UNKNOWN");
+            const threadMarkup = comments.available && comments.threads?.length ? `<div class="thread-list">${comments.threads.slice(0, 12).map((thread) => `<span class="thread ${thread.addressed ? "" : "is-open"}">${thread.addressed ? "ADDRESSED" : "OPEN"} / ${escapeHtml(thread.author)}</span>`).join("")}</div>` : comments.available ? `<div class="thread-list"><span class="thread">No review threads</span></div>` : `<div class="thread-list"><span class="thread">Thread data unavailable</span></div>`;
+            return `<article class="pr-card"><div class="pr-head"><div><p class="pr-title"><a href="${escapeHtml(safeUrl(pr.url))}" target="_blank" rel="noreferrer">${escapeHtml(pr.title)}</a> <span class="pr-number">#${escapeHtml(pr.number)}</span></p></div><span class="status ${state === "OPEN" || state === "DRAFT" ? "status-warn" : state === "MERGED" ? "status-pass" : "status"}">${escapeHtml(state)}</span></div><div class="pr-meta"><span>${escapeHtml(pr.head)} → ${escapeHtml(pr.base)}</span><span>Updated ${escapeHtml(dateText(pr.updatedAt))}</span><span class="comment-count addressed">${escapeHtml(comments.addressed ?? 0)} addressed</span><span class="comment-count open">${escapeHtml(comments.unaddressed ?? 0)} open</span></div>${threadMarkup}</article>`;
+          }).join("") : `<div class="empty"><p>No pull requests loaded.</p><p>${escapeHtml(data.source?.prs ?? "Use GitHub CLI or pass a fixture with --pr-data")}</p></div>`;
+        }
+
+        function renderActivity(data) {
+          const rows = data.ledger ?? [];
+          $("activity-slot").innerHTML = rows.length ? `<table class="activity"><thead><tr><th>Time</th><th>Phase</th><th>Slice</th><th>Decision / evidence</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${escapeHtml(dateText(row.ts))}</td><td class="${String(row.result).toLowerCase() === "ok" ? "result-pass" : String(row.result).toLowerCase().includes("fail") ? "result-fail" : ""}">${escapeHtml(row.phase)}</td><td>${escapeHtml(row.slice)}</td><td><strong>${escapeHtml(row.decision)}</strong><br><span>${escapeHtml(row.reason)}</span>${row.evidence ? `<br><span>${escapeHtml(row.evidence)}</span>` : ""}</td></tr>`).join("")}</tbody></table>` : `<div class="empty"><p>No ledger rows yet.</p><p>State transitions and evidence will appear here as the run progresses.</p></div>`;
+        }
+
+        function render(data) {
+          current = data;
+          renderMetrics(data);
+          renderRun(data);
+          renderAgents(data);
+          renderInventory(data);
+          renderMap(data);
+          renderPullRequests(data);
+          renderActivity(data);
+          $("source-state").textContent = `State: ${compact(data.source?.state)}`;
+          $("source-prs").textContent = `PRs: ${compact(data.source?.prs)}`;
+          $("last-refresh").textContent = `Last refresh: ${dateText(data.generatedAt)}`;
+        }
+
+        async function refresh() {
+          if (fetchInFlight || window.location.protocol === "file:") return;
+          fetchInFlight = true;
+          try {
+            const response = await fetch(`/api/snapshot?at=${Date.now()}`, { cache: "no-store" });
+            if (!response.ok) throw new Error(`snapshot ${response.status}`);
+            render(await response.json());
+            setConnection("LIVE", "status-live");
+          } catch (error) {
+            setConnection("SERVER UNAVAILABLE", "status-warn");
+            $("source-state").textContent = `State: ${error.message}`;
+          } finally {
+            fetchInFlight = false;
+          }
+        }
+
+        function syncLabel() {
+          $("sync-toggle").textContent = `LIVE SYNC: ${liveSync ? "ON" : "OFF"}`;
+          $("sync-toggle").setAttribute("aria-pressed", String(liveSync));
+        }
+
+        function viewLabel() {
+          document.body.classList.toggle("view-disabled", !viewEnabled);
+          $("view-toggle").textContent = `HTML VIEW: ${viewEnabled ? "ON" : "OFF"}`;
+          $("view-toggle").setAttribute("aria-pressed", String(viewEnabled));
+        }
+
+        $("view-toggle").addEventListener("click", () => {
+          viewEnabled = !viewEnabled;
+          localStorage.setItem("run-observer-view", viewEnabled ? "on" : "off");
+          viewLabel();
+        });
+        $("sync-toggle").addEventListener("click", () => {
+          liveSync = !liveSync;
+          localStorage.setItem("run-observer-sync", liveSync ? "on" : "off");
+          syncLabel();
+          setConnection(liveSync ? "LIVE SYNC" : "PAUSED", liveSync ? "status-live" : "status-warn");
+        });
+        $("refresh-now").addEventListener("click", refresh);
+        $("server-stop").addEventListener("click", async () => {
+          try {
+            await fetch("/api/server/disable", { method: "POST" });
+            setConnection("DISABLED", "status-warn");
+            $("server-stop").textContent = "SERVER DISABLED";
+            $("server-stop").disabled = true;
+          } catch {
+            setConnection("SERVER UNAVAILABLE", "status-warn");
+          }
+        });
+
+        viewLabel();
+        syncLabel();
+        render(current);
+        refresh();
+        window.setInterval(() => { if (liveSync) refresh(); }, 5000);
+      })();
+    </script>
+  </body>
+</html>

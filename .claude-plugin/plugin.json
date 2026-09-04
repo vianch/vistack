@@ -1,0 +1,13 @@
+{
+  "name": "vistack",
+  "displayName": "viStack",
+  "description": "Standing entry point for a unit of engineering work — issue, task, bug, feature, refactor, or design implementation. One sticky router, a principles index, verbatim playbooks, and a coordinator that dispatches per-role agents to merge-ready draft PRs without merging.",
+  "version": "0.3.0",
+  "author": {
+    "name": "Victor",
+    "url": "https://github.com/vianch"
+  },
+  "homepage": "https://github.com/vianch/viStack",
+  "repository": "https://github.com/vianch/viStack",
+  "keywords": ["workflow", "coordinator", "playbooks", "autonomous", "qa"]
+}

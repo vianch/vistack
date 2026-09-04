@@ -1,0 +1,15 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "vistack",
+  "description": "Engineering workflows built from explicit playbooks, role contracts, evidence gates, and merge-ready draft pull requests.",
+  "owner": {
+    "name": "viStack Maintainers"
+  },
+  "plugins": [
+    {
+      "name": "vistack",
+      "source": "./",
+      "description": "Standing entry point for a unit of engineering work — router, playbooks, coordinator, and per-role agents."
+    }
+  ]
+}

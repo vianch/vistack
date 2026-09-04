@@ -175,6 +175,20 @@ Longer version, including the four fences: [`docs/guide/usage.md`](docs/guide/us
 The failures that cost the most:
 [`docs/guide/common-mistakes.md`](docs/guide/common-mistakes.md).
 
+### Workflow observer
+
+Run the local HTML observer to see coordinator state, agent lanes, skills, playbooks, ledger
+evidence, pull requests, and addressed or open review threads:
+
+```bash
+node scripts/visualizer-server.mjs --enable
+open http://127.0.0.1:47319
+```
+
+Use `node scripts/visualizer-server.mjs --status` and `--disable` to control the detached
+server. The page's `LIVE SYNC` toggle pauses polling without stopping it. See
+[`docs/guide/visualizer.md`](docs/guide/visualizer.md) for data sources and offline fixtures.
+
 ---
 
 ## what it gives you

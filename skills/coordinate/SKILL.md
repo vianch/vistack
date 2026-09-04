@@ -8,6 +8,11 @@ description: "Dispatch per-role agents through a playbook, maintain resumable st
 The dispatch layer moves a run between phases. It owns coordination state and evidence. It
 never edits product code.
 
+Any issue comment or other external status written by the coordinator uses the consuming
+project's ordinary voice. It must not mention `viStack`, `vistack`, `/vistack`, `$vistack`, or
+internal role, skill, model, or host names. Keep those identifiers in the state, ledger, or
+host-local records only.
+
 ## Host paths
 
 Resolve these once at startup.

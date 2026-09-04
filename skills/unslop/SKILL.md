@@ -31,6 +31,9 @@ Make the writing concrete, direct, and specific to the project.
 - Keep bold text for real labels. Do not turn every noun into emphasis.
 - Use the project's actual names. A sentence that could appear unchanged in another project
   is probably too vague.
+- Before externalizing text, remove internal product, invocation, role, skill, model, and host
+  names. Keep them only in internal instructions, paths, state, or commands where they are
+  required for loading or execution.
 
 ## Exit criteria
 

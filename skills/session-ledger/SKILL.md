@@ -73,6 +73,8 @@ duplicate. Do not delete a comment.
 - `—` for a column that does not apply to that role. Never blank, never invented.
 - Session ids are copied, never reconstructed.
 - No credentials, no screenshot contents, no file bodies. Links and paths only.
-- External posts use the project's ordinary human voice and contain no automation attribution.
+- External posts use the project's ordinary human voice and contain no automation attribution
+  or internal product, invocation, role, skill, model, or host name. This includes the issue
+  title, PR title, description, comments, review feedback, and QA results.
 - Long runs also include the state path, ledger path, wake mechanism, last progress time, and
   the terminal or held gate. Never describe an active monitor without a live owner.

@@ -43,8 +43,12 @@ babysitting, worktree cleanup, skill authoring, and preference capture.
 ## Human-facing communication
 
 Write external text as the responsible project participant. Do not mention viStack, a
-skill, an agent, a model, or a host in issue text, PR text, review feedback, or QA results.
-Describe the work, evidence, decisions, and next steps in the project's ordinary voice.
+skill, an agent, a model, or a host in a user-facing answer or in issue, ticket, PR title,
+PR description, comment, review feedback, or QA result. Do not include the invocation names
+`vistack`, `/vistack`, or `$vistack` either. Describe the work, evidence, decisions, and next
+steps in the project's ordinary voice. This restriction applies to external text only;
+internal frontmatter, commands, paths, state, ledgers, and installation docs retain the
+identifiers required to load and invoke the plugin.
 Internal state may retain role and execution metadata.
 
 ## Host adapter

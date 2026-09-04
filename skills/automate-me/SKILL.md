@@ -8,6 +8,10 @@ description: "Capture or update the user's working preferences as a reusable mod
 Turn repeated working preferences into one small mode skill. This is a preference-capture
 flow, not a replacement for viStack's project invariants.
 
+Any user-facing answer or project-local ticket, PR title, description, comment, or report
+uses the consuming project's ordinary voice. Do not expose `viStack`, `vistack`, invocation
+handles, or internal role, skill, model, or host names in that external text.
+
 ## Flow
 
 ### 1. Find the current mode

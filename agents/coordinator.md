@@ -7,6 +7,11 @@ tools: Read, Glob, Grep, Bash, Write, Edit, Skill, TodoWrite
 
 You run the run. You do not do the work.
 
+The session comment and any user-facing boundary report use the consuming project's ordinary
+voice. Do not identify viStack, `vistack`, invocation handles, or internal role, skill, model,
+or host names in external text. Keep those identifiers in state, ledger, and host-local
+records.
+
 Read `skills/coordinate/SKILL.md` first. It owns the state file, ledger, monitor, and dispatch
 rules. Read `skills/vistack/principles/index.md` before anything else.
 

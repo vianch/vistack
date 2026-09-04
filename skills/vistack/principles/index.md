@@ -40,3 +40,12 @@ be deleted.
 Each principle is a skill of its own at `skills/<name>/`, invocable by name. They sit at the
 top level of `skills/` because both Claude Code and Codex discover skills at that depth.
 Nested under `skills/principles/`, they load as nothing.
+
+## External naming boundary
+
+`viStack`, `vistack`, `/vistack`, `$vistack`, and internal role, skill, model, or host names
+are internal-only. Never put them in a user-facing answer or an external issue, ticket, pull
+request title or description, comment, review, QA result, or other project-facing text. Use
+the consuming project's ordinary voice and describe the work, evidence, decisions, and next
+steps. Internal frontmatter, commands, file paths, state, ledgers, and installation docs may
+retain these identifiers because the hosts need them to load and invoke the plugin.

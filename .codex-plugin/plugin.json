@@ -1,7 +1,7 @@
 {
   "name": "vistack",
-  "version": "0.3.0",
-  "description": "Route engineering work through explicit playbooks, evidence gates, and merge-ready draft PRs in Codex or Claude Code.",
+  "version": "0.4.0",
+  "description": "Route engineering work through explicit playbooks, evidence gates, unattended runs, and merge-ready draft PRs in Codex or Claude Code.",
   "author": {
     "name": "Victor",
     "url": "https://github.com/vianch"
@@ -21,7 +21,7 @@
   "interface": {
     "displayName": "viStack",
     "shortDescription": "Evidence-driven engineering workflows",
-    "longDescription": "Route a bug, feature, refactor, investigation, or design task through a checkable playbook in Codex or Claude Code. The workflow keeps run state resumable and stops at merge-ready draft PRs without merging.",
+    "longDescription": "Route a bug, feature, refactor, investigation, design task, queue, or overnight run through a checkable playbook in Codex or Claude Code. The workflow keeps run state resumable and stops at merge-ready draft PRs without merging.",
     "developerName": "Victor",
     "category": "Developer Tools",
     "capabilities": [

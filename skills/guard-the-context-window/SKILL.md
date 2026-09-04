@@ -1,6 +1,6 @@
 ---
 name: guard-the-context-window
-description: "Treat context as the scarce resource — delegate reading, keep conclusions, and let per-role agents hold their own detail. Use when about to read many files, when a run is long, or when deciding what to put in the state file versus the transcript."
+description: "Treat context as the scarce resource. Delegate bulk reading, keep conclusions, and let role agents hold their own detail. Use for large file sets, long runs, or state versus transcript decisions."
 ---
 
 # guard-the-context-window
@@ -11,11 +11,12 @@ Context is the budget. Everything else is cheap by comparison.
 
 - Delegate the reading. A role that must read twelve files reads them in its own session
   and returns the conclusion. The coordinator holds conclusions, not file dumps.
-- Write state to disk, not to the transcript. `.claude/state/<slug>.json` and its ledger
-  are the memory; the transcript is a cache that will be summarized.
+- Write state to disk, not to the transcript. The resolved state root contains the JSON state
+  and ledger. The transcript is a cache that will be summarized.
 - Do not re-derive. A fact established once, in the ledger, is not re-established.
 - No progress narration. Every "now I'll look at…" is spend with no return.
-- A run that needs the whole repo in context is mis-sliced. Go back to `slice-plan`.
+- A run that needs the whole repo in context is mis-sliced. Go back to `slice-plan` and split
+  the read into evidence-bearing units.
 
 ## What it changes
 

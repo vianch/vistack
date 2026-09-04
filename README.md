@@ -18,8 +18,8 @@ the same playbooks, principles, and skill names across the two hosts.
 
 | Host | Version | Manifest |
 |---|---:|---|
-| Claude Code | `0.3.0` | `.claude-plugin/plugin.json` |
-| Codex | `0.3.0` | `.codex-plugin/plugin.json` |
+| Claude Code | `0.4.0` | `.claude-plugin/plugin.json` |
+| Codex | `0.4.0` | `.codex-plugin/plugin.json` |
 
 ### Claude Code
 
@@ -130,6 +130,24 @@ Matches `autopilot-stack` — the default for a groomed ticket. Intake → plan 
 implement → PR → QA → audit → bot-comment cleanup, with no human in the loop, reporting at
 phase boundaries only. It stops at merge-ready. **It never merges.**
 
+### An overnight run
+
+```
+/vistack I am going to bed. Migrate every caller to the new parser in a fresh worktree.
+Done means zero old callers, all parser fixtures pass, and the old API is deleted.
+Keep parser output unchanged. Commit and push branches, but do not merge.
+If the blocker loop is exhausted, stop with the full dossier.
+```
+
+Matches `overnight`. It records the permissions, escape hatch, host wake mechanism, and
+decision trail before dispatch. Each iteration makes one evidence-backed change, checks the
+real artifact, and records whether the predicate moved. It stops at merge-ready drafts or a
+fence.
+
+For a queue of independent items, say `full autopilot` and name each item and its finish
+check. That matches `autopilot-full`, which runs one owner per item and leaves every PR as a
+draft.
+
 ### A read-only investigation
 
 ```
@@ -178,6 +196,14 @@ files are the source of truth, so they are not restated here.
 | [`pr-stack`](skills/vistack/playbooks/pr-stack.md) | a branch is done and the diff needs to become a PR or a chain |
 | [`qa-verification`](skills/vistack/playbooks/qa-verification.md) | a PR exists and needs behavioural evidence against a live env |
 | [`autopilot-stack`](skills/vistack/playbooks/autopilot-stack.md) | **the default for a groomed ticket.** The whole thing, unattended |
+| [`autopilot-full`](skills/vistack/playbooks/autopilot-full.md) | independent PR queue, one owner per item, all to merge-ready drafts |
+| [`overnight`](skills/vistack/playbooks/overnight.md) | one task or bounded queue while the user is away |
+| [`perf-issue`](skills/vistack/playbooks/perf-issue.md) | one measured performance fix |
+| [`prototype`](skills/vistack/playbooks/prototype.md) | a throwaway experiment that settles a design or behavior question |
+| [`multi-phase-plan`](skills/vistack/playbooks/multi-phase-plan.md) | large or cross-cutting work that needs a durable execution plan |
+| [`authoring-skill`](skills/vistack/playbooks/authoring-skill.md) | creating or modifying a workflow contract |
+| [`automate-me`](skills/vistack/playbooks/automate-me.md) | capturing working preferences in a reusable mode skill |
+| [`worktree-cleanup`](skills/vistack/playbooks/worktree-cleanup.md) | an evidence-based audit of stale worktrees |
 | [`session-pickup`](skills/vistack/playbooks/session-pickup.md) | resuming work whose session is gone; state file and ledger exist |
 | [`pause-safely`](skills/vistack/playbooks/pause-safely.md) | stop now, stay resumable, hold nothing |
 | [`babysit`](skills/vistack/playbooks/babysit.md) | a run is dispatched; watch it, unstick it, report at boundaries |
@@ -203,8 +229,8 @@ to Sonnet; mechanical work and the adversarial audit to Haiku.
 
 ### Principles
 
-Ten, indexed at [`skills/vistack/principles/index.md`](skills/vistack/principles/index.md),
-each invocable by name. The index is read first on every run, unconditionally. A reply that
+The indexed principles at [`skills/vistack/principles/index.md`](skills/vistack/principles/index.md)
+are each invocable by name. The index is read first on every run, unconditionally. A reply that
 invokes a principle must name the decision the principle changed.
 
 ### Specialist skills
@@ -214,7 +240,14 @@ invokes a principle must name the decision the principle changed.
 [`unblock`](skills/unblock/SKILL.md) (the bounded loop) ·
 [`qa-verify`](skills/qa-verify/SKILL.md) (the QA contract) ·
 [`stack-split`](skills/stack-split/SKILL.md) (the >500-line split) ·
-[`session-ledger`](skills/session-ledger/SKILL.md) (the issue comment).
+[`session-ledger`](skills/session-ledger/SKILL.md) (the issue comment) ·
+[`swarm`](skills/swarm/SKILL.md) (parallel verification) ·
+[`show-me-your-work`](skills/show-me-your-work/SKILL.md) (overnight ledger audit) ·
+[`build-the-lever`](skills/build-the-lever/SKILL.md) (rerunnable checks) ·
+[`unslop`](skills/unslop/SKILL.md) (concrete prose).
+
+Direct entries include [`overnight`](skills/overnight/SKILL.md) and
+[`automate-me`](skills/automate-me/SKILL.md).
 
 ---
 
@@ -229,22 +262,21 @@ reviewer team, or a service. Three inputs come from the repo it runs in:
 | **reviewer team** | resolved by `requesting-reviewers` for that repo |
 | **verification target** | the environment a QA scenario runs against |
 
-Before `autopilot-stack` will run in a new repo, that repo must provide:
+Before `autopilot-stack`, `autopilot-full`, or `overnight` will run in a new repo, that repo must provide:
 
 1. **A QA env recipe, or coverage by `the project QA environment procedure`.** A per-PR preview
    is the best case; a claimable QA tenant works; a repo with neither has no way to produce
    behavioural evidence, and `autopilot-stack` will stop rather than accept a green build in
    its place.
-2. **Credentials resolvable at `_private/knowledge/key-maker.json`** — the deployment-
-   protection bypass, the application login, and any test fixtures the scenarios need.
-   Confirm the path is git-ignored there before writing to it; a credential about to be
-   written to a tracked file is FENCE 4.
+2. **An approved credential procedure** for the target environment. Confirm its path is
+   ignored before writing to it. A credential about to be written to a tracked file is
+   FENCE 4.
 3. **A lint command and a test command the implementer can run**, both green on the base
    branch before a run starts. A suite already red gives every slice the same false signal.
 
-Also worth setting up once: `.claude/state/` and `.claude/worktrees/` in `.gitignore`. The
-coordinator adds them if they are missing, but a repo that ships them avoids the first run
-having to commit anything.
+Also worth setting up once: `.claude/state/`, `.claude/worktrees/`, `.codex/vistack/state/`,
+and `.codex/vistack/worktrees/` in `.gitignore`. The coordinator checks them before the first
+run.
 
 **Anything outside `the project organization and its approved repositories` is out of scope by design.** No remote, clone,
 fetch, submodule, or vendored copy leaves the realm — see
@@ -255,15 +287,15 @@ outside gets authored, not copied.
 
 ## resuming
 
-**The session is still alive** → attach to it:
+**The session is still alive** → attach through the host's coordinator-session operation:
 
 ```
-claude attach <coordinator-session-id>
+<host attach command> <coordinator-session-id>
 ```
 
-The id is on the resume line of the `Engineering work — agent sessions` comment on the issue. Attach
-to the **coordinator**, not to an implementer — an implementer gives you one slice, the
-coordinator gives you the run.
+The id is on the resume line of the `Engineering work — agent sessions` record. Attach to
+the coordinator, not to an implementer. An implementer gives you one slice. The coordinator
+gives you the run.
 
 **The session is gone** → reconstruct from disk:
 
@@ -271,7 +303,7 @@ coordinator gives you the run.
 /vistack session-pickup <slug>
 ```
 
-It reads `.claude/state/<slug>.json` and `.claude/state/<slug>.tsv`, reconciles them against
+It reads the host's state file and ledger, reconciles them against
 `git worktree list`, `git branch -a`, `gh pr view` and `gh issue view`, writes down every
 divergence as a `reconciled` ledger row, prunes the worktrees no longer needed, upserts the
 session comment with the new session ids, and resumes at the earliest unfinished phase.
@@ -350,7 +382,7 @@ codex plugin list
 codex plugin add vistack@vistack
 ```
 
-3. Confirm `vistack` reports version `0.3.0` and is enabled:
+3. Confirm `vistack` reports version `0.4.0` and is enabled:
 
 ```bash
 codex plugin list
@@ -401,7 +433,7 @@ evidence, and it will not substitute a green build for one.
 /plugin uninstall vistack
 ```
 
-Then prune anything left behind under `.claude/worktrees/`:
+Then audit and prune anything left behind under the host's worktree root:
 
 ```
 /cleanup-worktrees
@@ -411,8 +443,8 @@ Then prune anything left behind under `.claude/worktrees/`:
 open, merged, or closed, and asks before deleting. A worktree with unpushed commits is worth
 looking at before it goes.
 
-State files under `.claude/state/` are small, git-ignored, and the only record of why a run
-decided what it did. Delete them by hand if you want them gone.
+State files under the host's state root are small, git-ignored, and the only record of why a
+run decided what it did. Delete them by hand if you want them gone.
 
 ---
 
@@ -425,7 +457,7 @@ decided what it did. Delete them by hand if you want them gone.
 | **`/vistack` does not resolve** | the plugin is disabled | `/plugin` → find viStack → enable. Then confirm it is listed as enabled, not just installed |
 | **`$vistack` does not activate in Codex** | the plugin is not installed or the current thread predates the install | run `codex plugin list`, reinstall `vistack@vistack`, and start a new thread |
 | **Two agents writing to the same directory** | the conflict matrix was never produced, so dispatch had nothing to serialize against | stop the run, re-run [`slice-plan`](skills/slice-plan/SKILL.md), and dispatch from the matrix. No matrix, no dispatch |
-| **The QA step fails at login** | the Vercel bypass ran before the preview finished building — it lands on the protection wall, which looks exactly like a bad password | wait for the deployment to finish, then re-run the scenario. Check the credential only after the build is confirmed green |
+| **The QA step fails at login** | access ran before the PR target finished building, or the approved credential procedure is unavailable | wait for the target to finish, then check access. Do not substitute another environment or credential path |
 | **`/plugin install vistack` cannot find it** | more than one registered marketplace carries the name, or the entry is missing from `marketplace.json` | qualify it: `/plugin install vistack`, using the `name` field from `.claude-plugin/marketplace.json` |
 | **A run stops to ask something every few minutes** | the request had no checkable finish condition, so nothing can settle a step | re-state it with `Done means <checkable condition>` and start again |
 

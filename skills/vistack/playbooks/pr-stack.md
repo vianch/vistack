@@ -1,27 +1,21 @@
 # Playbook: pr-stack
 
-**Match when** a branch is done and the diff needs to become one PR, or a chain of them.
+**Match when a finished branch needs one PR or a parent-to-child chain.** This playbook stops
+at draft PRs.
 
 ## Steps
 
-1. Measure the diff: `git diff --stat` against the base branch, excluding lockfiles and
-   generated files. Record the number.
-2. Count the concerns. One reason for the change is one PR, regardless of the line count.
-3. ≤500 lines and one concern → one PR. Go to step 6.
-4. Over 500 lines, or more than one concern → `stack-split`. Split by concern first, then by
-   size; tests and stories separate cleanly from the change they cover.
-5. Order the chain parent→child so each link is independently reviewable and each compiles
-   on its own. Build it with `stacking-prs`.
-6. Pass every diff through `pruning-comments` before opening anything.
-7. `pr-author` opens each PR via `create-pr` — draft, authored by the configured project user,
-   linked to the issue, base set to the parent for a child link.
-8. Assign the reviewer team with `requesting-reviewers`. A PR with no
-   reviewer team has no path to merge and is not done.
-9. Each PR body carries: the one concern, the verification evidence, and for a stack, its
-   position in the chain with links to the parent and children.
-10. Check CI on each PR with `the project CI checks`. A red build is a blocker
-    for that link — run `blocker` on it.
-11. Clear bot comments with `address-ai-reviews`.
-12. Record every PR link in the state file and in the `Engineering work — agent sessions` comment.
-13. Stop at merge-ready. Leave every PR as a draft. Never merge, and never mark a child
-    ready before its parent.
+1. Measure the diff against the base branch. Exclude lockfiles and generated files. Record
+   the changed-line count.
+2. Count concerns. One reason for the change is one PR.
+3. If the diff is at most 500 lines and has one concern, keep one PR. Otherwise run
+   `stack-split` and split by concern before size.
+4. Order the chain so every link compiles, passes its checks, and is independently reviewable.
+5. Pass every diff through comment cleanup before opening it.
+6. Open each PR through the project PR skill as a draft, with the correct base and issue link.
+7. Assign reviewers on every link. A PR without a reviewer path is incomplete.
+8. Put the concern, acceptance checks, evidence, and chain position in each body.
+9. Run the project CI checks. A red result returns to the owning slice or `blocker`.
+10. Clear review automation comments through the project skill.
+11. Record each PR, head SHA, and phase in the state file, ledger, and session record.
+12. Stop at merge-ready. Never merge or mark a child ready before its parent.

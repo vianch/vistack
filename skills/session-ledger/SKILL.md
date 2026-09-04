@@ -1,12 +1,12 @@
 ---
 name: session-ledger
-description: "Maintain the single engineering-session comment on the parent issue — a table of role, slice, model, session id, worktree, branch, PR and phase, plus the resume line — upserted in place on every dispatch and every transition. Use immediately after dispatching an agent or on any phase change."
+description: "Maintain one durable run record with role, slice, model, session id, worktree, branch, PR, phase, monitor, and resume information. Use after dispatch and every phase transition."
 ---
 
 # session-ledger
 
-One comment on the parent issue. It is how a human finds a running agent, and how anyone
-resumes a run whose session is gone.
+One comment on the parent issue, or one host-local equivalent when the host has no issue
+surface. It is how a human finds a running agent and resumes a run whose session is gone.
 
 **Upsert, never append.** A second comment splits the truth in two and the older one starts
 lying immediately.
@@ -18,7 +18,7 @@ lying immediately.
   merge-ready.
 - After `session-pickup` reconciles, with the new session ids.
 
-## The comment
+## The record
 
 Title line, exactly: `Engineering work — agent sessions`
 
@@ -35,12 +35,13 @@ Title line, exactly: `Engineering work — agent sessions`
 
 Resume: `claude attach session_011xyz…`
 
-Ledger: `.claude/state/21510-progressbar.tsv` · State: `.claude/state/21510-progressbar.json`
+Ledger: `<state-root>/21510-progressbar.tsv` · State: `<state-root>/21510-progressbar.json`
 
 ```
 
-The resume line always carries the **coordinator's** session id. A user attaching to an
-implementer gets one slice; attaching to the coordinator gets the run.
+The resume line always carries the coordinator's session id. A user attaching to an
+implementer gets one slice. Attaching to the coordinator gets the run. On Codex, use the
+host's thread or session resume operation instead of inventing a Claude command.
 
 ## Upsert mechanics
 
@@ -67,9 +68,13 @@ duplicate. Do not delete a comment.
 
 - One row per dispatched agent, including the coordinator. A finished agent keeps its row
   with its final phase — the table is the run's history, not just its present.
-- Include one `monitor` row while the coordinator's recurring 10-minute loop is active;
-  update its phase to `stopped` when the run pauses, fences, or reaches merge-ready.
+- Include one `monitor` row while the coordinator's recurring monitor is active. Update its
+  phase to `stopped` when the run pauses, fences, or reaches merge-ready.
 - `—` for a column that does not apply to that role. Never blank, never invented.
 - Session ids are copied, never reconstructed.
 - No credentials, no screenshot contents, no file bodies. Links and paths only.
-- External posts use the project's ordinary human voice and contain no automation attribution.
+- External posts use the project's ordinary human voice and contain no automation attribution
+  or internal product, invocation, role, skill, model, or host name. This includes the issue
+  title, PR title, description, comments, review feedback, and QA results.
+- Long runs also include the state path, ledger path, wake mechanism, last progress time, and
+  the terminal or held gate. Never describe an active monitor without a live owner.

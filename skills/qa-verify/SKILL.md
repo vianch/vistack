@@ -1,71 +1,87 @@
 ---
 name: qa-verify
-description: "The QA contract — derive scenarios from the PR diff, drive them on the PR's own Vercel preview with Playwright, capture a screenshot at every assertion point, and post the results table with the screenshots embedded on the PR. Use when a PR needs behavioural evidence before it can be called merge-ready."
+description: "The QA contract: derive scenarios from a PR diff, use its head-matched Vercel preview with Playwright when the PR exposes one, otherwise use the repository's approved live-target control procedure, capture evidence at every assertion point, and post the results with embedded screenshots. Use when a PR needs behavioral evidence before merge-ready."
 ---
 
 # qa-verify
 
-The QA CONTRACT. Exact shape, per PR, non-negotiable. A pass exists only where a screenshot
-exists.
+A QA pass proves changed behavior on the exact PR head. Prefer the PR's own Vercel preview
+and Playwright when the PR exposes a live Vercel URL. If it does not, use the repository's
+approved live target and control skill. A green build or a test run alone is not behavioral
+evidence.
 
 ## Inputs
 
-| Input | Value |
+| Input | Requirement |
 |---|---|
-| **PR** | the pull request link |
-| **Env** | the Vercel preview generated **for that PR** — not staging, not another branch's preview |
-| **Credentials** | `_private/knowledge/key-maker.json` |
+| PR | The pull request under review, including its head SHA. |
+| Target | The Vercel preview linked to this PR and head SHA, or the repository's approved live target when no Vercel URL is present. |
+| Credentials | `_private/knowledge/key-maker.json` |
+| Surface | Playwright through the repository's approved browser/control skill for a Vercel preview; otherwise the repository's control skill or project command. |
+| PR reporting | The repository's PR skill and its screenshot upload/embed procedure. |
 
-If the credentials file does not exist or cannot be read at that path, stop before login and
-ask the user for the correct path or filename. Do not guess, search unrelated locations, or
-continue with an unverified credential source. A missing or expired credential is **FENCE 4**.
-Do not proceed on a stale one.
+If `_private/knowledge/key-maker.json` does not exist or cannot be read, stop before login
+and ask the user for the correct path or filename. Do not guess, search unrelated locations,
+or continue with an unverified credential source. A missing or expired credential is FENCE 4.
+
+If the file exists but a required access property is absent, unreadable, or expired, stop
+before login and ask the user for the approved credential path or property mapping for the
+preview bypass, app login, or test event. Ask for paths and property names, never secret
+values. This is FENCE 4.
+
+## Resolve the target
+
+1. Resolve the PR head SHA. Inspect the PR body, comments, checks, and deployment metadata
+   for a live URL. A `vercel.app` URL or configured Vercel deployment domain is a preview
+   candidate; a `vercel.com` dashboard URL is not itself a test target.
+2. If the PR has a Vercel candidate, use that branch of the contract. Prove that the
+   deployment belongs to the PR head and has finished building before bypassing deployment
+   protection or logging in. If the link is stale, points at another SHA, or is still
+   building, wait or report the blocked target; do not silently switch environments.
+3. If the PR has no Vercel candidate, resolve the repository's own approved live target and
+   control skill. If either is missing, the QA gate remains open. Never invent a URL or use
+   staging as a substitute.
 
 ## Steps
 
-1. **Read the PR diff and derive the scenarios it requires** — happy path, edge cases, and
-   regressions in the touched areas. **Every scenario cites the diff hunk it exists for.** A
-   generic smoke pass does not satisfy this step, and a scenario that cites no hunk is a
-   scenario about something this PR did not change.
+1. Read the PR diff and derive happy-path, edge, and regression scenarios for the touched
+   behavior. Every scenario cites the diff hunk that requires it. Split scenarios into
+   explicit assertion points; each assertion point gets its own result row and artifact.
+2. Resolve the target using the decision above. For a Vercel target, use Playwright through
+   the repository's approved control skill. For another approved target, use that target's
+   repository control skill. Keep secrets out of commands, URLs, logs, screenshots,
+   comments, and tracked files.
+3. Access the env with Playwright. For a protected Vercel preview, confirm the build is
+   complete, then bypass deployment protection with `portal.vercelPreviewPassword` from the
+   credential file. Log in with `portal.email` / `portal.password`. Use
+   `portal.stagingTestEventPYOS` as the test event, or `portal.stagingTestEventGA` where
+   general admission is required. Apply the repository's equivalent access procedure for
+   the fallback target.
+4. Run every scenario end to end. Capture one screenshot at the exact moment of every
+   assertion point, named `<scenario>-<step>.png`. One screenshot at the end of a scenario
+   does not cover earlier assertions.
+5. Record the scenario, assertion point, steps, expected result, actual result, pass or
+   fail, screenshot, and diff hunk.
+6. Record a pass only when the screenshot exists and shows the claimed state. A missing,
+   unreadable, stale, or secret-bearing artifact is a fail.
+7. Post the results table through the project PR skill. Upload and embed every approved
+   screenshot in the PR comment, placing the resulting image reference in the matching
+   evidence cell. Use `embed-screenshots` when the project provides it. A local file path or
+   plain attachment outside the posted table is not enough.
+8. Re-read the posted PR comment and verify that it contains one row per assertion point,
+   every row has an embedded screenshot, and the reported PR head matches the tested head.
+9. A failed assertion returns to its owning slice with the evidence attached. Do not fix
+   product code from the verifier role.
 
-2. **Access the env with Playwright.** It is a Vercel preview, so it takes two gates in
-   order:
-   - bypass the deployment protection with `portal.vercelPreviewPassword`
-   - then log in to the app with `portal.email` / `portal.password`
+## Results table
 
-   Confirm the preview has **finished building** first. A bypass against a still-building
-   preview lands on the protection wall and reads exactly like a bad password.
+| scenario | assertion point | steps | expected | actual | pass/fail | embedded screenshot | diff hunk |
+|---|---|---|---|---|---|---|---|
+| `<name>` | `<step>` | `<actions>` | `<predicate>` | `<observation>` | `pass` | `![<step>](<uploaded-image-url>)` | `<file:line>` |
 
-3. **Use `portal.stagingTestEventPYOS` as the test event**, or `portal.stagingTestEventGA`
-   where a scenario needs general admission.
+## Exit criteria
 
-4. **Run every scenario end to end.** Capture a screenshot at each assertion point, named
-   `<scenario>-<step>.png`. Not one screenshot at the end — one per assertion.
-
-5. **Report a table:**
-
-   | scenario | steps | expected | actual | pass/fail | screenshot |
-   |---|---|---|---|---|---|
-   | `progressbar-renders` | open story, set 50% | bar half filled, `aria-valuenow=50` | as expected | pass | `progressbar-renders-02.png` |
-
-6. **Post the table on the PR and embed the screenshots** with
-   `embed-screenshots`.
-
-## Rules that decide the outcome
-
-- **A pass is recorded only against a captured screenshot, never against inference.** No
-  screenshot, no pass — the row is a fail with the file missing, and that is the honest
-  result (`prove-it-works`).
-- **Any fail blocks the PR** and returns that slice to implementation, with the failing
-  scenario and its screenshot attached. Not a note in the body; a return to the owner.
-- **Never commit credentials.** Never commit or embed a screenshot showing a password field
-  with content, a token in a URL, or a session cookie.
-- Screenshots live outside tracked paths until `embed-screenshots` places them.
-
-## Credential key reference
-
-The contract's keys resolve inside `_private/knowledge/key-maker.json` as:
-`portal.vercelPreviewPassword` (the deployment-protection bypass), `portal.email` and
-`portal.password` (the application login), `portal.stagingTestEventPYOS` and
-`portal.stagingTestEventGA` (test events). `_private/**` is git-ignored in this repo; in
-another repo, confirm the equivalent path is ignored before writing anything to it.
+Every required assertion point has a screenshot captured on the tested PR head, every row
+maps to a diff hunk, every screenshot is embedded in the posted PR results table, and the
+comment has been verified after posting. Any failure remains open and blocks merge-ready
+status.

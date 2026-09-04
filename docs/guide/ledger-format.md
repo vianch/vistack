@@ -1,11 +1,11 @@
 # Ledger format
 
-Two files per run, both under `.claude/state/`, both git-ignored. The state file is *where
-the run is*. The ledger is *how it got there*.
+Two files per run live under the host's resolved state root and are git-ignored. The state
+file is where the run is. The ledger is how it got there.
 
 A decision without a ledger row did not happen.
 
-## `.claude/state/<slug>.tsv` — the decision ledger
+## `<state-root>/<slug>.tsv` - the decision ledger
 
 Tab-separated, append-only, seven columns, no header row.
 
@@ -50,6 +50,10 @@ Free text is allowed, but these carry meaning elsewhere in the plugin:
 | `workaround` | `implementer` | a symptom treatment was accepted as a decision |
 | `reconciled` | `session-pickup` | the state file diverged from reality and was corrected |
 | `paused` | `pause-safely` | the slice was parked at a safe point |
+| `progress` | any execution role | a committed change, captured artifact, check delta, or completed unit moved the predicate |
+| `monitor-restarted` | `coordinate` or `session-pickup` | the prior monitor was not live and one new owner was established |
+| `queue-item-added` | `autopilot-full` | an independent item entered the queue after reconciliation |
+| `discarded` | any execution role | a change was reverted because its evidence did not improve the predicate |
 
 ### Worked rows
 
@@ -80,7 +84,7 @@ Free text is allowed, but these carry meaning elsewhere in the plugin:
 ### Appending
 
 ```bash
-LEDGER=".claude/state/${SLUG}.tsv"
+LEDGER="<state-root>/${SLUG}.tsv"
 printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$PHASE" "$SLICE" \
   "$DECISION" "$REASON" "$EVIDENCE" "$RESULT" >> "$LEDGER"
@@ -89,7 +93,7 @@ printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
 `printf` with explicit `\t`, never `echo` with typed tabs — a typed tab is an autocomplete
 away from being spaces, and a ledger with spaces where tabs should be parses as one column.
 
-## `.claude/state/<slug>.json` — the state file
+## `<state-root>/<slug>.json` - the state file
 
 Where the run is now. Full schema and an example: `skills/coordinate/SKILL.md`.
 
@@ -98,7 +102,9 @@ Any other order loses the run if the session dies between two of them.
 
 Keyed by slice. Per slice: `agent` · `model` · `session_id` · `worktree` · `branch` · `pr` ·
 `phase` · `blockers[]` · `retries`. Run-level: `slug` · `issue` · `playbook` ·
-`finish_condition` · `unchanged` · `base_branch` · `coordinator_session_id`.
+`finish_condition` · `unchanged` · `base_branch` · `coordinator_session_id`. New optional
+run fields may include `mode`, `objective`, `permissions`, `escape_hatch`, `host`, and
+monitor progress timestamps. Pickup preserves unknown fields.
 
 ## Schema changes
 

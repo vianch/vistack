@@ -18,6 +18,19 @@ Three parts, and each one does a job:
 Leave out the finish condition and viStack will ask for it before starting an autonomous
 run. That is the one question it blocks on, because everything after is measured against it.
 
+For a run you will review later, include the permission boundary and escape hatch:
+
+```text
+/vistack I am going to bed. Migrate every caller to the new parser in an isolated worktree.
+Done means zero old callers, all parser fixtures pass, and the old API is deleted.
+Keep parser output unchanged. Commit and push branches, but do not merge.
+If the blocker loop cannot resolve a problem, stop with the full attempt dossier.
+```
+
+That request matches `overnight`. The run checks the predicate, makes one evidence-backed
+change, verifies it, records one ledger row, and repeats. It stops at merge-ready drafts or
+one of the four fences.
+
 ## Sticky mode
 
 Once `/vistack` has run, the session is in viStack mode.
@@ -61,15 +74,15 @@ Control comes back to you in exactly these cases, and nowhere else:
 
 | Thing | Path |
 |---|---|
-| State file — the resume point | `.claude/state/<slug>.json` |
-| Decision ledger | `.claude/state/<slug>.tsv` |
-| Worktrees, one per slice | `.claude/worktrees/<slug>-<slice>` |
+| State file | Claude `.claude/state/<slug>.json`; Codex `.codex/vistack/state/<slug>.json` |
+| Decision ledger | The matching state root with `.tsv` extension |
+| Worktrees, one per slice | Claude `.claude/worktrees/<slug>-<slice>`; Codex `.codex/vistack/worktrees/<slug>-<slice>` |
 | Live agent sessions | the `Engineering work — agent sessions` comment on the issue |
 
 ## Resuming
 
-Session still alive → `claude attach <coordinator-session-id>`, taken from the resume line
-in the session comment.
+Session still alive → attach through the host's coordinator session operation, using the
+resume id in the session record.
 
 Session gone → `/vistack session-pickup <slug>`. It reads the state file and the ledger,
 reconciles them against `git worktree list`, `git branch -a`, and `gh pr view`, writes down
@@ -77,11 +90,12 @@ every divergence, and resumes at the earliest unfinished phase.
 
 ## Invoking a principle
 
-Any of the ten principles is invocable by name. A reply that invokes one must name **the
-decision the principle changed** — restating the name is not invoking it. See
+Any indexed principle is invocable by name. A reply that invokes one must name **the
+decision the principle changed**. Restating the name is not invoking it. See
 `skills/vistack/principles/index.md`.
 
 ## Related
 
 - Mistakes that cost the most: `common-mistakes.md`
 - Ledger column semantics: `ledger-format.md`
+- Overnight handoff: `overnight.md`

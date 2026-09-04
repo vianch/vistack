@@ -1,29 +1,22 @@
 # Playbook: blocker
 
-**Match when** work is already open and stuck on one identified obstacle. Owned by
-`unblocker`. Bounded: **20 attempts**, with an early abort.
+**Match when one open unit is stuck on one identified obstacle.** The loop is bounded at 20
+attempts and aborts early when evidence stops changing.
 
 ## Steps
 
-1. State the blocker in one sentence: what was expected, what happened, and the exact error
-   text quoted.
-2. Confirm it is one blocker. Two symptoms with different causes are two runs of this
-   playbook.
-3. Record the baseline: the exact command, its full output, and the commit it ran against.
-4. Enter the attempt loop (`unblock`). Each attempt: state a hypothesis **distinct from
-   every prior attempt**, change **exactly one variable**, run, and append a ledger row with
-   command, output, and verdict.
-5. Abort early if three consecutive attempts produce identical evidence. That is a knowledge
-   gap, not a solvable defect — go to step 8.
-6. Never widen scope, skip a test, loosen a type, add a blanket `catch`, or force-push to
-   get unblocked. An attempt that does any of those is void and does not count against the
-   budget.
-7. On resolution: state the root cause, apply the fix that addresses it, and confirm the
-   original command now succeeds. Record the cause in the ledger.
-8. On abort or exhaustion: assemble the escalation dossier — the blocker, every hypothesis
-   tried with its evidence, what the evidence rules out, the two or three remaining
-   candidates, and what would settle each.
-9. Escalate as FENCE 1 with the full log. Park the slice in the state file with
-   `phase: blocked` and its blocker list.
-10. Update the `Engineering work — agent sessions` comment. Other slices keep running; a blocker on
-    one slice does not stop the others unless the conflict matrix says it must.
+1. State the expected result, actual result, and exact error text.
+2. Confirm this is one blocker. Separate symptoms use separate runs.
+3. Record the baseline command, full output, commit, worktree, and branch.
+4. For each attempt, state a distinct hypothesis, change exactly one variable, run the
+   command, capture full output, and append one ledger row.
+5. Abort after three consecutive attempts with identical evidence. Do not burn the remaining
+   budget on a loop that is not learning.
+6. Never widen scope, skip or delete tests, loosen types, add a blanket catch, force-push,
+   reset shared work, or rerun an identical command. Such an attempt is void.
+7. On resolution, state the root cause with `file:line`, apply the cause-level fix, and
+   rerun the original baseline. Record `root-cause-fixed` and return to the prior phase.
+8. On abort or exhaustion, write the six-part FENCE 1 dossier: blocker, baseline, attempts,
+   ruled-out causes, remaining candidates, and the check that would settle each.
+9. Park the slice as `blocked`, update the state and session record, and let independent
+   slices continue.

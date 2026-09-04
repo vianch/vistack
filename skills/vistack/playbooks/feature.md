@@ -1,32 +1,30 @@
 # Playbook: feature
 
-**Match when** new behaviour is wanted behind a specified acceptance criterion.
+**Match when new behavior is wanted behind specified acceptance criteria.** The feature
+owner stays responsible for the design and reviews delegated implementation.
 
 ## Steps
 
-1. Read the ticket's acceptance criteria. Restate each one as a check with a subject and a
-   verb. An AC that cannot be restated that way is FENCE 2.
-2. State the finish condition and the behaviour that must not change.
-3. Dispatch `analyst` for the impact map: where the new behaviour attaches, existing
-   patterns to follow, and the coverage of the paths that will change.
-4. Dispatch `planner`: slices ≤500 lines, each independently mergeable, file-level ownership
-   per slice, plus the conflict matrix (`slice-plan`).
-5. Serialize any slices that share a file. Parallelize the rest. Write the plan into
-   `.claude/state/<slug>.json`.
-6. For each parallel slice, create the worktree at `.claude/worktrees/<slug>` and dispatch
-   one `implementer`. One slice, one worktree, one agent.
-7. Each `implementer` writes the test first where a test is the check, then the code, then
-   runs lint and tests, then passes its diff through
-   `pruning-comments`.
-8. A slice that finishes raises its PR immediately via `pr-author` — draft, ≤500 lines,
-   linked to the issue, reviewer team assigned by
-   `requesting-reviewers`. Never batch.
-9. Over 500 lines → `stack-split` before the PR opens, not after.
-10. `qa-verifier` runs the QA CONTRACT against the PR's preview and posts the results table
-    with screenshots (`qa-verify`).
-11. `health-check` audits each diff: does it satisfy every acceptance criterion, and is every
-    QA scenario traceable to a diff hunk. Defects route back to the owning slice only.
-12. `address-ai-reviews` clears bot comments on each PR.
-13. Update the state file and the `Engineering work — agent sessions` comment on every transition.
-14. Stop at merge-ready. Report the PR set, the evidence, and anything left open. Never
+1. Read the acceptance criteria. Restate each as a subject, verb, and check. An ambiguous
+   criterion that changes behavior or a public contract is FENCE 2.
+2. State the finish predicate and unchanged behavior.
+3. Run a read-only architecture pass over the affected subsystem. Name the data shape and
+   organizing structure before logic. Reuse existing patterns.
+4. Write the throughput checkpoint with four entries: blocking steps, independent
+   workstreams, shared mutable state, and the smallest safe decomposition. Keep an `n/a`
+   reason for a dimension that does not apply.
+5. Dispatch `analyst` for the impact map and `planner` for slices of at most 500 changed
+   lines, file ownership, checks, dependencies, and the conflict matrix.
+6. Serialize slices that share a file. Create one worktree per parallel slice and dispatch
+   one `implementer` per slice.
+7. Each implementer writes the check first where practical, then code, then lint and tests.
+   It passes the diff through comment cleanup and reports exact output.
+8. Drain completed slices as queue events. Open each finished slice as a draft PR immediately.
+   Over 500 lines or multiple concerns goes through `stack-split` first.
+9. Run QA on each PR's own environment. Capture a screenshot at every assertion point and
+   trace every scenario to a diff hunk.
+10. Run `health-check` independently. A finding returns to the owning slice only.
+11. Clear review automation comments through the project skill. Update state, ledger, and the
+    session record on every transition.
+12. Stop when every slice is merge-ready. Report the PR set, evidence, and open work. Never
     merge.

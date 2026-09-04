@@ -1,65 +1,86 @@
 ---
 name: coordinate
-description: "Dispatch per-role agents through a playbook's phases, maintain the run's state file and decision ledger, and report at phase boundaries only. Use when a slice plan exists and work needs dispatching, or when a run's state file and ledger need updating on a transition."
+description: "Dispatch per-role agents through a playbook, maintain resumable state and an append-only decision ledger, and report at phase boundaries. Use when a slice plan exists or a run needs a state transition."
 ---
 
 # coordinate
 
-The dispatch layer. It moves phases, launches roles, writes state, and reports at
-boundaries. **It never edits product code** — the moment the coordinator writes code,
-nobody is coordinating.
+The dispatch layer moves a run between phases. It owns coordination state and evidence. It
+never edits product code.
 
-## Coordinator startup invariant
+Any issue comment or other external status written by the coordinator uses the consuming
+project's ordinary voice. It must not mention `viStack`, `vistack`, `/vistack`, `$vistack`, or
+internal role, skill, model, or host names. Keep those identifiers in the state, ledger, or
+host-local records only.
 
-Every new coordinator must establish exactly one live review monitor before it dispatches a
-slice or reviews a PR. A persisted `monitor.status: active` value is not evidence that the
-monitor is running: the new coordinator must verify ownership in the current session or
-start a new monitor. If the monitor cannot be verified as active, do not dispatch work;
-record the blocker and return it as a fence.
+## Host paths
 
-The monitor belongs to the coordinator session, not to the worktree or an implementer. On
-coordinator replacement or pickup, the new coordinator reclaims the monitor explicitly and
-records the new owner before continuing. There is exactly one monitor per run.
+Resolve these once at startup.
+
+| Host | State root | Worktree root | Recurring monitor |
+|---|---|---|---|
+| Claude Code | `.claude/state/` | `.claude/worktrees/` | `/loop 10m /vistack babysit <slug>` |
+| Codex | `.codex/vistack/state/` | `.codex/vistack/worktrees/` | the host's recurring-task or background equivalent |
+
+In the contracts below, `<state-root>` and `<worktree-root>` mean the resolved paths. Do not
+mix roots in one run. A run resumes only on the host that created it.
+
+## Startup invariant
+
+Establish exactly one live monitor before dispatching a slice or reviewing a PR. A persisted
+`monitor.status: active` value is only a claim. Verify the current owner and live mechanism.
+If either is missing, start one monitor and record it. If verification fails, record a
+blocker and do not dispatch.
+
+On pickup, the new coordinator reclaims the monitor explicitly. On pause, a fence, or the
+last merge-ready slice, stop it. Never start a second monitor to cover a stale first one.
 
 ## Setup, once per run
 
-1. Derive the slug: the issue number and a short kebab descriptor, e.g. `21510-progressbar`.
-2. Ensure `.claude/state/` is git-ignored. If it is not, add it to `.gitignore` — this is a
-   per-repo input and a run must not commit its own bookkeeping. `.claude/worktrees/`
-   likewise.
-3. Confirm the realm: `git remote -v` shows only `the project organization and its approved repositories`.
-4. Write the initial state file and open the ledger.
+1. Derive a stable slug from the issue and a short kebab descriptor.
+2. Ensure `<state-root>` and `<worktree-root>` are git-ignored in the consuming repository.
+   Do not commit run bookkeeping.
+3. Confirm `git remote -v` stays inside the consuming project's approved repositories.
+4. Write the initial state file and open the ledger before dispatch.
+5. Record the objective, finish condition, unchanged behavior, host, monitor mechanism,
+   permissions, and escape hatch. Preserve unknown keys when updating an existing state file.
 
-## The state file — `.claude/state/<slug>.json`
+## State file
 
-Keyed by slice. Updated on **every** transition, not at the end — it is the resume point
-for `session-pickup`, and a state file written at the end is a state file that does not
-exist when it is needed.
+`<state-root>/<slug>.json` is the resume point. Update it on every transition. The fields
+below are additive to the existing schema, so pickup can read older runs.
 
 ```json
 {
   "slug": "21510-progressbar",
   "issue": "https://github.com/ORG/REPO/issues/123",
   "playbook": "autopilot-stack",
-  "finish_condition": "ProgressBar renders at 0/50/100% in Storybook; the two Loader call sites use it; suite green",
-  "unchanged": "existing Loader consumers keep their current visual output",
+  "mode": "unattended",
+  "objective": "Replace the two Loader call sites with ProgressBar",
+  "finish_condition": "ProgressBar renders at 0/50/100%; two call sites use it; suite green",
+  "unchanged": "Existing Loader consumers keep their current visual output",
+  "permissions": "Commit and push slice branches. Leave PRs as drafts. Do not merge.",
+  "escape_hatch": "Stop with a blocker dossier after the bounded unblock loop",
   "base_branch": "main",
-  "coordinator_session_id": "session_011xyz…",
+  "host": "claude-code",
+  "coordinator_session_id": "session_011xyz",
   "monitor": {
     "interval": "10m",
-    "loop_command": "/loop 10m /vistack babysit <slug>",
+    "mechanism": "/loop 10m /vistack babysit <slug>",
+    "owner": "session_011xyz",
     "status": "active",
-    "last_pass_at": null
+    "last_pass_at": null,
+    "last_progress_at": null
   },
   "slices": {
     "primitive": {
       "agent": "implementer",
       "model": "sonnet",
-      "session_id": "session_011abc…",
+      "session_id": "session_011abc",
       "worktree": ".claude/worktrees/21510-progressbar-primitive",
       "branch": "user/issue-progressbar-primitive",
-      "pr": "https://github.com/ORG/REPO/pull/456",
-      "phase": "qa",
+      "pr": null,
+      "phase": "planned",
       "blockers": [],
       "retries": 0
     }
@@ -67,75 +88,60 @@ exist when it is needed.
 }
 ```
 
-`phase` is one of: `planned` · `dispatched` · `implementing` · `pr-open` · `qa` ·
-`audit` · `merge-ready` · `blocked` · `paused`.
+`phase` is one of `planned`, `dispatched`, `implementing`, `pr-open`, `qa`, `audit`,
+`merge-ready`, `blocked`, or `paused`. `blockers[]` contains `{ "summary", "attempts",
+"last_evidence" }`.
 
-`blockers[]` holds one entry per open blocker: `{ "summary", "attempts", "last_evidence" }`.
+## Ledger
 
-## The ledger — `.claude/state/<slug>.tsv`
+`<state-root>/<slug>.tsv` is append-only and keeps the existing seven columns:
 
-One row per decision. Tab-separated, append-only, seven columns:
-
-```
+```text
 ts	phase	slice	decision	reason	evidence	result
 ```
 
-Full column semantics and worked rows: `docs/guide/ledger-format.md`.
+Log playbook matches, skipped steps, dispatches, transitions, attempts, side fixes, monitor
+restarts, reconciliations, and verification results. Evidence is a path, URL, SHA, command
+output, or artifact. It is not a paragraph.
 
-A decision without a row did not happen. This includes skipped playbook steps — the step
-stays in the task list, and the reason lives here.
+Use `decision: step-skipped` for every retained step that does not run. A decision without
+a ledger row did not happen.
 
 ## Dispatch rules
 
-- **Start and verify the monitor at coordinator startup.** In the current coordinator
-  session, run `/loop 10m /vistack babysit <slug>` (or the consuming client's equivalent
-  recurring-task command), record `monitor.status = active`, and append a monitor-started
-  ledger row before any agent is launched. The existing `coordinator_session_id` identifies
-  the owner. This is a startup gate and a standing routine, not a one-off reminder.
-- The monitor owns no product changes. Every pass reads the state and ledger, enumerates
-  every PR recorded under `slices.*.pr`, and runs the `babysit` checks against all of them:
-  liveness, CI, draft status, size, concern scope, and review/QA evidence. It must also
-  discover newly opened agent PRs and add their links to the state before checking them.
-- If a pass finds a stalled agent, red CI, failed QA, review comment, invariant violation,
-  or a newly opened PR, route or record the owning slice and update state → ledger → session
-  comment in that order. A clean pass updates only `monitor.last_pass_at` and records a
-  `monitor-pass` ledger row.
-- A `monitor.status` of `active` is a claim about a loop, not proof of one. Any new
-  coordinator, pass, or pickup that finds no running loop behind that claim, or finds a
-  different coordinator session in `coordinator_session_id`, restarts exactly one monitor
-  before doing more work and appends a monitor-started ledger row. The coordinator session
-  id and ledger survive the session that created them.
-- Do not start a second loop if one is already active. On `pause-safely`, a fence, or when
-  every slice is `merge-ready`, cancel `/loop`, set `monitor.status = stopped`, and record
-  the reason. A stopped loop is resumed only by a new coordinator session or explicit
-  babysit request.
-
-- One slice, one worktree, one agent. `.claude/worktrees/<slug>-<slice>`.
-- Before dispatching, assert the invariant: the number of directories under
-  `.claude/worktrees/` equals the number of in-flight slices. Not equal → stop.
-- Slices sharing a file are serialized per the conflict matrix from `slice-plan`. The
-  second starts from the first's branch, after its PR opens.
-- Models come from agent frontmatter. Do not override per-run.
-- Immediately after each dispatch, upsert the session comment (`session-ledger`).
+- One slice uses one worktree, one branch, and one owning agent.
+- Before each wave, the number of worktree directories must equal the number of in-flight
+  slices. A mismatch stops dispatch.
+- Read the conflict matrix before every wave. Shared files serialize. Disjoint slices may
+  run in parallel.
+- Every agent brief names the goal, scope, files it may not touch, acceptance checks, exact
+  verification commands, timebox, forbidden actions, and report shape.
+- A completion is a queue event. Drain it, update state, ledger, and session comment, then
+  dispatch the next eligible unit without waiting for a human.
+- A lane that reaches its expected runtime without a commit, captured artifact, check delta,
+  or report is stalled. Route it to `unblock` or replace it after the playbook's limit.
 - A finished slice raises its PR immediately. Never batch.
+- Every PR is one concern, at most 500 changed lines excluding lockfiles and generated
+  files, assigned to the configured reviewers, and left as a draft.
+- No owner, coordinator, or monitor merges. Merging is FENCE 3.
 
-## Phase transitions
+## Transition order
 
-On every transition, in this order:
+For every phase transition, write in this order.
 
-1. Write the state file.
-2. Append the ledger row.
-3. Upsert the `Engineering work — agent sessions` comment in the project's ordinary human voice.
+1. State file.
+2. Ledger row.
+3. Session comment, or a host-local equivalent when the host has no issue-comment surface.
 
-Doing them in the other order loses the run if the session dies between steps.
+Reconcile before acting after a restart. Compare state with worktrees, branches, PRs,
+comments, and live agent status. Record each divergence as `decision: reconciled`.
 
 ## Reporting
 
-Report at phase boundaries only. A boundary report is three things: what changed, the
-evidence, and what is next. No narration between boundaries, no confirmations, no status
-questions — outside the four fences (`autonomy-has-fences`).
+Report at phase boundaries only. State what changed, the evidence that proves it, and what
+is next. Do not narrate tool calls or ask for confirmation outside the four fences.
 
 ## Exit
 
-All slices `merge-ready`, or a fence hit. Report the PR set, the evidence per PR, the ledger
-path, and anything left open. Leave every PR a draft. **Never merge.**
+Stop when every slice is merge-ready or a fence is reached. Report the PR set, evidence per
+PR, ledger path, monitor status, and open work. Leave every PR a draft. Never merge.

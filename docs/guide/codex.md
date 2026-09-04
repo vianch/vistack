@@ -44,10 +44,17 @@ The shared router therefore adapts the same playbooks to the current Codex threa
 - Run state and the decision ledger live under `.codex/vistack/state/`.
 - Slice worktrees live under `.codex/vistack/worktrees/`.
 - Claude-only `/loop`, `claude attach`, and session-comment operations are skipped with an
-  explicit ledger reason; Codex continues with the equivalent sequential phase in-thread.
+  explicit ledger reason. Codex continues with the equivalent sequential phase in-thread.
+- An overnight run uses the Codex recurring-task or background equivalent when the host
+  provides one. If it does not, the run still writes resumable state but must not claim that
+  work continued after the thread ended.
 
 The workflow still requires a checkable finish condition, keeps the four fences, uses one
 concern per draft PR, and stops at merge-ready. It never merges.
+
+Use `$overnight` for a direct overnight entry point, or include "going to bed" and the full
+permission boundary in a `$vistack` request. Use `$automate-me` to capture personal working
+preferences. Project invariants stay in viStack principles and playbooks.
 
 ## Update
 

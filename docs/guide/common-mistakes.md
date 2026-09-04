@@ -29,6 +29,12 @@ diff against — so it audits against the PR description, which is the thing bei
 
 viStack refuses to start an autonomous run without one. That refusal is the feature.
 
+## Do not start an overnight run without an escape hatch
+
+An overnight prompt also states what the agent may do, what remains human-owned, and when to
+stop. "Keep going while I sleep" is not enough. A bounded blocker dossier, a credential
+fence, and a merge boundary keep a long run from inventing a new goal at 3am.
+
 ## Do not let parallel writers share a directory
 
 ❌ Two agents, one checkout, "they're editing different files".
@@ -99,6 +105,14 @@ budget does not move.
 
 **Asking for confirmation mid-phase.** A fence violation in the other direction. It converts
 an unattended run into a supervised one and wastes the reason for starting it.
+
+**Treating a monitor flag as a live monitor.** `monitor.status: active` is persisted state,
+not proof. Verify the owner and wake mechanism after startup and pickup, and keep one monitor
+per run.
+
+**Retrying a lane without a side effect.** A completion notification is not progress. Count
+commits, pushes, check changes, captured artifacts, and reports. Reconcile or replace a lane
+that reaches its limit without one.
 
 **Citing a principle without naming what it changed.** "Following `subtract-before-you-add`,
 I'll keep things clean" is a citation with no content. Name the decision or delete the

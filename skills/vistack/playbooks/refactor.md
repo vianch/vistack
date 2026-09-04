@@ -1,32 +1,26 @@
 # Playbook: refactor
 
-**Match when** structure must change and behaviour must not. The finish condition is always
-partly negative: nothing observable changed.
+**Match when structure must change and observable behavior must not.** A discovered bug or
+feature becomes a separate unit.
 
 ## Steps
 
-1. State what changes structurally, and state explicitly that behaviour does not.
-2. Establish the behavioural baseline before touching anything: run the suite, record the
-   result, and note which of the touched paths are uncovered.
-3. Where a touched path is uncovered, add the characterization test **first**, against
-   current behaviour, and land it in its own slice. It is the only thing that will catch a
-   regression.
-4. Dispatch `analyst` for the full call-site inventory of everything being moved, renamed,
-   or deleted, with `file:line`. An incomplete inventory makes the rest of the run unsafe.
-5. Look for the deletion first: unused code is removed, not migrated
-   (`subtract-before-you-add`).
-6. Dispatch `planner`: slices ≤500 lines, mechanical and non-mechanical separated, file-level
-   ownership per slice, conflict matrix (`slice-plan`). A rename that touches 40 files is its
-   own slice and shares files with nothing else.
-7. Serialize slices sharing a file. Parallelize the rest, one worktree each.
-8. Each `implementer` keeps behaviour identical: no bundled fixes, no bundled improvements,
-   no signature changes that were not in the plan. Anything noticed goes in the ticket.
-9. Verify per slice: the suite gives the same result as the step-2 baseline, and lint is
-   green. Pass each diff through `pruning-comments`.
-10. Raise each PR as it finishes — draft, one concern, ≤500 lines, "no behaviour change"
-    stated in the body with the baseline evidence.
-11. `qa-verifier` spot-checks the user-visible surfaces the refactor passed through, with
-    screenshots showing them unchanged.
-12. `health-check` reads each diff for a behaviour change that slipped in — a changed
-    default, a dropped branch, an altered order.
-13. Update the state file and the `Engineering work — agent sessions` comment. Stop at merge-ready.
+1. State the target structure and the behavior contract that remains unchanged.
+2. Run the behavioral baseline and record the command, result, commit, and uncovered paths.
+3. Add characterization tests or an equivalence harness for every uncovered touched path.
+   Land the pin before moving structure.
+4. Inventory all callers, references, exports, tests, and generated files with `file:line`.
+5. Name the target data shape. Use a state machine, registry, or typed model only when it
+   removes branches or invalid states.
+6. Delete dead code and duplicate paths before adding the new structure.
+7. Dispatch `planner` for independently verifiable slices, file ownership, and the conflict
+   matrix. Migrate callers and remove an obsolete internal API in the same planned wave.
+8. Serialize shared files. Dispatch one implementer per isolated worktree. No bundled fixes,
+   new behavior, or compatibility shims without a recorded external-compatibility reason.
+9. Keep the baseline green after every slice. Run lint, tests, and an equivalence check on
+   the matching surface.
+10. Open a draft PR per slice, one concern and at most 500 changed lines. Include the baseline
+    evidence and reader-load improvement.
+11. Run QA spot checks and `health-check` for hidden behavior changes. Update state, ledger,
+    and session record.
+12. Stop at merge-ready. Report the structure, pin, equivalence proof, and discarded work.

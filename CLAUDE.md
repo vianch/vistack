@@ -4,10 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repository is
 
-viStack is a **Claude Code and Codex plugin**, not an application. There is no source code, no
-build, no test runner, and no package manager — the entire deliverable is Markdown (skills,
-agents, playbooks, docs) plus host manifests. Editing a file here changes agent behaviour
-directly; there is nothing to compile.
+viStack is a **Claude Code and Codex plugin**, not an application. The deliverable is mostly
+Markdown (skills, agents, playbooks, docs) plus host manifests and small dependency-free
+validation scripts. Editing a contract changes agent behavior directly. There is no product
+build.
 
 The working copy sits inside `~/.claude/plugins/marketplaces/vistack` and is **not a git
 repository** at that path. The upstream is `github.com/vianch/viStack`.
@@ -23,8 +23,9 @@ codex plugin add vistack@vistack  # install from the Codex marketplace
 $vistack <request>                # invoke the Codex skill in a new thread
 ```
 
-Verification after any edit is the inventory: a skill or agent that fails frontmatter or
-path rules loads as *nothing*, silently, with no error.
+Verification after any edit is the inventory and the structural checker:
+`node scripts/check-playbooks.mjs`. A skill or agent that fails frontmatter or path rules
+loads as *nothing*, silently, with no error.
 
 ## Layout and load rules
 
@@ -49,8 +50,8 @@ adapter and uses `.codex/vistack/` for Codex run state and worktrees.
 Two hard constraints that break loading silently when violated:
 
 - **Claude Code discovers a skill only at `skills/<name>/SKILL.md`.** One level deeper
-  (`skills/principles/<name>/SKILL.md`) yields zero skills. This is why all ten principles
-  sit at the top level of `skills/` rather than being nested.
+  (`skills/principles/<name>/SKILL.md`) yields zero skills. All principles therefore sit at
+  the top level of `skills/` rather than being nested.
 - **Every skill and agent `name` must match `^[a-z0-9]+(-[a-z0-9]+)*$`, and the directory or
   filename must match the frontmatter `name`.** `viStack` in a `name:` field or a directory
   name breaks the load. `viStack` is prose only; `vistack` is the identifier.
@@ -74,7 +75,7 @@ The design is a **router → playbook → agent** chain, with all coordination s
 
 ### Run state (schema-bearing — see "Versioning")
 
-Two git-ignored files per run in the *consuming* repo, never here:
+Two git-ignored files per run in the *consuming* repo, never here. Claude uses:
 
 - `.claude/state/<slug>.json` — where the run is, keyed by slice; updated on **every**
   transition, because it is the resume point for `session-pickup`.
@@ -99,6 +100,8 @@ everywhere it appears:
   `stack-split` makes a parent→child chain.
 - **One worktree per slice** at `.claude/worktrees/<slug>`; slices sharing a file are
   serialized by the conflict matrix from `slice-plan`, never run concurrently.
+- **Host-specific state.** Codex uses `.codex/vistack/state/` and
+  `.codex/vistack/worktrees/`. A run does not switch state roots when it changes hosts.
 - **Repo-agnostic.** Nothing hardcodes a repository, branch, reviewer team, or service. The
   three per-repo inputs are base branch, reviewer team, and verification target.
 - **Reuse, do not reimplement.** viStack supplies only the coordinator layer, state file,

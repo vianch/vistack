@@ -1,12 +1,12 @@
 ---
 name: slice-plan
-description: "Decompose a ticket into slices of 500 lines or fewer that are each independently mergeable, assign file-level ownership per slice, and produce the conflict matrix that decides what runs in parallel. Use when planning work before dispatch, or when two agents turn out to be touching the same file."
+description: "Decompose a ticket into independently verifiable slices of 500 lines or fewer, assign file ownership, and produce the conflict matrix and wave schedule. Use before dispatch or when agents collide on a file."
 ---
 
 # slice-plan
 
-Turn one ticket into slices that can be built, reviewed, and merged separately — and decide
-which of them may run at the same time.
+Turn one ticket into slices that can be built, reviewed, and merged separately. Decide which
+ones may run at the same time.
 
 Two outputs, both required: **the slice list** and **the conflict matrix**. A dispatch
 without a matrix is a dispatch that will corrupt a file.
@@ -21,6 +21,8 @@ without a matrix is a dispatch that will corrupt a file.
 - **One concern each.** The slice boundary is a reason for the change, not a line count.
 - **File-level ownership.** Every slice lists the files it will create, modify, and delete.
   A file with no owning slice does not get touched; a file with two owners is a conflict.
+- **Complete briefs.** Each slice names its goal, context, acceptance checks, exact verify
+  command, timebox, forbidden actions, and report shape before it is dispatched.
 - **Delete first.** Check for unused code before planning a port
   (`subtract-before-you-add`).
 - **Do not over-slice.** A 40-line change split in two adds two review cycles and proves
@@ -54,8 +56,8 @@ Read it as a schedule:
 - **Non-empty cell → serialize the pair.** The later slice starts from the earlier one's
   branch, after that PR opens. They never run at the same time.
 
-From the matrix above: A runs first. B and C run concurrently once A's PR is open — they
-share nothing with each other. D waits for C.
+From the matrix above, A runs first. B and C run concurrently once A's PR is open because
+they share nothing with each other. D waits for C.
 
 If the matrix comes out dense — most cells populated — the slicing is wrong, not the
 schedule. Re-cut along file boundaries instead of feature boundaries and try again.
@@ -76,5 +78,6 @@ Then the matrix, then the schedule as an ordered list of waves.
 
 ## Hand-off
 
-The slice list and matrix go into `.claude/state/<slug>.json` before any worktree is
-created. `coordinate` dispatches from them and re-reads the matrix on every wave.
+The slice list, matrix, wave schedule, and brief references go into the resolved state root
+before any worktree is created. `coordinate` dispatches from them and re-reads the matrix on
+every wave.

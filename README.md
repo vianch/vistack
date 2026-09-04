@@ -18,8 +18,8 @@ the same playbooks, principles, and skill names across the two hosts.
 
 | Host | Version | Manifest |
 |---|---:|---|
-| Claude Code | `0.4.0` | `.claude-plugin/plugin.json` |
-| Codex | `0.4.0` | `.codex-plugin/plugin.json` |
+| Claude Code | `0.5.0` | `.claude-plugin/plugin.json` |
+| Codex | `0.5.0` | `.codex-plugin/plugin.json` |
 
 ### Claude Code
 
@@ -188,6 +188,8 @@ open http://127.0.0.1:47319
 Use `node scripts/visualizer-server.mjs --status` and `--disable` to control the detached
 server. The page's `LIVE SYNC` toggle pauses polling without stopping it. See
 [`docs/guide/visualizer.md`](docs/guide/visualizer.md) for data sources and offline fixtures.
+The lifecycle skill provides the same controls through `vistack:visualizer on`, `off`, and
+`status`.
 
 ---
 
@@ -218,6 +220,9 @@ files are the source of truth, so they are not restated here.
 | [`authoring-skill`](skills/vistack/playbooks/authoring-skill.md) | creating or modifying a workflow contract |
 | [`automate-me`](skills/vistack/playbooks/automate-me.md) | capturing working preferences in a reusable mode skill |
 | [`worktree-cleanup`](skills/vistack/playbooks/worktree-cleanup.md) | an evidence-based audit of stale worktrees |
+
+Specialist skills include [`visualizer`](skills/visualizer/SKILL.md) for starting, stopping,
+and inspecting the local workflow observer.
 | [`session-pickup`](skills/vistack/playbooks/session-pickup.md) | resuming work whose session is gone; state file and ledger exist |
 | [`pause-safely`](skills/vistack/playbooks/pause-safely.md) | stop now, stay resumable, hold nothing |
 | [`babysit`](skills/vistack/playbooks/babysit.md) | a run is dispatched; watch it, unstick it, report at boundaries |

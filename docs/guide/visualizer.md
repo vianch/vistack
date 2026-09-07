@@ -101,5 +101,10 @@ The canvas also provides light/dark themes, Signal Flow / Classic / Blueprint / 
 presets, node search, focus inspection, fit-to-canvas, and self-contained SVG export. These
 controls are viewer-only; they do not edit the workflow source or project state.
 
+The live overlay is built from the server snapshot rather than from guessed topology. It
+surfaces the current run phase, active agent lanes, open review threads, and evidence count;
+matching authored nodes and relationships pulse in the canvas. `PLAY STORY` cycles through the
+named authored flows at a finite pace, and `PAUSE STORY` leaves the current route selected.
+
 Review-thread resolution comes from GitHub's `isResolved` value. Fixture data uses the explicit
 `addressed` field. A missing thread source is shown as unavailable, never as zero open comments.

@@ -315,16 +315,27 @@
       .archify-toolbar button.is-active { border-color: var(--archify-accent); color: var(--archify-accent); }
       .archify-toolbar input { min-width: 180px; margin-left: auto; }
       .archify-toolbar select { background: var(--archify-bg); }
+      .archify-livebar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; border-bottom: 1px solid var(--archify-border); padding: 10px 16px; color: var(--archify-muted); font-size: 10px; text-transform: uppercase; }
+      .archify-livebar strong { color: var(--archify-ink); font-weight: 600; }
+      .archify-livebar .live-pulse { display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: var(--archify-accent); box-shadow: 0 0 0 0 color-mix(in srgb, var(--archify-accent) 55%, transparent); animation: archify-pulse 1.8s infinite; }
+      @keyframes archify-pulse { 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
       .archify-canvas { min-height: 590px; overflow: auto; background-image: linear-gradient(var(--archify-grid) 1px, transparent 1px), linear-gradient(90deg, var(--archify-grid) 1px, transparent 1px); background-size: 32px 32px; }
       .archify-canvas svg { display: block; min-width: 100%; }
       .archify-lane { fill: color-mix(in srgb, var(--archify-bg) 84%, white 16%); stroke: var(--archify-border); stroke-width: 1; }
       .archify-lane-label { fill: var(--archify-muted); font: 600 11px var(--font-abc-diatype-mono); letter-spacing: .08em; }
       .archify-edge { fill: none; stroke: #64748b; stroke-width: 1.5; opacity: .68; marker-end: url(#archify-arrow); transition: opacity .15s, stroke .15s, stroke-width .15s; }
       .archify-edge.is-route { stroke: var(--archify-accent); stroke-width: 2.7; opacity: 1; }
+      .archify-edge.is-live { stroke: var(--archify-accent); stroke-dasharray: 7 7; animation: archify-flow 1.1s linear infinite; opacity: 1; }
+      .archify-edge.is-attention { stroke: #fb923c; opacity: 1; }
+      .archify-shell.is-playing .archify-edge.is-route { stroke-dasharray: 7 7; animation: archify-flow .8s linear infinite; }
+      @keyframes archify-flow { to { stroke-dashoffset: -14; } }
       .archify-edge-label { fill: var(--archify-muted); font: 10px var(--font-abc-diatype-mono); pointer-events: none; }
       .archify-node { cursor: pointer; }
       .archify-node rect { fill: var(--node-fill, #1e293b); stroke: var(--node-stroke, #94a3b8); stroke-width: 1.4; transition: opacity .15s, stroke-width .15s, filter .15s; }
       .archify-node:hover rect, .archify-node.is-selected rect { stroke: var(--archify-accent); stroke-width: 2.5; filter: drop-shadow(0 0 8px color-mix(in srgb, var(--archify-accent) 55%, transparent)); }
+      .archify-node.is-live rect { animation: archify-node-live 1.8s ease-in-out infinite; }
+      .archify-node.is-attention rect { stroke: #fb923c; stroke-width: 2.2; }
+      @keyframes archify-node-live { 50% { filter: drop-shadow(0 0 9px color-mix(in srgb, var(--archify-accent) 45%, transparent)); } }
       .archify-node.is-dim, .archify-edge.is-dim { opacity: .16; }
       .archify-node-title { fill: var(--archify-ink); font: 600 12px var(--font-abc-diatype-mono); }
       .archify-node-subtitle { fill: var(--archify-muted); font: 10px var(--font-abc-diatype-mono); }
@@ -468,8 +479,10 @@
               <select id="map-route" aria-label="Trace a route"><option value="">TRACE ROUTE</option></select>
               <input id="map-search" type="search" placeholder="Find node / route…" aria-label="Find node or route">
               <button type="button" id="map-fit">FIT</button>
+              <button type="button" id="map-story">PLAY STORY</button>
               <button type="button" id="map-export">EXPORT SVG</button>
             </div>
+            <div class="archify-livebar" id="map-livebar" aria-live="polite"><span><i class="live-pulse"></i><strong>LIVE OVERLAY</strong></span><span>Waiting for snapshot</span></div>
             <div class="archify-canvas" id="system-map" tabindex="0" aria-label="Interactive architecture diagram"></div>
             <div class="archify-detail"><div class="archify-legend" id="map-legend"></div><aside class="archify-inspector" id="map-inspector"><strong>Choose a node</strong><p>Search, focus, or click the map to inspect authored relationships.</p></aside></div>
           </div>
@@ -532,7 +545,8 @@
         let viewEnabled = localStorage.getItem("run-observer-view") !== "off";
         let liveSync = localStorage.getItem("run-observer-sync") !== "off";
         let fetchInFlight = false;
-        const mapState = { theme: localStorage.getItem("observer-map-theme") || "dark", preset: localStorage.getItem("observer-map-preset") || "signal-flow", depth: "map", query: "", route: "", selected: null, type: "architecture" };
+        const mapState = { theme: localStorage.getItem("observer-map-theme") || "dark", preset: localStorage.getItem("observer-map-preset") || "signal-flow", depth: "map", query: "", route: "", selected: null, type: "architecture", playing: false };
+        let storyTimer = null;
 
         const $ = (id) => document.getElementById(id);
         const escapeHtml = (value) => String(value ?? "-").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
@@ -620,11 +634,31 @@
           return category?.color ?? "#94a3b8";
         }
 
-        function nodeMarkup(node, position, color, selected, dim, detailed) {
+        function runtimeState(node, data) {
+          const activity = data.activity ?? {};
+          const text = `${node.id} ${node.name ?? ""} ${node.subtitle ?? ""}`.toLowerCase();
+          const tokens = [activity.status, activity.playbook, ...(activity.activeAgents ?? []).flatMap((agent) => [agent.role, agent.slice, agent.phase])].filter((token) => token && String(token).length > 2).map((token) => String(token).toLowerCase());
+          const live = tokens.some((token) => text.includes(token) || token.includes(text));
+          const review = Number(activity.review?.openThreads ?? 0) > 0 && /(review|comment|pr|pull|qa|quality|github)/.test(text);
+          const evidence = Number(activity.evidence?.count ?? 0) > 0 && /(evidence|ledger|state|proof|qa|verify)/.test(text);
+          return { live, review, evidence };
+        }
+
+        function nodeMarkup(node, position, color, selected, dim, detailed, state) {
           const label = compact(node.name, node.id);
           const subtitle = detailed ? compact(node.subtitle, "") : "";
           const titleSize = label.length > 25 ? 10 : 12;
-          return `<g class="archify-node ${selected ? "is-selected" : ""} ${dim ? "is-dim" : ""}" data-node-id="${escapeHtml(node.id)}" tabindex="0" role="button" aria-label="${escapeHtml(label)}" style="--node-stroke:${escapeHtml(color)};--node-fill:${escapeHtml(color)}22"><rect x="${position.x}" y="${position.y}" width="190" height="58" rx="10"></rect><circle cx="${position.x + 15}" cy="${position.y + 17}" r="5" fill="${escapeHtml(color)}"></circle><text class="archify-node-title" x="${position.x + 28}" y="${position.y + 22}" style="font-size:${titleSize}px">${escapeHtml(label)}</text>${subtitle ? `<text class="archify-node-subtitle" x="${position.x + 15}" y="${position.y + 43}">${escapeHtml(subtitle.slice(0, 34))}</text>` : ""}</g>`;
+          const runtimeClass = state.live ? "is-live" : state.review ? "is-attention" : "";
+          const runtimeLabel = state.live ? "LIVE" : state.review ? "REVIEW" : state.evidence ? "EVIDENCE" : "";
+          return `<g class="archify-node ${selected ? "is-selected" : ""} ${dim ? "is-dim" : ""} ${runtimeClass}" data-node-id="${escapeHtml(node.id)}" tabindex="0" role="button" aria-label="${escapeHtml(label)}" style="--node-stroke:${escapeHtml(color)};--node-fill:${escapeHtml(color)}22"><rect x="${position.x}" y="${position.y}" width="190" height="58" rx="10"></rect><circle cx="${position.x + 15}" cy="${position.y + 17}" r="5" fill="${escapeHtml(color)}"></circle><text class="archify-node-title" x="${position.x + 28}" y="${position.y + 22}" style="font-size:${titleSize}px">${escapeHtml(label)}</text>${subtitle ? `<text class="archify-node-subtitle" x="${position.x + 15}" y="${position.y + 43}">${escapeHtml(subtitle.slice(0, 34))}</text>` : ""}${runtimeLabel ? `<text class="archify-node-subtitle" x="${position.x + 169}" y="${position.y + 17}" text-anchor="end">${runtimeLabel}</text>` : ""}</g>`;
+        }
+
+        function renderLiveBar(data) {
+          const activity = data.activity ?? {};
+          const agents = activity.activeAgents?.length ?? 0;
+          const review = activity.review ?? {};
+          const evidence = activity.evidence ?? {};
+          $("map-livebar").innerHTML = `<span><i class="live-pulse"></i><strong>LIVE OVERLAY</strong></span><span>Phase <strong>${escapeHtml(compact(activity.status, "IDLE"))}</strong></span><span>${agents} active agent${agents === 1 ? "" : "s"}</span><span>${Number(review.openThreads ?? 0)} open review thread${Number(review.openThreads ?? 0) === 1 ? "" : "s"}</span><span>${Number(evidence.count ?? 0)} evidence events</span><span>Updated ${escapeHtml(dateText(activity.updatedAt))}</span>`;
         }
 
         function renderMap(data) {
@@ -651,19 +685,24 @@
             const startY = from.y + 29;
             const endY = to.y + 29;
             const route = mapState.route === edge.routeId;
+            const fromState = runtimeState(graph.byId.get(edge.from) ?? {}, data);
+            const toState = runtimeState(graph.byId.get(edge.to) ?? {}, data);
+            const live = fromState.live || toState.live;
+            const attention = fromState.review || toState.review;
             const dim = query && !matchingIds.has(edge.from) && !matchingIds.has(edge.to);
             const path = sameColumn ? `M ${startX} ${startY} C ${startX + 80} ${startY}, ${startX + 80} ${endY}, ${startX} ${endY}` : `M ${startX} ${startY} C ${startX + 40} ${startY}, ${endX - 40} ${endY}, ${endX} ${endY}`;
             const label = mapState.depth === "full" ? `<text class="archify-edge-label" x="${(startX + endX) / 2}" y="${(startY + endY) / 2 - 5}" text-anchor="middle">${escapeHtml(compact(edge.label, "relationship").slice(0, 26))}</text>` : "";
-            return `<path class="archify-edge ${route ? "is-route" : ""} ${dim ? "is-dim" : ""}" d="${path}" data-edge-from="${escapeHtml(edge.from)}" data-edge-to="${escapeHtml(edge.to)}"></path>${label}`;
+            return `<path class="archify-edge ${route ? "is-route" : ""} ${live ? "is-live" : ""} ${attention ? "is-attention" : ""} ${dim ? "is-dim" : ""}" d="${path}" data-edge-from="${escapeHtml(edge.from)}" data-edge-to="${escapeHtml(edge.to)}"></path>${label}`;
           }).join("");
           const laneMarkup = columns.map((column, index) => `<g><rect class="archify-lane" x="${nodeX(index) - 12}" y="16" width="214" height="${height - 32}" rx="14"></rect><text class="archify-lane-label" x="${nodeX(index)}" y="39">${escapeHtml(column.label)}</text></g>`).join("");
           const nodeMarkupText = graph.nodes.map((node) => {
             const position = positions.get(node.id);
             if (!position) return "";
             const dim = Boolean(query && !matchingIds.has(node.id));
-            return nodeMarkup(node, position, nodeColor(node, graph.categories), mapState.selected === node.id, dim, mapState.depth !== "map");
+            return nodeMarkup(node, position, nodeColor(node, graph.categories), mapState.selected === node.id, dim, mapState.depth !== "map", runtimeState(node, data));
           }).join("");
           $("map-kicker").textContent = `${mapState.type.replace("-", " ").toUpperCase()} · ${graph.nodes.length} nodes · ${graph.edges.length} authored relationships · ${compact(data.source?.flows, "built-in")}`;
+          renderLiveBar(data);
           $("architecture-canvas").dataset.theme = mapState.theme;
           $("architecture-canvas").dataset.preset = mapState.preset;
           $("system-map").innerHTML = columns.length ? `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(data.flow?.app?.name ?? "System architecture")}"><defs><marker id="archify-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"></path></marker></defs>${laneMarkup}<g>${edgeMarkup}</g><g>${nodeMarkupText}</g></svg>` : `<div class="archify-empty">No workflow graph loaded. Pass <code>--flows /path/to/flows.json</code> to add authored nodes and relationships.</div>`;
@@ -795,6 +834,29 @@
         $("map-fit").addEventListener("click", () => {
           const canvas = $("system-map");
           canvas.scrollTo({ left: Math.max(0, (canvas.scrollWidth - canvas.clientWidth) / 2), top: 0, behavior: "smooth" });
+        });
+        $("map-story").addEventListener("click", () => {
+          const routes = current.flow?.flows ?? [];
+          if (!routes.length) return;
+          mapState.playing = !mapState.playing;
+          if (mapState.playing) {
+            let index = Math.max(0, routes.findIndex((route) => route.id === mapState.route));
+            $("architecture-canvas").classList.add("is-playing");
+            $("map-story").textContent = "PAUSE STORY";
+            mapState.route = routes[index]?.id ?? routes[0].id;
+            renderMap(current);
+            storyTimer = window.setInterval(() => {
+              index = (index + 1) % routes.length;
+              mapState.route = routes[index].id;
+              renderMap(current);
+            }, 2400);
+          } else {
+            window.clearInterval(storyTimer);
+            storyTimer = null;
+            $("architecture-canvas").classList.remove("is-playing");
+            $("map-story").textContent = "PLAY STORY";
+            renderMap(current);
+          }
         });
         $("map-export").addEventListener("click", () => {
           const svg = $("system-map").querySelector("svg");

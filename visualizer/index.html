@@ -283,6 +283,9 @@
       .thread-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: var(--spacing-16); }
       .thread { border: 1px solid var(--color-ash); border-radius: var(--radius-pill); padding: 6px 10px; color: var(--color-smoke); font-size: var(--text-caption); }
       .thread.is-open { border-color: var(--color-coral); color: var(--color-off-black); }
+      .pr-monitor { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; margin-top: 16px; color: var(--color-smoke); font-size: var(--text-caption); text-transform: uppercase; }
+      .pr-monitor-track { height: 6px; overflow: hidden; border-radius: var(--radius-pill); background: var(--color-ash); }
+      .pr-monitor-fill { height: 100%; border-radius: inherit; background: #22834b; }
 
       .activity { width: 100%; border-collapse: collapse; font-size: var(--text-body-sm); }
       .activity th { padding: 0 12px 12px 0; color: var(--color-smoke); font-size: var(--text-caption); font-weight: 400; text-align: left; text-transform: uppercase; }
@@ -299,6 +302,39 @@
       .map-items { display: grid; gap: 8px; padding-top: 12px; }
       .map-item { border: 1px solid var(--color-ash); border-radius: var(--radius-pill); padding: 10px 12px; background: var(--color-parchment); font-size: var(--text-caption); }
       .map-item small { display: block; margin-top: 4px; color: var(--color-smoke); font-size: 10px; }
+
+      .archify-shell { --archify-bg: #0b1220; --archify-grid: #203047; --archify-ink: #f8fafc; --archify-muted: #94a3b8; --archify-border: #334155; --archify-accent: #34d399; position: relative; overflow: hidden; border: 1px solid var(--archify-border); border-radius: 28px; background: var(--archify-bg); color: var(--archify-ink); }
+      .archify-shell[data-theme="light"] { --archify-bg: #f8fafc; --archify-grid: #dbe4ee; --archify-ink: #0f172a; --archify-muted: #64748b; --archify-border: #cbd5e1; --archify-accent: #059669; }
+      .archify-shell[data-preset="blueprint"] { --archify-bg: #092236; --archify-grid: #1e5570; --archify-border: #34799a; --archify-accent: #64dfc1; }
+      .archify-shell[data-preset="editorial"] { --archify-bg: #262219; --archify-grid: #4b4437; --archify-border: #625a4a; --archify-accent: #dd6b3d; }
+      .archify-shell[data-theme="light"][data-preset="blueprint"] { --archify-bg: #edf7fa; --archify-grid: #b5d5e1; --archify-ink: #123344; --archify-muted: #4e7486; --archify-border: #78aabd; }
+      .archify-shell[data-theme="light"][data-preset="editorial"] { --archify-bg: #f2eee5; --archify-grid: #d8d0c2; --archify-ink: #242018; --archify-muted: #6f6658; --archify-border: #c4b9a6; }
+      .archify-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-bottom: 1px solid var(--archify-border); padding: 12px 16px; background: color-mix(in srgb, var(--archify-bg) 88%, white 12%); }
+      .archify-toolbar button, .archify-toolbar select, .archify-toolbar input { border: 1px solid var(--archify-border); border-radius: 8px; padding: 8px 10px; color: var(--archify-ink); background: transparent; font: inherit; font-size: 11px; }
+      .archify-toolbar button:hover, .archify-toolbar button:focus-visible, .archify-toolbar select:focus-visible, .archify-toolbar input:focus-visible { border-color: var(--archify-accent); outline: none; }
+      .archify-toolbar button.is-active { border-color: var(--archify-accent); color: var(--archify-accent); }
+      .archify-toolbar input { min-width: 180px; margin-left: auto; }
+      .archify-toolbar select { background: var(--archify-bg); }
+      .archify-canvas { min-height: 590px; overflow: auto; background-image: linear-gradient(var(--archify-grid) 1px, transparent 1px), linear-gradient(90deg, var(--archify-grid) 1px, transparent 1px); background-size: 32px 32px; }
+      .archify-canvas svg { display: block; min-width: 100%; }
+      .archify-lane { fill: color-mix(in srgb, var(--archify-bg) 84%, white 16%); stroke: var(--archify-border); stroke-width: 1; }
+      .archify-lane-label { fill: var(--archify-muted); font: 600 11px var(--font-abc-diatype-mono); letter-spacing: .08em; }
+      .archify-edge { fill: none; stroke: #64748b; stroke-width: 1.5; opacity: .68; marker-end: url(#archify-arrow); transition: opacity .15s, stroke .15s, stroke-width .15s; }
+      .archify-edge.is-route { stroke: var(--archify-accent); stroke-width: 2.7; opacity: 1; }
+      .archify-edge-label { fill: var(--archify-muted); font: 10px var(--font-abc-diatype-mono); pointer-events: none; }
+      .archify-node { cursor: pointer; }
+      .archify-node rect { fill: var(--node-fill, #1e293b); stroke: var(--node-stroke, #94a3b8); stroke-width: 1.4; transition: opacity .15s, stroke-width .15s, filter .15s; }
+      .archify-node:hover rect, .archify-node.is-selected rect { stroke: var(--archify-accent); stroke-width: 2.5; filter: drop-shadow(0 0 8px color-mix(in srgb, var(--archify-accent) 55%, transparent)); }
+      .archify-node.is-dim, .archify-edge.is-dim { opacity: .16; }
+      .archify-node-title { fill: var(--archify-ink); font: 600 12px var(--font-abc-diatype-mono); }
+      .archify-node-subtitle { fill: var(--archify-muted); font: 10px var(--font-abc-diatype-mono); }
+      .archify-detail { display: grid; grid-template-columns: 1fr minmax(220px, 300px); border-top: 1px solid var(--archify-border); }
+      .archify-legend { display: flex; flex-wrap: wrap; gap: 10px 16px; padding: 12px 16px; color: var(--archify-muted); font-size: 10px; }
+      .archify-legend span::before { display: inline-block; width: 8px; height: 8px; margin-right: 5px; border: 1px solid currentColor; border-radius: 50%; background: currentColor; content: ""; }
+      .archify-inspector { border-left: 1px solid var(--archify-border); padding: 14px 16px; color: var(--archify-muted); font-size: 11px; }
+      .archify-inspector strong { display: block; margin-bottom: 5px; color: var(--archify-ink); font-size: 13px; }
+      .archify-inspector p { margin: 0; }
+      .archify-empty { padding: 48px; color: var(--archify-muted); }
 
       .empty { border: 1px dashed var(--color-ash); border-radius: 24px; padding: var(--spacing-24); color: var(--color-smoke); }
       .empty p:last-child { margin-bottom: 0; }
@@ -421,7 +457,22 @@
               <p class="panel-kicker" id="map-kicker">Workflow graph source is optional; the built-in map keeps the view useful offline.</p>
             </div>
           </div>
-          <div class="map" id="system-map"></div>
+          <div class="archify-shell" id="architecture-canvas" data-theme="dark" data-preset="signal-flow">
+            <div class="archify-toolbar" aria-label="Architecture map controls">
+              <select id="map-type" aria-label="Diagram type"><option value="architecture">ARCHITECTURE</option><option value="workflow">WORKFLOW</option><option value="sequence">SEQUENCE</option><option value="data-flow">DATA FLOW</option><option value="lifecycle">LIFECYCLE</option><option value="code-review">CODE REVIEW</option></select>
+              <button type="button" class="is-active" data-map-depth="map">MAP</button>
+              <button type="button" data-map-depth="read">READ</button>
+              <button type="button" data-map-depth="full">FULL</button>
+              <button type="button" id="map-theme">THEME: DARK</button>
+              <select id="map-preset" aria-label="Map preset"><option value="signal-flow">SIGNAL FLOW</option><option value="classic">CLASSIC</option><option value="blueprint">BLUEPRINT</option><option value="editorial">EDITORIAL</option></select>
+              <select id="map-route" aria-label="Trace a route"><option value="">TRACE ROUTE</option></select>
+              <input id="map-search" type="search" placeholder="Find node / route…" aria-label="Find node or route">
+              <button type="button" id="map-fit">FIT</button>
+              <button type="button" id="map-export">EXPORT SVG</button>
+            </div>
+            <div class="archify-canvas" id="system-map" tabindex="0" aria-label="Interactive architecture diagram"></div>
+            <div class="archify-detail"><div class="archify-legend" id="map-legend"></div><aside class="archify-inspector" id="map-inspector"><strong>Choose a node</strong><p>Search, focus, or click the map to inspect authored relationships.</p></aside></div>
+          </div>
         </section>
 
         <section class="panel" aria-labelledby="prs-heading">
@@ -481,6 +532,7 @@
         let viewEnabled = localStorage.getItem("run-observer-view") !== "off";
         let liveSync = localStorage.getItem("run-observer-sync") !== "off";
         let fetchInFlight = false;
+        const mapState = { theme: localStorage.getItem("observer-map-theme") || "dark", preset: localStorage.getItem("observer-map-preset") || "signal-flow", depth: "map", query: "", route: "", selected: null, type: "architecture" };
 
         const $ = (id) => document.getElementById(id);
         const escapeHtml = (value) => String(value ?? "-").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
@@ -549,14 +601,90 @@
           $("playbook-note").textContent = `${playbooks.length} playbook${playbooks.length === 1 ? "" : "s"} discovered`;
         }
 
+        function graphFor(data) {
+          const flow = data.flow ?? {};
+          const nodes = flow.components ?? [];
+          const byId = new Map(nodes.map((node) => [node.id, node]));
+          const flows = flow.flows ?? [];
+          const edges = flows.flatMap((route) => (route.steps ?? []).map((step, index) => ({ ...step, id: `${route.id ?? "route"}-${index}`, routeId: route.id, routeName: route.name })));
+          return { categories: flow.categories ?? [], nodes, byId, edges, flows };
+        }
+
+        function diagramEdges(graph) {
+          if (mapState.route) return graph.edges.filter((edge) => edge.routeId === mapState.route);
+          return graph.edges;
+        }
+
+        function nodeColor(node, categories) {
+          const category = categories.find((item) => item.id === node.category);
+          return category?.color ?? "#94a3b8";
+        }
+
+        function nodeMarkup(node, position, color, selected, dim, detailed) {
+          const label = compact(node.name, node.id);
+          const subtitle = detailed ? compact(node.subtitle, "") : "";
+          const titleSize = label.length > 25 ? 10 : 12;
+          return `<g class="archify-node ${selected ? "is-selected" : ""} ${dim ? "is-dim" : ""}" data-node-id="${escapeHtml(node.id)}" tabindex="0" role="button" aria-label="${escapeHtml(label)}" style="--node-stroke:${escapeHtml(color)};--node-fill:${escapeHtml(color)}22"><rect x="${position.x}" y="${position.y}" width="190" height="58" rx="10"></rect><circle cx="${position.x + 15}" cy="${position.y + 17}" r="5" fill="${escapeHtml(color)}"></circle><text class="archify-node-title" x="${position.x + 28}" y="${position.y + 22}" style="font-size:${titleSize}px">${escapeHtml(label)}</text>${subtitle ? `<text class="archify-node-subtitle" x="${position.x + 15}" y="${position.y + 43}">${escapeHtml(subtitle.slice(0, 34))}</text>` : ""}</g>`;
+        }
+
         function renderMap(data) {
+          const graph = graphFor(data);
           const columns = data.flow?.columns ?? [];
-          const components = data.flow?.components ?? [];
-          $("map-kicker").textContent = `Workflow graph source: ${compact(data.source?.flows, "built-in")}`;
-          $("system-map").innerHTML = columns.length ? columns.map((column) => {
-            const items = components.filter((component) => component.column === column.id);
-            return `<div class="map-column"><div class="map-column-title">${escapeHtml(column.label)}</div><div class="map-items">${items.length ? items.map((item) => `<div class="map-item">${escapeHtml(item.name)}<small>${escapeHtml(item.subtitle)}</small></div>`).join("") : `<div class="map-item">Waiting<small>No component data</small></div>`}</div></div>`;
-          }).join("") : `<div class="empty" style="grid-column: 1 / -1"><p>No workflow graph loaded.</p><p>Pass <code>--flows /path/to/flows.json</code> to the server to add the architecture map.</p></div>`;
+          const columnIndex = new Map(columns.map((column, index) => [column.id, index]));
+          const positions = new Map();
+          const columnWidth = 238;
+          const nodeX = (index) => 24 + index * columnWidth;
+          columns.forEach((column, columnNumber) => graph.nodes.filter((node) => node.column === column.id).forEach((node, row) => positions.set(node.id, { x: nodeX(columnNumber), y: 64 + row * 78 })));
+          const maxRows = Math.max(1, ...columns.map((column) => graph.nodes.filter((node) => node.column === column.id).length));
+          const width = Math.max(760, columns.length * columnWidth + 24);
+          const height = Math.max(430, maxRows * 78 + 125);
+          const query = mapState.query.trim().toLowerCase();
+          const matchingIds = new Set(graph.nodes.filter((node) => !query || `${node.name} ${node.subtitle ?? ""} ${node.id}`.toLowerCase().includes(query)).map((node) => node.id));
+          const edges = diagramEdges(graph);
+          const edgeMarkup = edges.map((edge) => {
+            const from = positions.get(edge.from);
+            const to = positions.get(edge.to);
+            if (!from || !to) return "";
+            const sameColumn = from.x === to.x;
+            const startX = from.x + 190;
+            const endX = to.x;
+            const startY = from.y + 29;
+            const endY = to.y + 29;
+            const route = mapState.route === edge.routeId;
+            const dim = query && !matchingIds.has(edge.from) && !matchingIds.has(edge.to);
+            const path = sameColumn ? `M ${startX} ${startY} C ${startX + 80} ${startY}, ${startX + 80} ${endY}, ${startX} ${endY}` : `M ${startX} ${startY} C ${startX + 40} ${startY}, ${endX - 40} ${endY}, ${endX} ${endY}`;
+            const label = mapState.depth === "full" ? `<text class="archify-edge-label" x="${(startX + endX) / 2}" y="${(startY + endY) / 2 - 5}" text-anchor="middle">${escapeHtml(compact(edge.label, "relationship").slice(0, 26))}</text>` : "";
+            return `<path class="archify-edge ${route ? "is-route" : ""} ${dim ? "is-dim" : ""}" d="${path}" data-edge-from="${escapeHtml(edge.from)}" data-edge-to="${escapeHtml(edge.to)}"></path>${label}`;
+          }).join("");
+          const laneMarkup = columns.map((column, index) => `<g><rect class="archify-lane" x="${nodeX(index) - 12}" y="16" width="214" height="${height - 32}" rx="14"></rect><text class="archify-lane-label" x="${nodeX(index)}" y="39">${escapeHtml(column.label)}</text></g>`).join("");
+          const nodeMarkupText = graph.nodes.map((node) => {
+            const position = positions.get(node.id);
+            if (!position) return "";
+            const dim = Boolean(query && !matchingIds.has(node.id));
+            return nodeMarkup(node, position, nodeColor(node, graph.categories), mapState.selected === node.id, dim, mapState.depth !== "map");
+          }).join("");
+          $("map-kicker").textContent = `${mapState.type.replace("-", " ").toUpperCase()} · ${graph.nodes.length} nodes · ${graph.edges.length} authored relationships · ${compact(data.source?.flows, "built-in")}`;
+          $("architecture-canvas").dataset.theme = mapState.theme;
+          $("architecture-canvas").dataset.preset = mapState.preset;
+          $("system-map").innerHTML = columns.length ? `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(data.flow?.app?.name ?? "System architecture")}"><defs><marker id="archify-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"></path></marker></defs>${laneMarkup}<g>${edgeMarkup}</g><g>${nodeMarkupText}</g></svg>` : `<div class="archify-empty">No workflow graph loaded. Pass <code>--flows /path/to/flows.json</code> to add authored nodes and relationships.</div>`;
+          $("map-route").innerHTML = `<option value="">ALL RELATIONSHIPS</option>${graph.flows.map((flow) => `<option value="${escapeHtml(flow.id)}" ${flow.id === mapState.route ? "selected" : ""}>${escapeHtml(flow.name ?? flow.id)}</option>`).join("")}`;
+          $("map-type").value = mapState.type;
+          $("map-preset").value = mapState.preset;
+          $("map-theme").textContent = `THEME: ${mapState.theme.toUpperCase()}`;
+          $("map-legend").innerHTML = graph.categories.map((category) => `<span style="color:${escapeHtml(category.color ?? "#94a3b8")}">${escapeHtml(category.label ?? category.id)}</span>`).join("") || `<span>Authored workflow graph</span>`;
+          renderMapInspector(graph);
+          $("system-map").querySelectorAll(".archify-node").forEach((element) => {
+            element.addEventListener("click", () => { mapState.selected = element.dataset.nodeId; renderMap(current); });
+            element.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); mapState.selected = element.dataset.nodeId; renderMap(current); } });
+          });
+        }
+
+        function renderMapInspector(graph) {
+          const node = graph.byId.get(mapState.selected);
+          if (!node) { $("map-inspector").innerHTML = `<strong>Choose a node</strong><p>Search, focus, or click the map to inspect authored relationships.</p>`; return; }
+          const incoming = graph.edges.filter((edge) => edge.to === node.id);
+          const outgoing = graph.edges.filter((edge) => edge.from === node.id);
+          $("map-inspector").innerHTML = `<strong>${escapeHtml(node.name)}</strong><p>${escapeHtml(node.subtitle ?? "")}</p><p style="margin-top:8px">${incoming.length} incoming · ${outgoing.length} outgoing authored relationships</p><p style="margin-top:8px">${escapeHtml(node.paths?.join(" · ") ?? "No source paths recorded")}</p>`;
         }
 
         function renderPullRequests(data) {
@@ -565,7 +693,11 @@
             const comments = pr.comments ?? {};
             const state = pr.state === "OPEN" && pr.draft ? "DRAFT" : compact(pr.state, "UNKNOWN");
             const threadMarkup = comments.available && comments.threads?.length ? `<div class="thread-list">${comments.threads.slice(0, 12).map((thread) => `<span class="thread ${thread.addressed ? "" : "is-open"}">${thread.addressed ? "ADDRESSED" : "OPEN"} / ${escapeHtml(thread.author)}</span>`).join("")}</div>` : comments.available ? `<div class="thread-list"><span class="thread">No review threads</span></div>` : `<div class="thread-list"><span class="thread">Thread data unavailable</span></div>`;
-            return `<article class="pr-card"><div class="pr-head"><div><p class="pr-title"><a href="${escapeHtml(safeUrl(pr.url))}" target="_blank" rel="noreferrer">${escapeHtml(pr.title)}</a> <span class="pr-number">#${escapeHtml(pr.number)}</span></p></div><span class="status ${state === "OPEN" || state === "DRAFT" ? "status-warn" : state === "MERGED" ? "status-pass" : "status"}">${escapeHtml(state)}</span></div><div class="pr-meta"><span>${escapeHtml(pr.head)} → ${escapeHtml(pr.base)}</span><span>Updated ${escapeHtml(dateText(pr.updatedAt))}</span><span class="comment-count addressed">${escapeHtml(comments.addressed ?? 0)} addressed</span><span class="comment-count open">${escapeHtml(comments.unaddressed ?? 0)} open</span></div>${threadMarkup}</article>`;
+            const addressed = Number(comments.addressed ?? 0);
+            const totalThreads = Number(comments.total ?? addressed + Number(comments.unaddressed ?? 0));
+            const reviewPercent = comments.available && totalThreads ? Math.round((addressed / totalThreads) * 100) : 0;
+            const monitorMarkup = `<div class="pr-monitor"><span>Review monitor</span><span class="pr-monitor-track"><span class="pr-monitor-fill" style="display:block;width:${reviewPercent}%"></span></span><strong>${comments.available ? `${reviewPercent}%` : "N/A"}</strong></div>`;
+            return `<article class="pr-card"><div class="pr-head"><div><p class="pr-title"><a href="${escapeHtml(safeUrl(pr.url))}" target="_blank" rel="noreferrer">${escapeHtml(pr.title)}</a> <span class="pr-number">#${escapeHtml(pr.number)}</span></p></div><span class="status ${state === "OPEN" || state === "DRAFT" ? "status-warn" : state === "MERGED" ? "status-pass" : "status"}">${escapeHtml(state)}</span></div><div class="pr-meta"><span>${escapeHtml(pr.head)} → ${escapeHtml(pr.base)}</span><span>Updated ${escapeHtml(dateText(pr.updatedAt))}</span><span class="comment-count addressed">${escapeHtml(comments.addressed ?? 0)} addressed</span><span class="comment-count open">${escapeHtml(comments.unaddressed ?? 0)} open</span></div>${monitorMarkup}${threadMarkup}</article>`;
           }).join("") : `<div class="empty"><p>No pull requests loaded.</p><p>${escapeHtml(data.source?.prs ?? "Use GitHub CLI or pass a fixture with --pr-data")}</p></div>`;
         }
 
@@ -625,6 +757,54 @@
           localStorage.setItem("run-observer-sync", liveSync ? "on" : "off");
           syncLabel();
           setConnection(liveSync ? "LIVE SYNC" : "PAUSED", liveSync ? "status-live" : "status-warn");
+        });
+        document.querySelectorAll("[data-map-depth]").forEach((button) => button.addEventListener("click", () => {
+          mapState.depth = button.dataset.mapDepth;
+          document.querySelectorAll("[data-map-depth]").forEach((item) => item.classList.toggle("is-active", item === button));
+          renderMap(current);
+        }));
+        $("map-theme").addEventListener("click", () => {
+          mapState.theme = mapState.theme === "dark" ? "light" : "dark";
+          localStorage.setItem("observer-map-theme", mapState.theme);
+          renderMap(current);
+        });
+        $("map-preset").addEventListener("change", (event) => {
+          mapState.preset = event.target.value;
+          localStorage.setItem("observer-map-preset", mapState.preset);
+          renderMap(current);
+        });
+        $("map-route").addEventListener("change", (event) => {
+          mapState.route = event.target.value;
+          mapState.selected = null;
+          renderMap(current);
+        });
+        $("map-search").addEventListener("input", (event) => {
+          mapState.query = event.target.value;
+          renderMap(current);
+        });
+        $("map-type").addEventListener("change", (event) => {
+          mapState.type = event.target.value;
+          if (mapState.type === "code-review") {
+            $("prs-heading").scrollIntoView({ behavior: "smooth", block: "start" });
+          } else if (["workflow", "sequence", "data-flow"].includes(mapState.type) && !mapState.route) {
+            const firstRoute = (current.flow?.flows ?? [])[0];
+            if (firstRoute) mapState.route = firstRoute.id;
+          }
+          renderMap(current);
+        });
+        $("map-fit").addEventListener("click", () => {
+          const canvas = $("system-map");
+          canvas.scrollTo({ left: Math.max(0, (canvas.scrollWidth - canvas.clientWidth) / 2), top: 0, behavior: "smooth" });
+        });
+        $("map-export").addEventListener("click", () => {
+          const svg = $("system-map").querySelector("svg");
+          if (!svg) return;
+          const blob = new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" });
+          const link = document.createElement("a");
+          link.href = URL.createObjectURL(blob);
+          link.download = `${String(current.flow?.app?.name ?? "architecture").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.svg`;
+          link.click();
+          URL.revokeObjectURL(link.href);
         });
         $("refresh-now").addEventListener("click", refresh);
         $("server-stop").addEventListener("click", async () => {

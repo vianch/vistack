@@ -252,15 +252,15 @@
       .monitor-row:last-child { padding-bottom: 0; }
       .monitor-row strong { font-weight: 500; text-align: right; }
 
-      .agent-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--spacing-16); }
-      .agent-card { border: 1px solid var(--color-ash); border-radius: 24px; padding: var(--spacing-24); background: rgba(246, 243, 241, 0.72); }
+      .agent-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--spacing-16); min-width: 0; }
+      .agent-card { min-width: 0; border: 1px solid var(--color-ash); border-radius: 24px; padding: var(--spacing-24); background: rgba(246, 243, 241, 0.72); }
       .agent-top { display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: var(--spacing-16); }
       .agent-role { margin: 0; font-family: var(--font-untitled-serif); font-size: var(--text-subheading); }
       .agent-model { color: var(--color-smoke); font-size: var(--text-caption); text-transform: uppercase; }
       .agent-meta { display: grid; gap: 8px; margin: 0; }
-      .agent-meta div { display: flex; justify-content: space-between; gap: var(--spacing-16); font-size: var(--text-body-sm); }
+      .agent-meta div { display: grid; grid-template-columns: minmax(76px, 30%) minmax(0, 1fr); align-items: baseline; gap: var(--spacing-16); min-width: 0; font-size: var(--text-body-sm); }
       .agent-meta dt { color: var(--color-smoke); text-transform: uppercase; }
-      .agent-meta dd { max-width: 68%; margin: 0; overflow: hidden; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+      .agent-meta dd { min-width: 0; max-width: none; margin: 0; overflow: hidden; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 
       .surface-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); gap: var(--spacing-24); }
       .chip-list { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -321,7 +321,7 @@
       @keyframes archify-pulse { 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
       .archify-canvas { min-height: 590px; overflow: auto; background-image: linear-gradient(var(--archify-grid) 1px, transparent 1px), linear-gradient(90deg, var(--archify-grid) 1px, transparent 1px); background-size: 32px 32px; }
       .archify-canvas svg { display: block; min-width: 100%; }
-      .archify-lane { fill: color-mix(in srgb, var(--archify-bg) 84%, white 16%); stroke: var(--archify-border); stroke-width: 1; }
+      .archify-lane { fill: color-mix(in srgb, var(--archify-bg) 84%, white 16%); stroke: var(--archify-border); stroke-width: 1.2; stroke-dasharray: 7 6; }
       .archify-lane-label { fill: var(--archify-muted); font: 600 11px var(--font-abc-diatype-mono); letter-spacing: .08em; }
       .archify-edge { fill: none; stroke: #64748b; stroke-width: 1.5; opacity: .68; marker-end: url(#archify-arrow); transition: opacity .15s, stroke .15s, stroke-width .15s; }
       .archify-edge.is-route { stroke: var(--archify-accent); stroke-width: 2.7; opacity: 1; }
@@ -330,6 +330,7 @@
       .archify-shell.is-playing .archify-edge.is-route { stroke-dasharray: 7 7; animation: archify-flow .8s linear infinite; }
       @keyframes archify-flow { to { stroke-dashoffset: -14; } }
       .archify-edge-label { fill: var(--archify-muted); font: 10px var(--font-abc-diatype-mono); pointer-events: none; }
+      .archify-edge-label-bg { fill: var(--archify-bg); opacity: .92; }
       .archify-node { cursor: pointer; }
       .archify-node rect { fill: var(--node-fill, #1e293b); stroke: var(--node-stroke, #94a3b8); stroke-width: 1.4; transition: opacity .15s, stroke-width .15s, filter .15s; }
       .archify-node:hover rect, .archify-node.is-selected rect { stroke: var(--archify-accent); stroke-width: 2.5; filter: drop-shadow(0 0 8px color-mix(in srgb, var(--archify-accent) 55%, transparent)); }
@@ -342,6 +343,7 @@
       .archify-detail { display: grid; grid-template-columns: 1fr minmax(220px, 300px); border-top: 1px solid var(--archify-border); }
       .archify-legend { display: flex; flex-wrap: wrap; gap: 10px 16px; padding: 12px 16px; color: var(--archify-muted); font-size: 10px; }
       .archify-legend span::before { display: inline-block; width: 8px; height: 8px; margin-right: 5px; border: 1px solid currentColor; border-radius: 50%; background: currentColor; content: ""; }
+      .archify-legend .legend-line::before { width: 18px; height: 2px; border: 0; border-radius: 0; vertical-align: middle; }
       .archify-inspector { border-left: 1px solid var(--archify-border); padding: 14px 16px; color: var(--archify-muted); font-size: 11px; }
       .archify-inspector strong { display: block; margin-bottom: 5px; color: var(--archify-ink); font-size: 13px; }
       .archify-inspector p { margin: 0; }
@@ -625,7 +627,7 @@
         }
 
         function diagramEdges(graph) {
-          if (mapState.route) return graph.edges.filter((edge) => edge.routeId === mapState.route);
+          if (mapState.route && ["workflow", "sequence", "lifecycle"].includes(mapState.type)) return graph.edges.filter((edge) => edge.routeId === mapState.route);
           return graph.edges;
         }
 
@@ -684,17 +686,20 @@
             const endX = to.x;
             const startY = from.y + 29;
             const endY = to.y + 29;
-            const route = mapState.route === edge.routeId;
+            const route = mapState.route === edge.routeId && ["workflow", "sequence", "lifecycle"].includes(mapState.type);
             const fromState = runtimeState(graph.byId.get(edge.from) ?? {}, data);
             const toState = runtimeState(graph.byId.get(edge.to) ?? {}, data);
             const live = fromState.live || toState.live;
             const attention = fromState.review || toState.review;
             const dim = query && !matchingIds.has(edge.from) && !matchingIds.has(edge.to);
             const path = sameColumn ? `M ${startX} ${startY} C ${startX + 80} ${startY}, ${startX + 80} ${endY}, ${startX} ${endY}` : `M ${startX} ${startY} C ${startX + 40} ${startY}, ${endX - 40} ${endY}, ${endX} ${endY}`;
-            const label = mapState.depth === "full" ? `<text class="archify-edge-label" x="${(startX + endX) / 2}" y="${(startY + endY) / 2 - 5}" text-anchor="middle">${escapeHtml(compact(edge.label, "relationship").slice(0, 26))}</text>` : "";
+            const showLabels = mapState.depth === "full" || ["data-flow", "sequence"].includes(mapState.type);
+            const edgeLabel = escapeHtml(compact(edge.label, "relationship").slice(0, 30));
+            const labelWidth = Math.max(58, edgeLabel.length * 6.1);
+            const label = showLabels ? `<rect class="archify-edge-label-bg" x="${(startX + endX) / 2 - labelWidth / 2}" y="${(startY + endY) / 2 - 17}" width="${labelWidth}" height="20" rx="5"></rect><text class="archify-edge-label" x="${(startX + endX) / 2}" y="${(startY + endY) / 2 - 4}" text-anchor="middle">${edgeLabel}</text>` : "";
             return `<path class="archify-edge ${route ? "is-route" : ""} ${live ? "is-live" : ""} ${attention ? "is-attention" : ""} ${dim ? "is-dim" : ""}" d="${path}" data-edge-from="${escapeHtml(edge.from)}" data-edge-to="${escapeHtml(edge.to)}"></path>${label}`;
           }).join("");
-          const laneMarkup = columns.map((column, index) => `<g><rect class="archify-lane" x="${nodeX(index) - 12}" y="16" width="214" height="${height - 32}" rx="14"></rect><text class="archify-lane-label" x="${nodeX(index)}" y="39">${escapeHtml(column.label)}</text></g>`).join("");
+          const laneMarkup = columns.map((column, index) => `<g><rect class="archify-lane" x="${nodeX(index) - 12}" y="16" width="214" height="${height - 32}" rx="14"></rect><text class="archify-lane-label" x="${nodeX(index)}" y="39">${String(index + 1).padStart(2, "0")} / ${escapeHtml(column.label)}</text></g>`).join("");
           const nodeMarkupText = graph.nodes.map((node) => {
             const position = positions.get(node.id);
             if (!position) return "";
@@ -710,7 +715,8 @@
           $("map-type").value = mapState.type;
           $("map-preset").value = mapState.preset;
           $("map-theme").textContent = `THEME: ${mapState.theme.toUpperCase()}`;
-          $("map-legend").innerHTML = graph.categories.map((category) => `<span style="color:${escapeHtml(category.color ?? "#94a3b8")}">${escapeHtml(category.label ?? category.id)}</span>`).join("") || `<span>Authored workflow graph</span>`;
+          const categoryLegend = graph.categories.map((category) => `<span style="color:${escapeHtml(category.color ?? "#94a3b8")}">${escapeHtml(category.label ?? category.id)}</span>`).join("");
+          $("map-legend").innerHTML = `${categoryLegend || "<span>Authored workflow graph</span>"}<span class="legend-line" style="color:var(--archify-accent)">LIVE PATH</span><span class="legend-line" style="color:#fb923c">REVIEW ATTENTION</span>`;
           renderMapInspector(graph);
           $("system-map").querySelectorAll(".archify-node").forEach((element) => {
             element.addEventListener("click", () => { mapState.selected = element.dataset.nodeId; renderMap(current); });
@@ -825,7 +831,7 @@
           mapState.type = event.target.value;
           if (mapState.type === "code-review") {
             $("prs-heading").scrollIntoView({ behavior: "smooth", block: "start" });
-          } else if (["workflow", "sequence", "data-flow"].includes(mapState.type) && !mapState.route) {
+          } else if (["workflow", "sequence", "lifecycle"].includes(mapState.type) && !mapState.route) {
             const firstRoute = (current.flow?.flows ?? [])[0];
             if (firstRoute) mapState.route = firstRoute.id;
           }

@@ -88,5 +88,23 @@ The PR fixture accepts either an array or this shape:
 - PR state, branch, update time, addressed review threads, and open threads
 - The newest ledger decisions and evidence paths
 
+## Architecture canvas
+
+The Architecture panel uses the authored `components`, `categories`, and flow `steps` from
+`flows.json` to render a dependency-free SVG canvas. It supports the same reader-friendly
+progression as Archify: `MAP` for topology, `READ` for node context, and `FULL` for edge
+labels. Use the diagram selector for Architecture, Workflow, Sequence, Data Flow, Lifecycle,
+or Code Review views. Workflow-oriented types can trace a named route; Code Review scrolls to
+the PR review monitor, where addressed and open threads are shown as a progress bar.
+
+The canvas also provides light/dark themes, Signal Flow / Classic / Blueprint / Editorial
+presets, node search, focus inspection, fit-to-canvas, and self-contained SVG export. These
+controls are viewer-only; they do not edit the workflow source or project state.
+
+The live overlay is built from the server snapshot rather than from guessed topology. It
+surfaces the current run phase, active agent lanes, open review threads, and evidence count;
+matching authored nodes and relationships pulse in the canvas. `PLAY STORY` cycles through the
+named authored flows at a finite pace, and `PAUSE STORY` leaves the current route selected.
+
 Review-thread resolution comes from GitHub's `isResolved` value. Fixture data uses the explicit
 `addressed` field. A missing thread source is shown as unavailable, never as zero open comments.

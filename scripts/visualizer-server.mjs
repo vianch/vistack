@@ -214,6 +214,7 @@ async function createSnapshot() {
   ]);
   const activeRun = runs.find((run) => !["merge-ready", "paused", "blocked"].includes(run.phase)) ?? runs[0] ?? null;
   const agents = runs.flatMap((run) => toAgentRows(run));
+  const activity = createActivityOverlay(activeRun, agents, ledgerRows, pullRequests.items);
 
   return {
     generatedAt: new Date().toISOString(),
@@ -229,8 +230,25 @@ async function createSnapshot() {
     agents,
     ledger: ledgerRows.slice(-40).reverse(),
     pullRequests: pullRequests.items,
+    activity,
     flow: flow.value,
     inventory,
+  };
+}
+
+function createActivityOverlay(run, agents, ledgerRows, pullRequests) {
+  const openPullRequests = pullRequests.filter((pullRequest) => String(pullRequest.state).toUpperCase() === "OPEN");
+  const openThreads = openPullRequests.reduce((total, pullRequest) => total + Number(pullRequest.comments?.unaddressed ?? 0), 0);
+  const activeAgents = agents.filter((agent) => agent.role !== "coordinator" && !["complete", "done", "merge-ready"].includes(String(agent.phase).toLowerCase()));
+  const latestEvidence = ledgerRows.at(-1)?.evidence ?? activeAgents[0]?.lastEvidence ?? run?.statePath ?? null;
+  return {
+    status: run?.phase ?? "idle",
+    playbook: run?.playbook ?? null,
+    objective: run?.objective ?? null,
+    activeAgents: activeAgents.map((agent) => ({ role: agent.role, slice: agent.slice, phase: agent.phase, branch: agent.branch })),
+    review: { openPullRequests: openPullRequests.length, openThreads },
+    evidence: { count: ledgerRows.length, latest: latestEvidence },
+    updatedAt: run?.updated_at ?? run?.updatedAt ?? ledgerRows.at(-1)?.ts ?? null,
   };
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "vistack",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Route engineering work through explicit playbooks, evidence gates, unattended runs, and merge-ready draft PRs in Codex or Claude Code.",
   "author": {
     "name": "Victor",

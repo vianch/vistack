@@ -51,15 +51,16 @@ before any worktree exists. No matrix, no dispatch.
 ## Do not accept a green build as behavioural evidence
 
 ❌ "CI is green, so the feature works."
-✅ A screenshot at the assertion point, on that PR's own preview, in the results table.
+✅ A screenshot at the assertion point, on that PR's own preview, attached with `gh --attach`
+and embedded in the results table. Follow [GitHub attachments](github-attachments.md).
 
 A green build proves the code compiles and the tests that exist pass. Those tests were
 written by the same agent that wrote the code, against the same misunderstanding if there
 was one. The build cannot prove the behaviour the ticket asked for — that is a different
 claim and it needs a different artifact.
 
-Concretely: a pass in the QA table without a screenshot path is a fail. Not a pass with a
-missing attachment.
+Concretely: a pass in the QA table without a screenshot path and hosted image is a fail. Not
+a pass with a missing attachment.
 
 ## Do not treat a large-sounding task as a multi-day program
 

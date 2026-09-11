@@ -17,6 +17,8 @@
 9. Verify each frame at each breakpoint with a screenshot beside the design reference. A
    nonzero parity diff is a failure until explained.
 10. Run lint and tests. Pass the diff through comment cleanup.
-11. Open each slice as a draft PR with screenshots and deviations. Assign reviewers.
+11. Open each slice as a draft PR with screenshots and deviations. Attach new screenshots
+    directly with `gh --attach`, following [GitHub attachments](../../docs/guide/github-attachments.md),
+    then assign reviewers.
 12. Run interactive QA on the preview and `health-check` against the references.
 13. Update state, ledger, and session record. Stop at merge-ready and report every deviation.

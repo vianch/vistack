@@ -39,7 +39,10 @@ description edits; `stacking-prs` owns the chain mechanics;
    the issue, base set correctly, repository template preserved.
 5. Write the body: the one concern, the acceptance criteria it satisfies, the verification
    evidence, and for a stack, the position in the chain with parent and child links. A
-   workaround or a deviation gets its own section.
+   workaround or a deviation gets its own section. When a change is user-visible, capture
+   the affected states from a preview or local environment and attach local images with
+   `gh --attach`, following [GitHub attachments](../docs/guide/github-attachments.md). Ask
+   the user for images only when the running interface cannot be reached.
 6. Assign the reviewer team with `requesting-reviewers`. **A PR with no
    reviewer team has no path to merge and is not done.**
 7. Check CI with `the project CI checks`. Red → the slice goes to `unblocker`.

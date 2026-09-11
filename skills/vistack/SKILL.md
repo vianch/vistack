@@ -98,6 +98,13 @@ task-list item:
 Read the leaf skill for every principle that changes a decision. In the final report, name
 the decision it changed. Naming a principle without naming its effect is not a citation.
 
+Before dispatching implementation, identify the consuming project's shape. Inspect its
+`package.json`, lockfile, TypeScript or JavaScript configuration, and source extensions.
+When the evidence shows React plus a frontend runtime/build surface and `.tsx`/`.jsx` (or
+equivalent React source), read `skills/frontend-code-style/SKILL.md` and add it to the
+implementation contract. Record the identifying evidence as `file:line` references. Do
+not apply that contract to non-React or non-frontend projects.
+
 ## Step 2. Match exactly one playbook
 
 Add a second task-list item for the match, then copy every numbered step from the selected

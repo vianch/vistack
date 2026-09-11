@@ -2,7 +2,7 @@
   "name": "vistack",
   "displayName": "viStack",
   "description": "Standing entry point for engineering work with sticky routing, evidence-backed playbooks, unattended overnight runs, and merge-ready draft PRs without merging.",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "author": {
     "name": "Victor",
     "url": "https://github.com/vianch"

@@ -34,8 +34,9 @@
    unreadable, or a required property is absent or expired, stop before login and ask the
    user for the correct credential path or property mapping. Ask for paths and property names,
    never secret values. This is FENCE 4.
-8. Post the results table through the project PR skill, upload the approved screenshots, and
-   embed each screenshot in its matching table row. Use `embed-screenshots` when available;
-   a local path alone is not enough. Re-read the PR comment and verify the tested head SHA,
-   one row per assertion point, and one embedded screenshot per row.
+8. Post the results table through the project PR skill. Check `gh --version` and confirm
+   `gh pr comment --help` lists `--attach`; follow [GitHub attachments](../../docs/guide/github-attachments.md).
+   Attach each new screenshot with `gh --attach` and reference its local path in the
+   matching table row. Keep historical hosted references. Re-read the PR comment and
+   verify the tested head SHA, one row per assertion point, and one attached image per row.
 9. Run the adversarial health check after QA. Update state, ledger, and session record.

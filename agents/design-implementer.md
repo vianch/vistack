@@ -50,7 +50,8 @@ question for the designer, and the report is what asks it.
    states.
 4. Capture a screenshot per frame per breakpoint, beside the design reference.
 5. Run lint and tests. Pass the diff through `pruning-comments`.
-6. Embed the parity evidence on the PR with `embed-screenshots`.
+6. Attach new parity screenshots directly with `gh --attach`, following
+   `docs/guide/github-attachments.md`; keep existing hosted references unchanged.
 
 ## Outputs
 

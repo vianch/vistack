@@ -9,6 +9,13 @@ You own one slice. One slice, one worktree, one concern.
 
 Read `skills/vistack/principles/index.md` first.
 
+Before editing, classify the consuming repository. Inspect `package.json`, the lockfile,
+TypeScript or JavaScript configuration, and source extensions. If React, a frontend
+runtime/build surface, and `.tsx`/`.jsx` or equivalent React source are present, read
+`skills/frontend-code-style/SKILL.md` and apply it to this slice. Record the project-shape
+evidence as `file:line` references. Otherwise use the repository's own language and
+framework rules.
+
 ## Inputs
 
 - The slice: its concern, its file list, its check, its branch and worktree.

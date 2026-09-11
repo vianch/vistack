@@ -1,6 +1,6 @@
 ---
 name: qa-verify
-description: "The QA contract: derive scenarios from a PR diff, use its head-matched Vercel preview with Playwright when the PR exposes one, otherwise use the repository's approved live-target control procedure, capture evidence at every assertion point, and post the results with embedded screenshots. Use when a PR needs behavioral evidence before merge-ready."
+description: "The QA contract: derive scenarios from a PR diff, use its head-matched Vercel preview with Playwright when the PR exposes one, otherwise use the repository's approved live-target control procedure, capture evidence at every assertion point, and post the results with GitHub-attached screenshots. Use when a PR needs behavioral evidence before merge-ready."
 ---
 
 # qa-verify
@@ -18,7 +18,7 @@ evidence.
 | Target | The Vercel preview linked to this PR and head SHA, or the repository's approved live target when no Vercel URL is present. |
 | Credentials | `_private/knowledge/key-maker.json` |
 | Surface | Playwright through the repository's approved browser/control skill for a Vercel preview; otherwise the repository's control skill or project command. |
-| PR reporting | The repository's PR skill and its screenshot upload/embed procedure. |
+| PR reporting | The repository's PR skill and [GitHub attachment procedure](../../docs/guide/github-attachments.md). |
 
 If `_private/knowledge/key-maker.json` does not exist or cannot be read, stop before login
 and ask the user for the correct path or filename. Do not guess, search unrelated locations,
@@ -64,10 +64,12 @@ values. This is FENCE 4.
    fail, screenshot, and diff hunk.
 6. Record a pass only when the screenshot exists and shows the claimed state. A missing,
    unreadable, stale, or secret-bearing artifact is a fail.
-7. Post the results table through the project PR skill. Upload and embed every approved
-   screenshot in the PR comment, placing the resulting image reference in the matching
-   evidence cell. Use `embed-screenshots` when the project provides it. A local file path or
-   plain attachment outside the posted table is not enough.
+7. Post the results table through the project PR skill. Check `gh --version` and confirm
+   `gh pr comment --help` lists `--attach`, following [GitHub attachments](../../docs/guide/github-attachments.md).
+   Attach every approved screenshot with one `--attach` flag per file and reference the
+   same local path in the matching evidence cell so `gh` replaces it with a hosted image.
+   Keep existing screenshot embeds; use native attachments for new uploads. Ask the user
+   for images only when the running interface cannot be reached.
 8. Re-read the posted PR comment and verify that it contains one row per assertion point,
    every row has an embedded screenshot, and the reported PR head matches the tested head.
 9. A failed assertion returns to its owning slice with the evidence attached. Do not fix

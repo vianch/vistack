@@ -24,6 +24,10 @@ It changes what closes a QA scenario. The `qa-verify` contract requires a screen
 open. It also changes what a report says: `qa-verifier` returns a table with a screenshot
 path per row, and a row with an empty path is a fail, not a pass with a missing file.
 
+For new PR evidence, attach local screenshots with `gh --attach` and embed the hosted
+references in the matching rows. Follow [GitHub attachments](../../docs/guide/github-attachments.md)
+for the CLI version check and upload procedure; preserve existing hosted references.
+
 It changes the reviewer's job too. A PR carrying evidence gets reviewed for design; a PR
 carrying assertions gets re-verified by hand.
 

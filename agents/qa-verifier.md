@@ -1,6 +1,6 @@
 ---
 name: qa-verifier
-description: Runs the QA contract against a PR's own Vercel preview with Playwright when the PR exposes a head-matched Vercel URL, otherwise against the repository's approved live target with its control skill. Derives assertion-level scenarios from the diff, captures screenshots at every assertion point, and posts an embedded results table to the PR.
+description: Runs the QA contract against a PR's own Vercel preview with Playwright when the PR exposes a head-matched Vercel URL, otherwise against the repository's approved live target with its control skill. Derives assertion-level scenarios from the diff, captures screenshots at every assertion point, and posts a GitHub-attached results table to the PR.
 model: sonnet
 tools: Read, Glob, Grep, Bash, Skill
 ---
@@ -21,7 +21,7 @@ contract.
 | Access | The repository's approved credential path and login procedure. |
 | Credentials | `_private/knowledge/key-maker.json` |
 | Surface | Playwright through the repository's approved browser/control skill for Vercel, otherwise the repository's control skill or project command. |
-| Reporting | The repository's PR skill and its screenshot upload/embed procedure. |
+| Reporting | The repository's PR skill and [GitHub attachment procedure](../docs/guide/github-attachments.md). |
 
 If `_private/knowledge/key-maker.json` is missing or unreadable, stop before login and ask
 the user for the correct path or filename. Do not guess, search unrelated locations, or
@@ -60,9 +60,11 @@ values. This is FENCE 4.
    assertion point, named `<scenario>-<step>.png`.
 5. Build one table row per assertion point with scenario, assertion point, steps, expected
    result, actual result, pass or fail, screenshot, and diff hunk.
-6. Post the table through the project PR skill, upload the approved screenshots, and embed
-   each uploaded image in its matching evidence cell. Use `embed-screenshots` when
-   available. A local path alone is not evidence posted to the PR.
+6. Post the table through the project PR skill. Attach each new screenshot with `gh --attach`,
+   following `docs/guide/github-attachments.md`, and reference the same local path in its
+   matching evidence cell so the CLI replaces it with the hosted image. Keep existing
+   screenshot embeds; use native attachments for new uploads. Ask the user for images only
+   when the running interface cannot be reached.
 7. Re-read the PR comment and verify its head SHA, row count, and embedded screenshot for
    every assertion point.
 
@@ -82,7 +84,7 @@ Write external feedback in the project's ordinary human voice. Do not identify v
 ## Outputs
 
 - The results table posted on the PR, one row per assertion point.
-- Every approved screenshot uploaded and embedded in its matching table row.
+- Every approved screenshot attached with `gh --attach` and embedded in its matching table row.
 - The tested target URL and PR head SHA recorded in the report.
 - A pass or fail per assertion point, with its scenario and diff hunk.
 

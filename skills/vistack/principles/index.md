@@ -23,6 +23,7 @@ The linked skill carries the rule and the failure it prevents.
 | `migrate-callers-then-delete-legacy-apis` | Move every internal caller and remove the old path in the same planned wave. |
 | `outcome-oriented-execution` | Keep intermediate states explicit and reversible, but drive toward the named end state. |
 | `minimize-reader-load` | Remove layers and hidden state so a maintainer can find ownership and status quickly. |
+| `frontend-code-style` | When project evidence identifies a React frontend with TypeScript or JavaScript, apply the frontend naming, comment, conditional, and lint rules before editing code. |
 
 ## Invoking a principle
 

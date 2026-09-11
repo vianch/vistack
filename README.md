@@ -1,5 +1,8 @@
 # viStack
 
+<img width="1920" height="819" alt="vistack" src="https://github.com/user-attachments/assets/9835e9ba-0687-45a1-9de8-bb932d1a90f4" />
+
+
 The standing entry point for a unit of engineering work — an issue, a task, a bug, a
 feature, a refactor, a design implementation, an investigation. One entry point, one
 playbook, one role phase per slice, stopping at merge-ready.

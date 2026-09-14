@@ -1,7 +1,7 @@
 {
   "name": "vistack",
   "displayName": "viStack",
-  "description": "Standing entry point for engineering work with sticky routing, evidence-backed playbooks, unattended overnight runs, and merge-ready draft PRs without merging.",
+  "description": "Standing entry point for engineering work with sticky routing, evidence-backed playbooks, unattended overnight runs, and merge-ready draft PRs without merging. The canonical command is vistack; run, orchestrator, and coordinator are equivalent aliases.",
   "version": "0.6.0",
   "author": {
     "name": "Victor",

@@ -1,6 +1,6 @@
 ---
 name: vistack
-description: "Standing entry point for engineering work. Routes each request to exactly one playbook, preserves its steps verbatim, dispatches owned slices, and drives unattended work to evidence-backed merge-ready draft PRs. Use for /vistack, $vistack, issue URLs, bugs, features, refactors, design work, queue work, or overnight runs. Sticky until the user says new task."
+description: "Standing entry point for engineering work. Canonical name: vistack. Aliases: run, orchestrator, coordinator. All names route each request to exactly one playbook, preserve its steps verbatim, dispatch owned slices, and drive unattended work to evidence-backed merge-ready draft PRs. Sticky until the user says new task."
 ---
 
 # viStack

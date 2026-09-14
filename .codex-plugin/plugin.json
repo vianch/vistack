@@ -1,7 +1,7 @@
 {
   "name": "vistack",
-  "version": "0.6.0",
-  "description": "Route engineering work through explicit playbooks, evidence gates, unattended runs, and merge-ready draft PRs in Codex or Claude Code.",
+  "version": "0.7.0",
+  "description": "Route engineering work through explicit playbooks, evidence gates, unattended runs, and merge-ready draft PRs in Codex or Claude Code. The canonical skill is vistack; run, orchestrator, and coordinator are equivalent aliases.",
   "author": {
     "name": "Victor",
     "url": "https://github.com/vianch"

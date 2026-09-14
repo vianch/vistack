@@ -3,7 +3,7 @@ description: "Route a unit of engineering work — issue, task, bug, feature, re
 argument-hint: "<what you observed or want>. Done means <checkable condition>. Keep <behaviour that must not change>."
 ---
 
-# /vistack
+# /vistack:vistack
 
 Invoke the `vistack` skill and follow it as executable instructions, starting at Step 0.
 
@@ -13,3 +13,6 @@ available; the router matches the playbook.
 
 Once this command has run, the session is in viStack mode. Subsequent turns stay in the
 mode without re-invoking the command. `new task` forces a fresh playbook match.
+
+This is the canonical command. `/vistack:run`, `/vistack:orchestrator`, and
+`/vistack:coordinator` are equivalent aliases.

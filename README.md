@@ -21,8 +21,8 @@ the same playbooks, principles, and skill names across the two hosts.
 
 | Host | Version | Manifest |
 |---|---:|---|
-| Claude Code | `0.6.0` | `.claude-plugin/plugin.json` |
-| Codex | `0.6.0` | `.codex-plugin/plugin.json` |
+| Claude Code | `0.7.0` | `.claude-plugin/plugin.json` |
+| Codex | `0.7.0` | `.codex-plugin/plugin.json` |
 
 ### Claude Code
 
@@ -45,14 +45,14 @@ the repository marketplace and install the plugin:
 4. Verify the installation:
 
 - `/plugin` lists **viStack** as enabled.
-- `/vistack` resolves — typing it offers the command rather than an unknown-command error.
+- `/vistack:vistack` resolves — typing it offers the command rather than an unknown-command error.
 
 If either fails, see [troubleshooting](#troubleshooting).
 
 ### Codex
 
 Codex installs the same repository through `.agents/plugins/marketplace.json` and loads
-`skills/vistack/SKILL.md` as `$vistack`:
+`skills/vistack/SKILL.md` as `$vistack:vistack`:
 
 1. Confirm the Codex CLI is available:
 
@@ -81,7 +81,7 @@ codex plugin add vistack@vistack
 codex plugin list
 ```
 
-5. Start a new Codex thread and invoke `$vistack`. Codex runs the playbook phases in the
+5. Start a new Codex thread and invoke `$vistack:vistack`. Codex runs the playbook phases in the
 current thread because Claude's `commands/` and `agents/` directories are not Codex runtime
 components. Codex state uses `.codex/vistack/state/` and `.codex/vistack/worktrees/`. See the
 [Codex guide](docs/guide/codex.md) for local development and update instructions.
@@ -89,6 +89,22 @@ components. Codex state uses `.codex/vistack/state/` and `.codex/vistack/worktre
 ---
 
 ## usage
+
+### Equivalent entrypoints
+
+`vistack` is the canonical, backwards-compatible skill name. The following names are
+equivalent entrypoints and do not select different playbooks, roles, state roots, host
+adapters, or merge policies:
+
+| Purpose | Claude Code | Codex |
+|---|---|---|
+| Canonical | `/vistack:vistack` | `$vistack:vistack` |
+| Action-oriented alias | `/vistack:run` | `$vistack:run` |
+| Role-oriented alias | `/vistack:orchestrator` | `$vistack:orchestrator` |
+| Coordination-oriented alias | `/vistack:coordinator` | `$vistack:coordinator` |
+
+Claude aliases are thin command shims. Codex aliases are thin skill shims; all delegate to
+`skills/vistack/SKILL.md`, which remains the single orchestration implementation.
 
 One command. The request shape is what makes it work.
 

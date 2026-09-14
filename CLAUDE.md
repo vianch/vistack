@@ -18,9 +18,11 @@ repository** at that path. The upstream is `github.com/vianch/viStack`.
 /plugin install vistack           # install / pick up a new version
 /plugin                           # confirm viStack is listed as enabled
 claude plugin details vistack     # component inventory — count skills/agents to verify loading
-/vistack <request>                # the plugin's own entry point
+/vistack:vistack <request>        # canonical plugin entry point
+/vistack:run|orchestrator|coordinator <request> # equivalent aliases
 codex plugin add vistack@vistack  # install from the Codex marketplace
-$vistack <request>                # invoke the Codex skill in a new thread
+$vistack:vistack <request>        # canonical Codex skill in a new thread
+$vistack:run|orchestrator|coordinator <request> # equivalent aliases
 ```
 
 Verification after any edit is the inventory and the structural checker:
@@ -35,9 +37,11 @@ loads as *nothing*, silently, with no error.
 | `.claude-plugin/marketplace.json` | marketplace entry |
 | `.codex-plugin/plugin.json` | Codex plugin manifest |
 | `.agents/plugins/marketplace.json` | Codex marketplace entry |
-| `commands/vistack.md` | the `/vistack` slash command — thin, delegates to the router skill |
+| `commands/vistack.md` | the canonical `/vistack:vistack` command — thin, delegates to the router skill |
+| `commands/{run,orchestrator,coordinator}.md` | Claude alias commands that delegate to the router |
 | `skills/<name>/SKILL.md` | a skill |
 | `skills/vistack/SKILL.md` | the router (see below) |
+| `skills/{run,orchestrator,coordinator}/SKILL.md` | Codex alias shims that delegate to the router |
 | `skills/vistack/playbooks/*.md` | data read by the router, **not** skills |
 | `skills/vistack/principles/index.md` | data read first on every run |
 | `agents/<name>.md` | a subagent |

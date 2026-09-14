@@ -28,11 +28,13 @@ reloaded.
 
 ## Use it
 
-Invoke the skill explicitly with `$vistack`, or describe the engineering request in a way that
+Invoke the canonical skill explicitly with `$vistack:vistack`, or use one of its equivalent
+aliases: `$vistack:run`, `$vistack:orchestrator`, or `$vistack:coordinator`. You can also
+describe the engineering request in a way that
 matches its skill description:
 
 ```text
-$vistack Fix the failing upload test. Done means the test passes and the upload error is
+$vistack:run Fix the failing upload test. Done means the test passes and the upload error is
 shown to users without changing successful uploads.
 ```
 
@@ -51,6 +53,9 @@ The shared router therefore adapts the same playbooks to the current Codex threa
 
 The workflow still requires a checkable finish condition, keeps the four fences, uses one
 concern per draft PR, and stops at merge-ready. It never merges.
+
+The four names are equivalent. The aliases are thin shims that delegate to
+`skills/vistack/SKILL.md`; they do not create separate Codex workflows.
 
 Use `$overnight` for a direct overnight entry point, or include "going to bed" and the full
 permission boundary in a `$vistack` request. Use `$automate-me` to capture personal working

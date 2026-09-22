@@ -26,6 +26,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--kev-model", default="kev-latest")
     parser.add_argument("--fallback", choices=("none", "kev", "host-llm"))
     parser.add_argument("--effort", choices=("low", "medium", "high"), default="low")
+    parser.add_argument("--check", action="store_true", help="exit 1 when the assisted action misses a labelled human action")
     args = parser.parse_args(argv)
     deterministic = DecisionEngine(backend="deterministic")
     assisted = DecisionEngine(
@@ -59,8 +60,34 @@ def main(argv: list[str] | None = None) -> None:
                 "final_outcome": scenario.get("final_outcome"),
             }
         )
-    matches = sum(row["assisted_action"] == row["human_action"] for row in rows if row["human_action"])
-    print(json.dumps({"scenarios": rows, "human_action_match_count": matches, "scenario_count": len(rows)}, indent=2, sort_keys=True))
+    labelled = [row for row in rows if row["human_action"]]
+    matches = sum(row["assisted_action"] == row["human_action"] for row in labelled)
+    by_type: dict[str, dict[str, int]] = {}
+    for row in labelled:
+        bucket = by_type.setdefault(row["decision_type"], {"matched": 0, "total": 0})
+        bucket["total"] += 1
+        bucket["matched"] += row["assisted_action"] == row["human_action"]
+    mismatches = [
+        {key: row[key] for key in ("id", "decision_type", "assisted_action", "human_action", "assisted_backend")}
+        for row in labelled
+        if row["assisted_action"] != row["human_action"]
+    ]
+    print(
+        json.dumps(
+            {
+                "scenarios": rows,
+                "human_action_match_count": matches,
+                "scenario_count": len(rows),
+                "human_action_accuracy": round(matches / len(labelled), 4) if labelled else None,
+                "by_decision_type": by_type,
+                "mismatches": mismatches,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    if args.check and mismatches:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

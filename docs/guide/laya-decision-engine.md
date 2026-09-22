@@ -201,6 +201,11 @@ For repeated orchestration events, keep the model resident:
 python3 scripts/vistack-decision.py serve --backend auto
 ```
 
+The server loads configured local models before reading the first request. Model load is
+not charged to the per-call timeout, and a failed load is remembered instead of retried on
+every request. A backend that fails twice in a row is skipped for 30 seconds, so an outage
+costs one connect or inference timeout per window rather than one per decision.
+
 Use `--timeout-ms` to bound an MLX call. The default is 2000 ms; a timeout returns the
 deterministic fallback. Set it to `0` only when the caller supplies its own process-level
 timeout.
@@ -238,6 +243,25 @@ Every response is a `Decision` with `decision_id`, `decision_type`, `action`, bo
 `confidence`, concise `rationale`, `evidence_considered`, `risks`, `required_evidence`,
 `alternatives`, `change_conditions`, machine-readable `outputs`, probability data, backend,
 and fallback metadata. `authority` is always `advisory-only`.
+
+### Inputs the deterministic policy reads
+
+Routing scores word-boundary signals for each task class. The request, title, description,
+and summary carry full weight; acceptance criteria, briefs, and other task values carry about
+a third, so a criterion such as "no failures in the console" cannot reroute a feature. The
+playbook-selection decision reports `outputs.route_source`: `state` (blocked, paused, or at
+QA), `handoff` (an explicit overnight or autopilot request), `signals`, or `default`. A model
+may not change a `state` or `handoff` route or invent an unattended one.
+
+| Decision type | Optional fields | Effect |
+|---|---|---|
+| `grooming` | `task.open_questions`, `task.estimated_changed_lines` | Open questions return `needs-decision`; an estimate above 500 returns `split`. |
+| `decomposition` | `task.slices[].files`, `task.slices[].depends_on`, `task.dependencies` | Overlapping slice files or a dependency return `sequence`; `outputs.shared_files` names the overlap. Textual estimates such as `"about 300"` are parsed. |
+| `runtime-progress` | `current_state.attempts`, `identical_results`, `unblock_exhausted`, `next_action`, `credentials_missing`, `credentials_expired`, `contract_ambiguity` | Each fence returns `escalate` with `outputs.fence` set to 1-4. Twenty attempts or three identical results is FENCE 1; an irreversible `next_action` such as a merge is FENCE 3. |
+| `verification` | `evidence[].criterion`, `evidence[].status` | `criterion` (1-based index or exact criterion text) covers that criterion only. `status` `fail` or a summary such as `3 tests failed` returns `request-evidence`; `status` `unavailable` returns `block`. Duplicate refs count once. `outputs.uncovered_criteria` lists the gaps. |
+
+Rationales name the matched terms or the missing fields, and `alternatives` names the
+runner-up route when one matched.
 
 ## Integration points
 
@@ -301,14 +325,26 @@ available checkpoint. The output reports cold-start time, warm p50/p95/mean, pro
 and CPU time. MLX GPU utilization is runtime-dependent and is not inferred from CPU time.
 
 The benchmark is deliberately separate from correctness tests. A latency result does not
-show that a decision is accurate for viStack. Add representative, labeled viStack scenarios
-and compare deterministic policy, Laya recommendation, human choice, and final outcome
-before raising the confidence threshold or enabling more automatic refinement.
+show that a decision is accurate for viStack. The labelled scenarios in
+`examples/laya/scenarios.jsonl` are the correctness check:
+
+```bash
+python3 scripts/evaluate-laya.py --check
+python3 scripts/evaluate-laya.py --backend mlx --model "$VISTACK_LAYA_MODEL"
+```
+
+The report includes accuracy, per-type counts, and every mismatch; `--check` exits non-zero
+on a mismatch, and the unit suite runs the same check for the deterministic policy. Add a
+scenario for every corrected decision, and compare deterministic policy, model
+recommendation, human choice, and final outcome before raising the confidence threshold or
+enabling more automatic refinement.
 
 The deterministic benchmark run in this repository on 2026-09-22 used 25 decisions and
 reported cold start `0.013 ms`, warm p50 `0.025 ms`, warm p95 `0.054 ms`, warm mean
 `0.033 ms`, and maximum process RSS `30688 KB`. This is policy and serialization latency;
-it is not an MLX model-load or GPU inference measurement. No MLX checkpoint was installed in
+it is not an MLX model-load or GPU inference measurement. With history enabled, 3000
+decisions took 23.0 s before the history index change and 0.56 s after it; the mean of the
+last 100 appends fell from 16.0 ms to 0.20 ms. No MLX checkpoint was installed in
 that run, so the MLX benchmark remains a machine-specific follow-up.
 
 ## Adding a decision type

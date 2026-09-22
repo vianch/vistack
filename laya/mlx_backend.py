@@ -37,10 +37,28 @@ class MLXBackend:
         self.compile = compile
         self.cache_prompts = cache_prompts
         self._agent: Any = None
+        self._load_error: LayaUnavailable | None = None
+
+    def warm(self) -> None:
+        """Load the checkpoint now so a later ``predict`` pays inference cost only."""
+
+        self._load()
 
     def _load(self) -> Any:
         if self._agent is not None:
             return self._agent
+        # A failed load is not retried: a missing package or checkpoint does not fix itself
+        # between requests, and retrying would repeat the import and download cost each time.
+        if self._load_error is not None:
+            raise self._load_error
+        try:
+            self._agent = self._load_agent()
+        except LayaUnavailable as exc:
+            self._load_error = exc
+            raise
+        return self._agent
+
+    def _load_agent(self) -> Any:
         if not self.model:
             raise LayaUnavailable(
                 "no Laya model configured; pass --model or set VISTACK_LAYA_MODEL"
@@ -50,7 +68,7 @@ class MLXBackend:
         except Exception as exc:  # pragma: no cover - depends on the host Python
             raise LayaUnavailable("laya-mlx is not installed in this Python environment") from exc
         try:
-            self._agent = laya_mlx.load(
+            return laya_mlx.load(
                 self.model,
                 dtype=self.dtype,
                 device=self.device,
@@ -60,7 +78,6 @@ class MLXBackend:
             )
         except Exception as exc:  # model path, tokenizer, and MLX errors are all fallbackable
             raise LayaUnavailable(f"Laya model could not be loaded: {exc}") from exc
-        return self._agent
 
     def predict(self, state: Mapping[str, Any], questions: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
         agent = self._load()

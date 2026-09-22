@@ -5,12 +5,11 @@ from __future__ import annotations
 import os
 import signal
 import threading
+import time
 import uuid
 from typing import Any, Mapping
 
 from .history import HistoryStore
-from .host_llm import HostLLMBackend
-from .kev_backend import KevBackend
 from .mlx_backend import InferenceTimeout, LayaUnavailable, MLXBackend
 from .policy import PolicyDraft, evaluate, verification_sufficient
 from .questions import questions_for, state_for_laya
@@ -68,6 +67,20 @@ def _requested_actions(context: DecisionContext) -> tuple[str, ...]:
     return context.available_actions or default_actions(context.decision_type)
 
 
+# The HTTP and subprocess adapters are imported only when configured, so the default
+# deterministic path does not pay for urllib or subprocess at startup.
+def _kev_backend(url: str, *, model: str, timeout_ms: int) -> Any:
+    from .kev_backend import KevBackend
+
+    return KevBackend(url, model=model, timeout_ms=timeout_ms)
+
+
+def _host_backend(host: str, *, model: str | None, effort: str, timeout_ms: int, workdir: str | None) -> Any:
+    from .host_llm import HostLLMBackend
+
+    return HostLLMBackend(host, model=model, effort=effort, timeout_ms=timeout_ms, workdir=workdir)
+
+
 class DecisionEngine:
     """A safe advisory decision engine.
 
@@ -93,6 +106,8 @@ class DecisionEngine:
         min_confidence: float = 0.65,
         timeout_ms: int = 2000,
         history_path: str | None = None,
+        failure_threshold: int = 2,
+        cooldown_s: float = 30.0,
     ) -> None:
         if backend not in {"auto", "deterministic", "mlx", "kev", "host-llm"}:
             raise ValueError("backend must be auto, deterministic, mlx, kev, or host-llm")
@@ -104,6 +119,8 @@ class DecisionEngine:
             raise ValueError("min_confidence must be between 0 and 1")
         if timeout_ms < 0:
             raise ValueError("timeout_ms must be zero or positive")
+        if failure_threshold < 1 or cooldown_s < 0:
+            raise ValueError("failure_threshold must be positive and cooldown_s zero or positive")
         env_enabled = os.environ.get("VISTACK_LAYA_ENABLED", "").strip().lower()
         # The environment switch is an emergency/CI-safe off switch.  It must
         # win even when a library caller explicitly requested the MLX backend;
@@ -119,6 +136,12 @@ class DecisionEngine:
         self.min_confidence = min_confidence
         self.timeout_ms = timeout_ms
         self.history = HistoryStore(history_path) if history_path else None
+        # A backend that keeps failing is skipped for ``cooldown_s`` so a long-lived server
+        # does not pay a connect or inference timeout on every request during an outage.
+        self.failure_threshold = failure_threshold
+        self.cooldown_s = cooldown_s
+        self._failures: dict[str, int] = {}
+        self._open_until: dict[str, float] = {}
         self._backend_name, self._backend = self._make_backend(
             self.backend_mode,
             dtype=dtype,
@@ -158,10 +181,10 @@ class DecisionEngine:
         if mode == "mlx":
             return "laya-mlx", MLXBackend(self.model, dtype=dtype, device=device)
         if mode == "kev":
-            return "kev", KevBackend(self.kev_url or "http://127.0.0.1:8009", model=self.kev_model, timeout_ms=self.timeout_ms)
+            return "kev", _kev_backend(self.kev_url or "http://127.0.0.1:8009", model=self.kev_model, timeout_ms=self.timeout_ms)
         if not self.host:
             raise ValueError("host-llm backend requires --host or VISTACK_LAYA_HOST")
-        return "host-llm", HostLLMBackend(
+        return "host-llm", _host_backend(
             self.host,
             model=self.host_model,
             effort=self.effort,
@@ -184,15 +207,15 @@ class DecisionEngine:
         # When host fallback is explicitly enabled, prefer a configured local
         # Kev service before sending the bounded context to a provider.
         if mode == "kev" and primary_name != "kev" and self.kev_url:
-            fallbacks.append(("kev", KevBackend(self.kev_url, model=self.kev_model, timeout_ms=self.timeout_ms)))
+            fallbacks.append(("kev", _kev_backend(self.kev_url, model=self.kev_model, timeout_ms=self.timeout_ms)))
         if mode == "host-llm":
             if primary_name != "kev" and self.kev_url:
-                fallbacks.append(("kev", KevBackend(self.kev_url, model=self.kev_model, timeout_ms=self.timeout_ms)))
+                fallbacks.append(("kev", _kev_backend(self.kev_url, model=self.kev_model, timeout_ms=self.timeout_ms)))
             if primary_name != "host-llm" and self.host:
                 fallbacks.append(
                     (
                         "host-llm",
-                        HostLLMBackend(
+                        _host_backend(
                             self.host,
                             model=self.host_model,
                             effort=self.effort,
@@ -318,6 +341,9 @@ class DecisionEngine:
             selected = _choice(answer)
             if not selected:
                 return None, "missing typed playbook answer"
+            conflict = _noul_probability(_answer(result, "route_conflict"))
+            if conflict is not None and conflict >= 0.5 and selected != baseline.action:
+                return None, "model flagged a fence conflict for its own route"
             outputs.update({"playbook": selected})
             confidence_parts = [_confidence(answer)]
             probabilities = _probabilities(answer)
@@ -399,26 +425,63 @@ class DecisionEngine:
             return False, "deterministic grooming gate rejected ready"
         if context.decision_type == "intake-analysis" and model_draft.action == "ready-for-implementation" and baseline.action != "ready-for-implementation":
             return False, "deterministic intake gate rejected ready-for-implementation"
+        if context.decision_type == "playbook-selection" and model_draft.action != baseline.action:
+            # Current state (blocked, paused, at QA) and an explicit unattended handoff are
+            # facts, not interpretations; a model may not route around them.
+            if baseline.outputs.get("route_source") in {"state", "handoff"}:
+                return False, f"deterministic route gate kept {baseline.action} from explicit state or handoff"
+            if model_draft.action in {"overnight", "autopilot-stack", "autopilot-full"}:
+                return False, "unattended routes require an explicit handoff in the request"
         if context.decision_type == "decomposition":
-            if model_draft.action == "parallelize" and (context.task.get("shared_files") or context.task.get("conflicts")):
+            if model_draft.action == "parallelize" and (
+                baseline.outputs.get("shared_file_conflict") or baseline.outputs.get("dependencies")
+            ):
                 return False, "deterministic conflict gate rejected parallelize"
             if model_draft.action == "parallelize" and baseline.action == "sequence":
                 return False, "deterministic dependency gate rejected parallelize"
-        if context.decision_type == "runtime-progress" and model_draft.action in {"continue", "retry"} and baseline.action in {"block", "pause", "escalate"}:
-            return False, "deterministic runtime gate rejected continuing"
+            if baseline.action == "split" and model_draft.action != "split":
+                return False, "deterministic size gate requires split above the changed-line limit"
+        if context.decision_type == "runtime-progress":
+            if baseline.action == "escalate" and model_draft.action != "escalate":
+                return False, "deterministic fence gate requires escalation"
+            if model_draft.action in {"continue", "retry"} and baseline.action in {"block", "pause"}:
+                return False, "deterministic runtime gate rejected continuing"
+            if model_draft.action == "continue" and baseline.action == "retry":
+                return False, "deterministic stall gate rejected continuing a stalled lane"
         if context.decision_type == "skill-improvement" and model_draft.action == "propose-change" and baseline.action != "propose-change":
             return False, "deterministic history gate requires repeated evidence before proposing a change"
         return True, None
 
-    def _predict_with_timeout(self, context: DecisionContext, backend: Any) -> dict[str, Any]:
+    def warm(self) -> None:
+        """Load configured local models before the first request; failures stay fallbackable."""
+
+        for backend in (self._mlx if self._backend_name == "laya-mlx" else self._backend, *(item[1] for item in self._fallbacks)):
+            warm = getattr(backend, "warm", None)
+            if callable(warm):
+                try:
+                    warm()
+                except LayaUnavailable:
+                    continue
+
+    def _predict_with_timeout(
+        self,
+        backend: Any,
+        state: Mapping[str, Any],
+        questions: Mapping[str, Mapping[str, Any]],
+    ) -> dict[str, Any]:
         if backend is None:
             raise LayaUnavailable("no refinement backend is configured")
+        # Model load is a one-time cost. Charging it to the per-call budget would time out
+        # the first request, discard the half-loaded model, and repeat on every request.
+        warm = getattr(backend, "warm", None)
+        if callable(warm):
+            warm()
         if (
             self.timeout_ms == 0
             or not hasattr(signal, "SIGALRM")
             or threading.current_thread() is not threading.main_thread()
         ):
-            return backend.predict(state_for_laya(context), questions_for(context))
+            return backend.predict(state, questions)
 
         def alarm_handler(_signum: int, _frame: Any) -> None:
             raise InferenceTimeout(f"inference exceeded {self.timeout_ms} ms")
@@ -428,7 +491,7 @@ class DecisionEngine:
         signal.signal(signal.SIGALRM, alarm_handler)
         signal.setitimer(signal.ITIMER_REAL, self.timeout_ms / 1000.0)
         try:
-            return backend.predict(state_for_laya(context), questions_for(context))
+            return backend.predict(state, questions)
         finally:
             signal.setitimer(signal.ITIMER_REAL, 0)
             signal.signal(signal.SIGALRM, previous_handler)
@@ -441,18 +504,32 @@ class DecisionEngine:
         baseline: PolicyDraft,
         backend_name: str,
         backend: Any,
+        state: Mapping[str, Any],
+        questions: Mapping[str, Mapping[str, Any]],
     ) -> tuple[PolicyDraft | None, str | None]:
+        open_until = self._open_until.get(backend_name, 0.0)
+        if open_until > time.monotonic():
+            return None, f"skipped for {open_until - time.monotonic():.0f}s after repeated failures"
         try:
-            raw = self._predict_with_timeout(context, backend)
-            model_draft, error = self._model_draft(context, raw, baseline, backend_name)
-            if model_draft is None:
-                return None, error or "invalid typed model output"
-            safe, safety_error = self._safe_model_draft(context, baseline, model_draft)
-            if not safe:
-                return None, safety_error or "safety gate rejected model output"
-            return model_draft, None
+            raw = self._predict_with_timeout(backend, state, questions)
         except Exception as exc:  # An advisory engine must not break orchestration.
-            return None, str(exc)
+            failures = self._failures.get(backend_name, 0) + 1
+            self._failures[backend_name] = failures
+            if failures >= self.failure_threshold:
+                self._open_until[backend_name] = time.monotonic() + self.cooldown_s
+            return None, str(exc) or type(exc).__name__
+        self._failures[backend_name] = 0
+        self._open_until.pop(backend_name, None)
+        try:
+            model_draft, error = self._model_draft(context, raw, baseline, backend_name)
+        except Exception as exc:
+            return None, f"malformed typed model output: {exc}"
+        if model_draft is None:
+            return None, error or "invalid typed model output"
+        safe, safety_error = self._safe_model_draft(context, baseline, model_draft)
+        if not safe:
+            return None, safety_error or "safety gate rejected model output"
+        return model_draft, None
 
     def decide(
         self,
@@ -476,7 +553,11 @@ class DecisionEngine:
             )
         else:
             primary_backend = self._mlx if self._backend_name == "laya-mlx" else self._backend
-            model_draft, primary_error = self._try_backend(ctx, baseline, self._backend_name, primary_backend)
+            state = state_for_laya(ctx)
+            questions = questions_for(ctx)
+            model_draft, primary_error = self._try_backend(
+                ctx, baseline, self._backend_name, primary_backend, state, questions
+            )
             if model_draft is not None:
                 final = self._decision(
                     ctx,
@@ -512,6 +593,8 @@ class DecisionEngine:
                             baseline,
                             candidate_name,
                             candidate_backend,
+                            state,
+                            questions,
                         )
                         if fallback_draft is not None:
                             break

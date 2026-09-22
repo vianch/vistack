@@ -110,7 +110,9 @@ def main(argv: list[str] | None = None) -> None:
         print(json.dumps(result.to_dict(), indent=2, sort_keys=True, ensure_ascii=False))
         return
     if args.command == "serve":
-        serve(_engine(args))
+        engine = _engine(args)
+        engine.warm()
+        serve(engine)
         return
     if args.command == "laya":
         if args.action in {"on", "off"}:

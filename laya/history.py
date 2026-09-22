@@ -14,10 +14,17 @@ from .schema import Decision, DecisionContext, redact, utc_now
 
 
 class HistoryStore:
-    """A small JSONL store. Replaying the same event id is idempotent."""
+    """A small JSONL store. Replaying the same event id is idempotent.
+
+    Event ids already on disk are indexed incrementally: each append reads only the bytes
+    written since this store last looked, so append cost stays flat as the history grows.
+    """
 
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
+        self._ids: set[str] = set()
+        self._offset = 0
+        self._identity: tuple[int, int] | None = None
 
     def _records(self) -> list[dict[str, Any]]:
         if not self.path.exists():
@@ -37,27 +44,43 @@ class HistoryStore:
     def records(self) -> list[dict[str, Any]]:
         return self._records()
 
+    def _index_new_lines(self, stream: Any) -> None:
+        info = os.fstat(stream.fileno())
+        identity = (info.st_dev, info.st_ino)
+        if identity != self._identity or info.st_size < self._offset:
+            # A replaced or truncated file invalidates the index.
+            self._ids.clear()
+            self._offset = 0
+            self._identity = identity
+        stream.seek(self._offset)
+        chunk = stream.read()
+        complete = chunk.rfind(b"\n") + 1
+        for line in chunk[:complete].splitlines():
+            try:
+                value = json.loads(line)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                continue
+            if isinstance(value, dict) and value.get("event_id"):
+                self._ids.add(str(value["event_id"]))
+        self._offset += complete
+
     def _append(self, event: Mapping[str, Any]) -> bool:
         event_id = event.get("event_id")
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("a+", encoding="utf-8") as stream:
+        with self.path.open("ab+") as stream:
             fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
             try:
-                stream.seek(0)
-                existing_ids = set()
-                for line in stream:
-                    try:
-                        value = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    if isinstance(value, dict) and value.get("event_id"):
-                        existing_ids.add(value["event_id"])
-                if event_id and event_id in existing_ids:
+                self._index_new_lines(stream)
+                if event_id and str(event_id) in self._ids:
                     return False
+                encoded = (json.dumps(redact(dict(event)), sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8")
                 stream.seek(0, os.SEEK_END)
-                stream.write(json.dumps(redact(dict(event)), sort_keys=True, ensure_ascii=False) + "\n")
+                stream.write(encoded)
                 stream.flush()
                 os.fsync(stream.fileno())
+                self._offset = stream.tell()
+                if event_id:
+                    self._ids.add(str(event_id))
             finally:
                 fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
         return True

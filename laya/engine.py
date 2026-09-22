@@ -433,12 +433,21 @@ class DecisionEngine:
             if model_draft.action in {"overnight", "autopilot-stack", "autopilot-full"}:
                 return False, "unattended routes require an explicit handoff in the request"
         if context.decision_type == "decomposition":
-            if model_draft.action == "parallelize" and (context.task.get("shared_files") or context.task.get("conflicts")):
+            if model_draft.action == "parallelize" and (
+                baseline.outputs.get("shared_file_conflict") or baseline.outputs.get("dependencies")
+            ):
                 return False, "deterministic conflict gate rejected parallelize"
             if model_draft.action == "parallelize" and baseline.action == "sequence":
                 return False, "deterministic dependency gate rejected parallelize"
-        if context.decision_type == "runtime-progress" and model_draft.action in {"continue", "retry"} and baseline.action in {"block", "pause", "escalate"}:
-            return False, "deterministic runtime gate rejected continuing"
+            if baseline.action == "split" and model_draft.action != "split":
+                return False, "deterministic size gate requires split above the changed-line limit"
+        if context.decision_type == "runtime-progress":
+            if baseline.action == "escalate" and model_draft.action != "escalate":
+                return False, "deterministic fence gate requires escalation"
+            if model_draft.action in {"continue", "retry"} and baseline.action in {"block", "pause"}:
+                return False, "deterministic runtime gate rejected continuing"
+            if model_draft.action == "continue" and baseline.action == "retry":
+                return False, "deterministic stall gate rejected continuing a stalled lane"
         if context.decision_type == "skill-improvement" and model_draft.action == "propose-change" and baseline.action != "propose-change":
             return False, "deterministic history gate requires repeated evidence before proposing a change"
         return True, None

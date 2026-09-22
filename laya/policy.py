@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
 import re
 from typing import Any, Mapping
 
-from .schema import DECISION_TYPES, DecisionContext, PLAYBOOKS, ROLES
+from .schema import DECISION_TYPES, DecisionContext, Evidence, PLAYBOOKS, ROLES
 
 
 @dataclass(frozen=True)
@@ -24,6 +23,8 @@ class PolicyDraft:
 
 
 MAX_CHANGED_LINES = 500
+UNBLOCK_ATTEMPT_LIMIT = 20
+IDENTICAL_RESULT_LIMIT = 3
 
 # Signals are matched on word boundaries against observed values, never field names. The
 # request text carries full weight; acceptance criteria, briefs, and other task values carry
@@ -61,32 +62,21 @@ _CROSS_CUTTING = re.compile(r"\b(?:large|cross-cutting|many services|program|mul
 _NEEDS_DECISION = re.compile(r"\b(?:product decision|choose between|ambiguous|tbd|to be decided|undecided)\b|\beither\b.{1,80}\bor\b")
 _SPLIT = re.compile(r"\b(?:split|decompose)\b")
 _INDEPENDENT = re.compile(r"\b(?:independent|separate directories|parallel(?:ize)?|disjoint)\b")
-
-
-
-def _task_text(context: DecisionContext) -> str:
-    # Search observed values, not field names. Keys such as ``playbook``, ``skill``, and
-    # ``verification_command`` are present in structured contexts and would otherwise create
-    # false classifications.
-    def observed(value: Any) -> list[Any]:
-        if isinstance(value, Mapping):
-            result: list[Any] = []
-            for item in value.values():
-                result.extend(observed(item))
-            return result
-        if isinstance(value, (list, tuple)):
-            result = []
-            for item in value:
-                result.extend(observed(item))
-            return result
-        return [value]
-
-    values = observed(context.task) + observed(context.playbook or "") + observed(context.current_state) + observed(context.constraints)
-    return json.dumps(values, sort_keys=True, ensure_ascii=False).lower()
-
-
-def _contains(text: str, *terms: str) -> bool:
-    return any(term in text for term in terms)
+_IRREVERSIBLE = re.compile(
+    r"\b(?:merge|force[- ]push|history rewrite|rewrite history|deploy(?: to)? prod(?:uction)?|production deploy|"
+    r"drop (?:table|database)|delete (?:data|rows|records|the database)|rotate (?:the )?secrets?|secret rotation|"
+    r"shared[- ]environment migration|major (?:version )?bump)\b"
+)
+# Summaries are free text, so only unambiguous failure reports count; "shows the error
+# message" describes behavior under test, not a failed run. Use ``status`` to be exact.
+_FAILURE = re.compile(
+    r"\b(?:[1-9]\d* (?:tests? )?(?:failed|failures?|errors?)|tests? failed|failed tests?|traceback|timed out|"
+    r"exit (?:code|status) [1-9]\d*)\b"
+)
+_NO_FAILURE = re.compile(r"\b(?:0|no|zero) (?:tests? )?(?:failed|failures?|errors?)\b")
+_ACCEPTED_EVIDENCE = {"command", "test", "test-output", "artifact", "screenshot", "response", "file"}
+_UNAVAILABLE = {"unavailable", "unreachable", "blocked"}
+_FAILED = {"fail", "failed", "failing", "error"}
 
 
 def _observed(value: Any) -> list[str]:
@@ -239,16 +229,72 @@ def _route(context: DecisionContext) -> tuple[str, float, str, Classification, s
 
 
 def evidence_refs(context: DecisionContext) -> tuple[str, ...]:
-    return tuple(item.ref for item in context.evidence)
+    return tuple(dict.fromkeys(item.ref for item in context.evidence))
+
+
+def _evidence_state(item: Evidence) -> str:
+    status = (item.status or "").strip().lower()
+    if status in _UNAVAILABLE:
+        return "unavailable"
+    if status in _FAILED:
+        return "failed"
+    if status:
+        return "passed"
+    if _FAILURE.search(_NO_FAILURE.sub(" ", item.summary.lower())):
+        return "failed"
+    return "passed"
+
+
+def _criterion_index(item: Evidence, criteria: list[Any]) -> int | None:
+    if item.criterion is None:
+        return None
+    number = _int(item.criterion) if str(item.criterion).strip().isdigit() else None
+    if number is not None and 1 <= number <= len(criteria):
+        return number - 1
+    wanted = str(item.criterion).strip().lower()
+    for index, criterion in enumerate(criteria):
+        if str(criterion).strip().lower() == wanted:
+            return index
+    return None
+
+
+def assess_evidence(context: DecisionContext) -> dict[str, Any]:
+    """Map evidence onto acceptance criteria and flag failing or unavailable artifacts."""
+
+    criteria = _acceptance_criteria(context)
+    seen: set[str] = set()
+    usable: list[Evidence] = []
+    failed: list[str] = []
+    unavailable: list[str] = []
+    for item in context.evidence:
+        if item.ref in seen:
+            continue
+        seen.add(item.ref)
+        state = _evidence_state(item)
+        if state == "failed":
+            failed.append(item.ref)
+        elif state == "unavailable":
+            unavailable.append(item.ref)
+        elif item.kind in _ACCEPTED_EVIDENCE:
+            usable.append(item)
+    mapped = {index for item in usable if (index := _criterion_index(item, criteria)) is not None}
+    unmapped = sum(1 for item in usable if _criterion_index(item, criteria) is None)
+    # Artifacts without a criterion label cover the remaining criteria one-to-one; labelled
+    # artifacts cover exactly the criterion they name.
+    uncovered = [index for index in range(len(criteria)) if index not in mapped]
+    uncovered = uncovered[unmapped:]
+    return {
+        "criteria_count": len(criteria),
+        "usable": [item.ref for item in usable],
+        "failed": failed,
+        "unavailable": unavailable,
+        "uncovered": [index + 1 for index in uncovered],
+        "sufficient": bool(criteria) and bool(usable) and not failed and not unavailable and not uncovered,
+    }
 
 
 def verification_sufficient(context: DecisionContext) -> bool:
-    criteria = _acceptance_criteria(context)
-    if not criteria or not context.evidence:
-        return False
-    accepted_kinds = {"command", "test", "test-output", "artifact", "screenshot", "response", "file"}
-    usable = [item for item in context.evidence if item.kind in accepted_kinds]
-    return len(usable) >= len(criteria)
+    return bool(assess_evidence(context)["sufficient"])
 
 
 def _common(
@@ -286,15 +332,35 @@ def _runner_up_alternative(classification: Classification) -> tuple[tuple[str, s
     return ((runner_up, f"The request also matches {runner_up} signals{detail}."),)
 
 
+def _slice_conflicts(context: DecisionContext) -> list[str]:
+    slices = context.task.get("slices")
+    if not isinstance(slices, (list, tuple)):
+        return []
+    owners: dict[str, int] = {}
+    shared: set[str] = set()
+    for item in slices:
+        if not isinstance(item, Mapping):
+            continue
+        for path in _items(item.get("files") or item.get("writable_files")):
+            owners[str(path)] = owners.get(str(path), 0) + 1
+            if owners[str(path)] > 1:
+                shared.add(str(path))
+    return sorted(shared)
+
+
+def _slice_dependencies(context: DecisionContext) -> bool:
+    slices = context.task.get("slices")
+    if not isinstance(slices, (list, tuple)):
+        return False
+    return any(isinstance(item, Mapping) and _items(item.get("depends_on") or item.get("dependencies")) for item in slices)
+
+
 def evaluate(context: DecisionContext) -> PolicyDraft:
     """Evaluate a context without importing MLX or making external calls."""
 
     decision_type = context.decision_type
     if decision_type not in DECISION_TYPES:
         raise ValueError(f"unknown decision type {decision_type!r}")
-    text = _task_text(context)
-    criteria = _acceptance_criteria(context)
-    refs = evidence_refs(context)
 
     if decision_type == "intake-analysis":
         criteria = _acceptance_criteria(context)
@@ -434,57 +500,74 @@ def evaluate(context: DecisionContext) -> PolicyDraft:
 
 
     if decision_type == "decomposition":
-        files = context.task.get("files") or context.task.get("touched_files") or []
-        conflict = bool(context.task.get("shared_files") or context.task.get("conflicts"))
-        if context.task.get("estimated_changed_lines", 0) and int(context.task["estimated_changed_lines"]) > 500:
+        request = _request(context).lower()
+        files = _items(context.task.get("files") or context.task.get("touched_files"))
+        shared = [str(item) for item in _items(context.task.get("shared_files") or context.task.get("conflicts"))] + _slice_conflicts(context)
+        shared = list(dict.fromkeys(shared))
+        dependencies = _items(context.task.get("dependencies")) or _slice_dependencies(context)
+        estimated = _int(context.task.get("estimated_changed_lines"))
+        base = {"estimated_files": len(files), "shared_files": shared, "estimated_changed_lines": estimated}
+        if estimated is not None and estimated > MAX_CHANGED_LINES:
             return _common(
                 context,
                 action="split",
                 confidence=0.99,
-                rationale="The estimated change exceeds the 500-line slice boundary.",
+                rationale=f"The estimate of {estimated} changed lines exceeds the {MAX_CHANGED_LINES}-line slice boundary.",
                 risks=("A large slice weakens reviewability and independent verification.",),
                 required=("slice list, file ownership, and conflict matrix",),
-                outputs={"parallelizable": False, "shared_file_conflict": conflict, "estimated_files": len(files)},
+                outputs={**base, "parallelizable": False, "shared_file_conflict": bool(shared)},
             )
-        if conflict:
+        if shared:
             return _common(
                 context,
                 action="sequence",
                 confidence=0.95,
-                rationale="Candidate slices share writable files, so they must be serialized.",
+                rationale=f"Candidate slices share writable files ({', '.join(shared[:5])}), so they must be serialized.",
                 risks=("Concurrent writers could corrupt the shared file.",),
                 required=("a conflict matrix naming the shared files",),
                 alternatives=(("parallelize", "Use only after file ownership becomes disjoint."),),
-                outputs={"parallelizable": False, "shared_file_conflict": True, "estimated_files": len(files)},
+                outputs={**base, "parallelizable": False, "shared_file_conflict": True},
             )
-        if _contains(text, "independent", "separate directories", "parallel"):
+        if dependencies:
+            return _common(
+                context,
+                action="sequence",
+                confidence=0.92,
+                rationale="A slice declares a dependency on earlier output, so the slices run in order.",
+                risks=("Parallel dispatch would start a lane before its input exists.",),
+                required=("the dependency order in the wave schedule",),
+                alternatives=(("parallelize", "Use once no slice reads another slice's output."),),
+                outputs={**base, "parallelizable": False, "shared_file_conflict": False, "dependencies": True},
+            )
+        if _INDEPENDENT.search(request) or (isinstance(context.task.get("slices"), (list, tuple)) and len(context.task["slices"]) > 1):
             return _common(
                 context,
                 action="parallelize",
                 confidence=0.84,
-                rationale="The context names independent work and no shared-file conflict.",
+                rationale="The context names independent work with disjoint files and no declared dependency.",
                 risks=("Parallelism is safe only with one worktree per slice.",),
                 required=("one worktree and one owner per slice", "conflict matrix"),
                 alternatives=(("sequence", "Serialize if a later slice reads an earlier output."),),
-                outputs={"parallelizable": True, "shared_file_conflict": False, "estimated_files": len(files)},
+                outputs={**base, "parallelizable": True, "shared_file_conflict": False},
             )
         return _common(
             context,
             action="single-slice",
             confidence=0.72,
-            rationale="No independent boundary or shared-file conflict is evidenced.",
+            rationale="No independent boundary, dependency, or shared-file conflict is evidenced.",
             risks=("Re-cut if the implementation grows beyond one independently verifiable concern.",),
             required=("a check that passes without a later slice",),
             alternatives=(("split", "Split only when each part has its own acceptance check."),),
-            outputs={"parallelizable": False, "shared_file_conflict": False, "estimated_files": len(files)},
+            outputs={**base, "parallelizable": False, "shared_file_conflict": False},
         )
 
+
     if decision_type == "dispatch-readiness":
-        brief = context.task.get("brief")
-        dependencies = context.task.get("dependencies", [])
+        criteria = _acceptance_criteria(context)
+        dependencies = _items(context.task.get("dependencies"))
         files = context.task.get("writable_files") or context.task.get("files")
         missing = []
-        if not brief:
+        if not context.task.get("brief"):
             missing.append("standalone slice brief")
         if not criteria:
             missing.append("acceptance checks")
@@ -497,7 +580,7 @@ def evaluate(context: DecisionContext) -> PolicyDraft:
                 context,
                 action="hold",
                 confidence=0.99,
-                rationale="The dispatch brief is incomplete.",
+                rationale=f"The dispatch brief is incomplete: {', '.join(missing)}.",
                 risks=("An incomplete brief causes scope drift and unverifiable completion.",),
                 required=tuple(missing),
                 outputs={"ready": False, "missing": missing},
@@ -507,7 +590,7 @@ def evaluate(context: DecisionContext) -> PolicyDraft:
                 context,
                 action="serialize",
                 confidence=0.94,
-                rationale="A declared dependency is not satisfied.",
+                rationale=f"Declared dependencies are not satisfied: {', '.join(str(item) for item in dependencies[:5])}.",
                 risks=("Dispatching now would make the lane depend on unfinished work.",),
                 required=("evidence that all declared dependencies are satisfied",),
                 outputs={"ready": False, "missing": [], "dependencies_satisfied": False},
@@ -531,9 +614,33 @@ def evaluate(context: DecisionContext) -> PolicyDraft:
             conditions=("Hold if the conflict matrix changes before dispatch.",),
         )
 
+
     if decision_type == "runtime-progress":
-        phase = str(context.current_state.get("phase", "")).lower()
-        blockers = context.current_state.get("blockers") or []
+        state = context.current_state
+        phase = str(state.get("phase", "")).lower()
+        blockers = _items(state.get("blockers"))
+        attempts = _int(state.get("attempts")) or 0
+        identical = _int(state.get("identical_results")) or 0
+        next_action = str(state.get("next_action") or "").lower()
+        base = {"phase": phase, "attempts": attempts}
+        fence: tuple[int, str] | None = None
+        if state.get("credentials_missing") or state.get("credentials_expired"):
+            fence = (4, "Credentials are missing or expired.")
+        elif next_action and _IRREVERSIBLE.search(next_action):
+            fence = (3, f"The next action {next_action!r} is irreversible.")
+        elif state.get("unblock_exhausted") or attempts >= UNBLOCK_ATTEMPT_LIMIT or identical >= IDENTICAL_RESULT_LIMIT:
+            fence = (1, "The bounded unblock loop is exhausted or repeating identical results.")
+        elif state.get("contract_ambiguity"):
+            fence = (2, "Two interpretations change acceptance criteria or a public contract.")
+        if fence:
+            return _common(
+                context,
+                action="escalate",
+                confidence=0.97,
+                rationale=f"FENCE {fence[0]}: {fence[1]}",
+                required=("the fence dossier for the human",),
+                outputs={**base, "stalled": bool(state.get("stalled")), "fence": fence[0]},
+            )
         if blockers or phase == "blocked":
             return _common(
                 context,
@@ -541,9 +648,10 @@ def evaluate(context: DecisionContext) -> PolicyDraft:
                 confidence=0.96,
                 rationale="The lane has a recorded blocker and cannot silently continue.",
                 required=("exact blocker text and the bounded unblock attempt log",),
-                outputs={"phase": phase, "stalled": True},
+                alternatives=(("escalate", f"Escalate after {UNBLOCK_ATTEMPT_LIMIT} attempts or {IDENTICAL_RESULT_LIMIT} identical results."),),
+                outputs={**base, "stalled": True},
             )
-        if context.current_state.get("stalled"):
+        if state.get("stalled"):
             return _common(
                 context,
                 action="retry",
@@ -551,7 +659,8 @@ def evaluate(context: DecisionContext) -> PolicyDraft:
                 rationale="The lane is marked stalled without a completed side effect.",
                 risks=("Retry only with a distinct hypothesis or route to unblocker.",),
                 required=("a new hypothesis and one changed variable",),
-                outputs={"phase": phase, "stalled": True},
+                alternatives=(("block", "Route to the unblocker when no distinct hypothesis remains."),),
+                outputs={**base, "stalled": True},
             )
         if phase == "paused":
             return _common(
@@ -559,48 +668,80 @@ def evaluate(context: DecisionContext) -> PolicyDraft:
                 action="pause",
                 confidence=0.98,
                 rationale="The lane is already at a safe paused state.",
-                outputs={"phase": phase, "stalled": False},
+                outputs={**base, "stalled": False},
             )
         return _common(
             context,
             action="continue",
             confidence=0.75,
-            rationale="The lane has no recorded blocker or stall condition.",
+            rationale="The lane has no recorded blocker, stall, or fence condition.",
             required=("a commit, check delta, captured artifact, or completed unit",),
-            outputs={"phase": phase, "stalled": False},
+            outputs={**base, "stalled": False},
         )
 
+
     if decision_type == "verification":
-        enough = verification_sufficient(context)
-        if not enough:
+        assessment = assess_evidence(context)
+        outputs = {
+            "sufficient": assessment["sufficient"],
+            "criteria_count": assessment["criteria_count"],
+            "evidence_count": len(evidence_refs(context)),
+            "failing_evidence": assessment["failed"],
+            "uncovered_criteria": assessment["uncovered"],
+        }
+        if assessment["unavailable"]:
+            return _common(
+                context,
+                action="block",
+                confidence=0.93,
+                rationale=f"The verification target is unavailable: {', '.join(assessment['unavailable'][:3])}.",
+                required=("a reachable verification target",),
+                outputs=outputs,
+            )
+        if assessment["failed"]:
+            return _common(
+                context,
+                action="request-evidence",
+                confidence=0.97,
+                rationale=f"Captured artifacts report failures: {', '.join(assessment['failed'][:3])}.",
+                risks=("A failing artifact disproves the criterion it covers.",),
+                required=tuple(f"a passing re-run of {ref}" for ref in assessment["failed"][:5]),
+                outputs=outputs,
+            )
+        if not assessment["sufficient"]:
+            uncovered = assessment["uncovered"]
             return _common(
                 context,
                 action="request-evidence",
                 confidence=0.99,
-                rationale="The supplied artifacts do not cover every acceptance criterion.",
+                rationale=(
+                    f"Acceptance criteria {', '.join(str(item) for item in uncovered)} have no captured artifact."
+                    if uncovered
+                    else "The supplied artifacts do not cover the acceptance criteria."
+                ),
                 risks=("A green test command alone does not prove behavior not exercised by that test.",),
-                required=tuple(f"evidence for acceptance criterion {index + 1}" for index, _ in enumerate(criteria))
-                or ("at least one captured artifact",),
-                outputs={"sufficient": False, "criteria_count": len(criteria), "evidence_count": len(refs)},
+                required=tuple(f"evidence for acceptance criterion {index}" for index in uncovered) or ("at least one captured artifact",),
+                outputs=outputs,
             )
         return _common(
             context,
             action="accept",
             confidence=0.79,
-            rationale="Each acceptance criterion has a captured artifact of an allowed kind.",
-            outputs={"sufficient": True, "criteria_count": len(criteria), "evidence_count": len(refs)},
+            rationale="Each acceptance criterion has a distinct passing artifact of an allowed kind.",
+            outputs=outputs,
             conditions=("Reopen verification if an artifact does not assert the named predicate.",),
         )
 
+
     if decision_type == "skill-improvement":
-        overrides = context.current_state.get("human_overrides", 0)
-        repeated = context.current_state.get("repeated_pattern", False)
-        if repeated or (isinstance(overrides, int) and overrides >= 3):
+        overrides = _int(context.current_state.get("human_overrides")) or 0
+        repeated = bool(context.current_state.get("repeated_pattern", False))
+        if repeated or overrides >= 3:
             return _common(
                 context,
                 action="propose-change",
                 confidence=0.83,
-                rationale="Repeated overrides or a repeated failure pattern is recorded.",
+                rationale=f"{'A repeated failure pattern' if repeated else f'{overrides} human overrides'} are recorded.",
                 risks=("The proposal must be reviewed and applied explicitly; model output cannot rewrite the skill.",),
                 required=("the affected decision IDs and final outcomes",),
                 outputs={"override_count": overrides, "repeated_pattern": repeated},

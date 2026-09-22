@@ -6,7 +6,7 @@ import json
 from typing import Any
 
 from .policy import score_classes, select_playbook
-from .schema import DecisionContext, PLAYBOOKS, ROLES
+from .schema import DecisionContext, PLAYBOOKS, ROLES, redact
 
 
 def _choice(instructions: str, criteria: dict[str, str]) -> dict[str, Any]:
@@ -195,21 +195,35 @@ def state_for_laya(context: DecisionContext, *, max_chars: int = 12000) -> dict[
         "task": context.task,
         "playbook": context.playbook,
         "current_state": context.current_state,
-        "evidence": [{"kind": item.kind, "ref": item.ref, "summary": item.summary} for item in context.evidence],
+        "evidence": [
+            {key: value for key, value in (("kind", item.kind), ("ref", item.ref), ("summary", item.summary), ("criterion", item.criterion), ("status", item.status)) if value}
+            for item in context.evidence
+        ],
         "constraints": context.constraints,
         "history": list(context.history[-3:]),
         "available_actions": list(context.available_actions),
     }
-    encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False)
-    if len(encoded) <= max_chars:
+    if len(json.dumps(payload, sort_keys=True, ensure_ascii=False)) <= max_chars:
         return payload
-    # Preserve the fields that drive the safety gates when a context is unusually large.
-    return {
-        "decision_type": context.decision_type,
-        "task": {"title": context.task.get("title"), "request": context.task.get("request")},
-        "playbook": context.playbook,
-        "current_state": {"phase": context.current_state.get("phase"), "status": context.current_state.get("status")},
-        "evidence": [{"kind": item.kind, "ref": item.ref} for item in context.evidence],
-        "constraints": context.constraints,
-        "available_actions": list(context.available_actions),
-    }
+    # Shorten long strings first; the acceptance criteria and state flags drive the answer
+    # and the safety gates, so they survive before whole sections are dropped.
+    shortened = redact(payload, max_string=400)
+    if len(json.dumps(shortened, sort_keys=True, ensure_ascii=False)) <= max_chars:
+        return shortened
+    keep_state = ("phase", "status", "blockers", "stalled", "attempts", "dependencies_satisfied", "next_action")
+    return redact(
+        {
+            "decision_type": context.decision_type,
+            "task": {
+                key: context.task.get(key)
+                for key in ("title", "request", "acceptance_criteria", "finish_condition", "estimated_changed_lines")
+                if context.task.get(key) is not None
+            },
+            "playbook": context.playbook,
+            "current_state": {key: context.current_state.get(key) for key in keep_state if key in context.current_state},
+            "evidence": [{"kind": item.kind, "ref": item.ref} for item in context.evidence[:20]],
+            "constraints": context.constraints,
+            "available_actions": list(context.available_actions),
+        },
+        max_string=200,
+    )

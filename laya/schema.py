@@ -107,6 +107,8 @@ class Evidence:
     kind: str
     ref: str
     summary: str = ""
+    criterion: str | None = None
+    status: str | None = None
 
     @classmethod
     def from_value(cls, value: Any) -> "Evidence":
@@ -118,7 +120,15 @@ class Evidence:
         ref = value.get("ref")
         if not isinstance(kind, str) or not isinstance(ref, str) or not ref:
             raise ValueError("evidence entries require non-empty string kind and ref")
-        return cls(kind=kind, ref=ref, summary=str(value.get("summary", "")))
+        criterion = value.get("criterion")
+        status = value.get("status")
+        return cls(
+            kind=kind,
+            ref=ref,
+            summary=str(value.get("summary", "")),
+            criterion=None if criterion is None else str(criterion),
+            status=None if status is None else str(status),
+        )
 
 
 @dataclass(frozen=True)

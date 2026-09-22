@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from .policy import classify_task, select_playbook
+from .policy import score_classes, select_playbook
 from .schema import DecisionContext, PLAYBOOKS, ROLES
 
 
@@ -37,8 +37,14 @@ def candidate_playbooks(context: DecisionContext) -> tuple[str, ...]:
             "feature": ("feature", "design-implementation", "prototype", "multi-phase-plan", "intake"),
             "refactor": ("refactor", "multi-phase-plan", "prototype", "intake"),
             "perf-issue": ("perf-issue", "prototype", "investigation", "feature", "multi-phase-plan"),
+            "pr-stack": ("pr-stack", "qa-verification", "babysit"),
+            "babysit": ("babysit", "session-pickup", "pause-safely", "blocker"),
+            "session-pickup": ("session-pickup", "babysit", "pause-safely"),
         }
-        candidates = list(family.get(selected, (selected, "intake", "investigation", "multi-phase-plan")))
+        # The runner-up classes carry real signal from the request; the family adds the
+        # routes a human most often corrects toward.
+        ranked = [item for item in score_classes(context).ranked()[:3] if item in PLAYBOOKS]
+        candidates = [selected, *ranked, *family.get(selected, (selected, "intake", "investigation", "multi-phase-plan"))]
     # Laya documents degradation above 20 options. Keep a deterministic, unique list.
     return tuple(dict.fromkeys(item for item in candidates if item in PLAYBOOKS))[:10]
 

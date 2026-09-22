@@ -341,6 +341,9 @@ class DecisionEngine:
             selected = _choice(answer)
             if not selected:
                 return None, "missing typed playbook answer"
+            conflict = _noul_probability(_answer(result, "route_conflict"))
+            if conflict is not None and conflict >= 0.5 and selected != baseline.action:
+                return None, "model flagged a fence conflict for its own route"
             outputs.update({"playbook": selected})
             confidence_parts = [_confidence(answer)]
             probabilities = _probabilities(answer)
@@ -422,6 +425,13 @@ class DecisionEngine:
             return False, "deterministic grooming gate rejected ready"
         if context.decision_type == "intake-analysis" and model_draft.action == "ready-for-implementation" and baseline.action != "ready-for-implementation":
             return False, "deterministic intake gate rejected ready-for-implementation"
+        if context.decision_type == "playbook-selection" and model_draft.action != baseline.action:
+            # Current state (blocked, paused, at QA) and an explicit unattended handoff are
+            # facts, not interpretations; a model may not route around them.
+            if baseline.outputs.get("route_source") in {"state", "handoff"}:
+                return False, f"deterministic route gate kept {baseline.action} from explicit state or handoff"
+            if model_draft.action in {"overnight", "autopilot-stack", "autopilot-full"}:
+                return False, "unattended routes require an explicit handoff in the request"
         if context.decision_type == "decomposition":
             if model_draft.action == "parallelize" and (context.task.get("shared_files") or context.task.get("conflicts")):
                 return False, "deterministic conflict gate rejected parallelize"

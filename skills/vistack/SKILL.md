@@ -72,6 +72,41 @@ equivalent phase in the current thread unless a real fence is reached.
 The state root and worktree root are selected once per run. Never mix Claude and Codex roots.
 A run resumes on the host that created it.
 
+## Optional local decision engine
+
+The repository includes an advisory local decision engine at `laya/` and
+`scripts/vistack-decision.py`. It is enabled by default. When `laya-mlx` and a model are not
+configured, `auto` still returns the deterministic policy. Use it only when a choice changes routing, readiness,
+decomposition, dispatch, runtime recovery, verification, or future rule review. It is not a
+coding agent and it never replaces the router, coordinator, state, ledger, worktrees,
+evidence gates, or merge boundary.
+
+The engine receives a bounded `DecisionContext` and returns a typed `Decision`. The
+deterministic viStack policy runs first. An optional local Laya-MLX answer may refine it only
+when the action is valid, confidence meets the configured threshold, and the existing
+deterministic safety gates accept it. A missing model, unavailable MLX runtime, timeout,
+malformed answer, low confidence, or rejected gate uses the deterministic result.
+
+Call the hook at these boundaries:
+
+| Boundary | Decision type | Existing authority |
+|---|---|---|
+| intake and grooming | `intake-analysis`, `grooming` | readiness fields and FENCE 2 |
+| route match | `playbook-selection` | this route table and the matched playbook |
+| slice planning | `decomposition` | file ownership, conflict matrix, and the 500-line limit |
+| pre-dispatch and monitoring | `dispatch-readiness`, `runtime-progress` | coordinator state, dependencies, monitor, and ledger |
+| QA | `verification` | captured artifacts tied to each acceptance criterion |
+| retrospective review | `skill-improvement` | explicit human review; no automatic skill edits |
+
+Record the returned decision id, backend, confidence, fallback status, and evidence pointer
+in the local decision history or run ledger when the consuming project has enabled it. Treat
+the recommendation as input to the existing rule, not as permission to act. In particular,
+Laya cannot merge, force-push, deploy, delete data, modify secrets, bypass a fence, or invent
+evidence. See `docs/guide/laya-decision-engine.md` for installation, the JSONL server, and
+the schema. Disable refinement for a consuming project with `python3
+scripts/vistack-decision.py laya off`, restore it with `laya on`, or bypass it for one request
+with `--disable-laya`. `VISTACK_LAYA_ENABLED=0` is the environment-wide emergency switch.
+
 ## Step 0. Sticky mode
 
 Once this skill starts, every later turn stays inside the open playbook.

@@ -21,8 +21,8 @@ the same playbooks, principles, and skill names across the two hosts.
 
 | Host | Version | Manifest |
 |---|---:|---|
-| Claude Code | `0.7.0` | `.claude-plugin/plugin.json` |
-| Codex | `0.7.0` | `.codex-plugin/plugin.json` |
+| Claude Code | `0.8.0` | `.claude-plugin/plugin.json` |
+| Codex | `0.8.0` | `.codex-plugin/plugin.json` |
 
 ### Claude Code
 
@@ -193,6 +193,142 @@ worktrees, no PRs. If the answer turns out to need a change, the run says so and
 Longer version, including the four fences: [`docs/guide/usage.md`](docs/guide/usage.md).
 The failures that cost the most:
 [`docs/guide/common-mistakes.md`](docs/guide/common-mistakes.md).
+
+### Local decision engine
+
+viStack includes a local decision subsystem that improves high-frequency workflow choices
+without turning the model into another coding agent. The router, playbooks, coordinator,
+worktrees, state, ledgers, verification, QA, PR creation, fences, and merge-ready boundary
+remain authoritative. Laya only answers bounded questions such as “is this ticket ready?”,
+“should these slices run in parallel?”, or “does the evidence cover the acceptance
+criteria?”
+
+The data flow is deliberately one-way:
+
+```text
+task and viStack state
+        -> DecisionContext
+        -> deterministic policy
+        -> optional local Laya typed questions
+        -> safety validation
+        -> advisory Decision
+        -> existing viStack rule and coordinator
+```
+
+The engine is enabled by default. Default-on means the decision hook is allowed to run; it
+does not mean a model download or cloud request happens automatically. With no configured
+model, `auto` returns the deterministic policy. With `laya-mlx` and a local checkpoint
+configured, the MLX agent is loaded lazily and reused by the long-lived JSONL server.
+
+Turn refinement off for the current consuming project:
+
+```bash
+python3 scripts/vistack-decision.py laya off
+python3 scripts/vistack-decision.py laya status
+```
+
+Turn it back on:
+
+```bash
+python3 scripts/vistack-decision.py laya on
+```
+
+For Claude-hosted state, use `--config .claude/vistack/laya.json`. For a single request,
+pass `--disable-laya`. For an environment-wide emergency switch, set
+`VISTACK_LAYA_ENABLED=0`. All of these switches leave the deterministic viStack policy
+active. They only disable optional model refinement.
+
+Evaluate a decision directly:
+
+```bash
+python3 scripts/vistack-decision.py decision grooming \
+  --context examples/laya/grooming.json
+```
+
+The JSON result is typed and machine-consumable. It includes the decision type, action,
+bounded confidence, rationale, evidence considered, risks, required evidence, alternatives,
+conditions for changing the recommendation, backend, and fallback status. Every result is
+`advisory-only`; there is no action in the schema that grants permission to merge, force-push,
+deploy, delete data, change secrets, or bypass a fence.
+
+The hook is available at these decision boundaries:
+
+| Boundary | Decision types | What remains authoritative |
+|---|---|---|
+| Intake and grooming | `intake-analysis`, `grooming` | readiness fields and FENCE 2 |
+| Route matching | `playbook-selection` | the playbook table and selected playbook |
+| Slice planning | `decomposition` | file ownership, conflict matrix, 500-line limit |
+| Pre-dispatch and monitoring | `dispatch-readiness`, `runtime-progress` | coordinator state, dependencies, monitor, ledger |
+| QA | `verification` | artifacts mapped to acceptance criteria |
+| Retrospective review | `skill-improvement` | explicit human review and an evidence-backed change |
+
+The model cannot create evidence. A verification recommendation of `accept` is rejected
+unless captured artifacts cover every acceptance criterion. A parallelization recommendation
+is rejected when the conflict matrix or dependency state says the lanes must serialize. A
+dispatch recommendation is rejected when the brief, writable file list, dependency proof, or
+verification command is missing.
+
+To reduce latency for repeated decisions, run one resident process:
+
+```bash
+python3 scripts/vistack-decision.py serve
+```
+
+The optional MLX runtime is installed separately on Apple Silicon:
+
+```bash
+python3 -m pip install laya-mlx
+export VISTACK_LAYA_MODEL=aac6fef/laya-mlx
+```
+
+The first model setup downloads weights; subsequent inference is local. A missing runtime,
+bad checkpoint, malformed result, timeout, low-confidence result, or failed safety gate all
+return the deterministic fallback. No cloud LLM is required for the decision layer.
+
+If MLX is not available, [Kev](https://github.com/jaredpalmer/kev) is the recommended local
+fallback. Kev uses the same typed decision primitives and serves on localhost. Start its
+server separately, then configure `--kev-url http://127.0.0.1:8009`; with `--fallback kev`,
+the order is Laya-MLX, Kev, and deterministic policy. Kev is a separate PyTorch service, so
+it remains optional and does not enlarge the normal viStack install. Its 0.8B checkpoint is
+the sensible latency-first starting point on Apple Silicon; benchmark the exact checkpoint
+and machine before making it a resident service.
+
+If both local backends are unavailable, a cost-aware host fallback is available but must be
+explicitly configured. Claude uses the current active Haiku model; Codex defaults to a configurable
+low-effort `gpt-5.4-mini` profile. The adapter uses read-only/plan execution, one turn, typed
+JSON validation, and a budget/timeout; it never becomes the executor. Set
+`VISTACK_LAYA_FALLBACK=host-llm`, `VISTACK_LAYA_HOST=claude|codex`, and optionally
+`VISTACK_LAYA_HOST_MODEL=...` for a long-lived server. `laya on` alone never creates a cloud
+request.
+
+Each decision can be recorded in local JSONL history. Use `override` when a human changes a
+recommendation, `outcome` when the lane finishes, and `feedback` to find repeated overrides:
+
+```bash
+python3 scripts/vistack-decision.py override dec_123 pause \
+  --recommended-action continue \
+  --reason "The lane reached a safe stop."
+python3 scripts/vistack-decision.py outcome dec_123 completed --evidence test-output.txt
+python3 scripts/vistack-decision.py feedback
+```
+
+Feedback produces review proposals; it never edits `skills/vistack/SKILL.md` automatically.
+Use [`docs/guide/laya-decision-engine.md`](docs/guide/laya-decision-engine.md) for the full
+schema, runtime research, benchmarks, failure behavior, and extension procedure.
+
+### Host integrations
+
+- Claude Code and Codex use the shared Python CLI and `laya-on`, `laya-off`, and
+  `laya-status` commands.
+- Grok Build support is declared in `.grok-plugin/plugin.json` and uses the same skills,
+  agents, commands, and local decision switch. The xAI marketplace entry must be pinned to
+  the published commit SHA; generate it with
+  `python3 scripts/grok-marketplace-entry.py --sha <sha>`.
+- OpenCode support is in `integrations/opencode/vistack.js`. Copy it to
+  `.opencode/plugins/vistack.js` to expose `vistack_decision` and `vistack_laya_toggle`.
+
+See [`docs/guide/grok-opencode.md`](docs/guide/grok-opencode.md) for marketplace and plugin
+installation details.
 
 ### Workflow observer
 

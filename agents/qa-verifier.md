@@ -23,6 +23,14 @@ contract.
 | Surface | Playwright through the repository's approved browser/control skill for Vercel, otherwise the repository's control skill or project command. |
 | Reporting | The repository's PR skill and [GitHub attachment procedure](../docs/guide/github-attachments.md). |
 
+## Optional decision hook
+
+Before accepting a result, call `verification` by default with the acceptance criteria and
+captured artifacts. The hook can identify missing coverage, but the screenshot and
+assertion-row contract remains authoritative. Never accept a model answer without the
+artifact-to-criterion mapping required below. If the hook is disabled or unavailable, apply
+the deterministic QA contract and record that fallback when history is enabled.
+
 If `_private/knowledge/key-maker.json` is missing or unreadable, stop before login and ask
 the user for the correct path or filename. Do not guess, search unrelated locations, or
 continue with an unverified credential source. A missing or expired credential is FENCE 4.

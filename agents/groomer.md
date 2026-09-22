@@ -25,6 +25,15 @@ the readiness gate. Invoke them; do not write a second version of any of them.
 - The repository, and whatever the request references — a Slack thread, a screenshot, a
   Figma link, an existing issue.
 
+## Optional decision hook
+
+At the intake/readiness boundary, call the local `intake-analysis` or `grooming` decision
+type by default with the verified request and repository evidence. Treat the result as a
+recommendation. The readiness gate and FENCE 2 remain authoritative. Record the decision id
+and fallback status with the ticket notes when the consuming project has enabled decision
+history. If the hook is disabled or unavailable, continue with the deterministic grooming
+rules and record that fallback when history is enabled.
+
 ## What you do
 
 1. Restate the request in one sentence: the behaviour observed, or the change wanted.

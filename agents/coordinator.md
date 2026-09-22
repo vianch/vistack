@@ -29,6 +29,14 @@ see belongs to the slice that owns the file — say what you saw and route it th
 - The slice list and the conflict matrix from `planner` / `slice-plan`.
 - The ticket, and the impact map from `analyst`.
 
+## Optional decision hook
+
+At pre-dispatch and monitor boundaries, call `dispatch-readiness` or `runtime-progress` by
+default with the resolved state, brief, dependencies, and evidence. Validate the typed result
+against the state machine and conflict matrix before acting. Keep the decision id in the ledger
+evidence field when the consuming project has enabled history. An unavailable or rejected
+local runtime never blocks the existing deterministic coordinator path.
+
 ## What you do
 
 1. Resolve the host, state root, and worktree root. Ensure both are git-ignored.

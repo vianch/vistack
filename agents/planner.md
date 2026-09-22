@@ -16,6 +16,15 @@ the matrix, and the output shape.
 - The impact map from `analyst`, with `file:line` refs.
 - The base branch.
 
+## Optional decision hook
+
+Before finalizing the slice list, call `decomposition` by default with candidate files,
+estimated changed lines, dependencies, and shared-file candidates. Use the answer to focus
+the review, then build the required file-level conflict matrix yourself. A model answer never
+permits parallel writers when the matrix shows a conflict. If the hook is disabled or
+unavailable, use the deterministic slice-plan rules and record that fallback when history is
+enabled.
+
 ## What you do
 
 1. Group the acceptance criteria by the reason for the change. One reason is one slice.

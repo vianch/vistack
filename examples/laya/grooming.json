@@ -1,0 +1,16 @@
+{
+  "decision_type": "grooming",
+  "task": {
+    "request": "Add a local typed decision adapter for orchestration readiness.",
+    "acceptance_criteria": [
+      "The adapter returns a typed decision JSON object",
+      "Unavailable local inference falls back to deterministic policy"
+    ],
+    "finish_condition": "python3 -m unittest discover -s laya/tests passes",
+    "brief": "Implement the adapter, tests, and CLI documentation.",
+    "verification_command": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s laya/tests"
+  },
+  "current_state": {"phase": "planned"},
+  "evidence": [],
+  "constraints": {"parallelizable": false}
+}

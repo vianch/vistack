@@ -1,0 +1,14 @@
+{
+  "name": "vistack",
+  "version": "0.8.0",
+  "description": "Evidence-driven engineering workflows with an optional local typed decision engine.",
+  "author": {
+    "name": "Victor",
+    "url": "https://github.com/vianch"
+  },
+  "homepage": "https://github.com/vianch/viStack",
+  "repository": "https://github.com/vianch/viStack",
+  "skills": "./skills/",
+  "commands": "./commands/",
+  "agents": "./agents/"
+}

@@ -2,12 +2,12 @@
   "name": "vistack",
   "displayName": "viStack",
   "description": "Standing entry point for engineering work with sticky routing, evidence-backed playbooks, unattended overnight runs, and merge-ready draft PRs without merging. The canonical command is vistack; run, orchestrator, and coordinator are equivalent aliases.",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "author": {
     "name": "Victor",
     "url": "https://github.com/vianch"
   },
   "homepage": "https://github.com/vianch/viStack",
   "repository": "https://github.com/vianch/viStack",
-  "keywords": ["workflow", "coordinator", "playbooks", "autonomous", "qa"]
+  "keywords": ["workflow", "coordinator", "playbooks", "autonomous", "qa", "decision-engine", "laya"]
 }

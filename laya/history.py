@@ -74,7 +74,14 @@ class HistoryStore:
                 if event_id and str(event_id) in self._ids:
                     return False
                 encoded = (json.dumps(redact(dict(event)), sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8")
-                stream.seek(0, os.SEEK_END)
+                end = stream.seek(0, os.SEEK_END)
+                if end:
+                    # A crash can leave a final line without its newline. Terminate it so
+                    # the new event starts on its own line instead of corrupting both.
+                    stream.seek(end - 1)
+                    if stream.read(1) != b"\n":
+                        encoded = b"\n" + encoded
+                    stream.seek(0, os.SEEK_END)
                 stream.write(encoded)
                 stream.flush()
                 os.fsync(stream.fileno())

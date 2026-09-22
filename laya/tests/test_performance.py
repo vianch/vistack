@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import tempfile
@@ -34,6 +35,18 @@ class HistoryIndexTests(unittest.TestCase):
             store.record_outcome("dec_1", "completed")
             path.write_text("", encoding="utf-8")
             self.assertTrue(store.record_outcome("dec_1", "completed"))
+
+    def test_append_after_a_torn_final_line_starts_a_new_line(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "history.jsonl"
+            path.write_text('{"event_id":"a"}\n{"event_id":"b"', encoding="utf-8")
+            store = HistoryStore(path)
+            self.assertTrue(store.record_outcome("dec_c", "completed"))
+            self.assertFalse(store.record_outcome("dec_c", "completed"))
+            lines = path.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(len(lines), 3)
+            self.assertEqual(json.loads(lines[2])["decision_id"], "dec_c")
+            self.assertEqual([item.get("event_id") for item in store.records()], ["a", "outcome:dec_c:completed:"])
 
     def test_append_cost_does_not_grow_with_history(self):
         with tempfile.TemporaryDirectory() as directory:

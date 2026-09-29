@@ -72,6 +72,24 @@ equivalent phase in the current thread unless a real fence is reached.
 The state root and worktree root are selected once per run. Never mix Claude and Codex roots.
 A run resumes on the host that created it.
 
+## Agent tree
+
+The main session plans and decides. Laya takes the forks that need no thinker. Subagents
+read, edit, and pull docs. The advisor is on call for three moments. On Codex the roles run
+sequentially in the thread and the model column does not apply.
+
+| Layer | Owner | Model · effort | Job |
+|---|---|---|---|
+| Main session | router and `coordinator` | Opus 5.5 · xhigh | plans, decides, reviews, verifies |
+| Fork layer | `laya-decision` | code | sharp forks run in code; split forks return to the main session |
+| Explorer | `analyst` | opus · medium | reads the code |
+| Researcher | `researcher` | opus · medium | pulls the docs |
+| Worker, mechanical | `implementer`, `design-implementer` | sonnet | repetitive edits, basic utils, unit tests |
+| Worker, complex | `senior-implementer` | opus · xhigh | data shapes, contracts, boundaries, hot paths |
+| Judgment roles | `groomer`, `planner`, `pr-author`, `unblocker` | opus · session effort | tickets, slices, PRs, blockers |
+| Verification | `qa-verifier`, `health-check` | sonnet, haiku | QA evidence, adversarial audit |
+| Advisor | advisor tool, else `advisor` | Fable 5.1 | before a plan, when an error repeats, before done |
+
 ## Optional local decision engine
 
 The repository includes an advisory local decision engine at `laya/` and
@@ -80,6 +98,12 @@ configured, `auto` still returns the deterministic policy. Use it only when a ch
 decomposition, dispatch, runtime recovery, verification, or future rule review. It is not a
 coding agent and it never replaces the router, coordinator, state, ledger, worktrees,
 evidence gates, or merge boundary.
+
+Laya is the fork layer. Which playbook, which file goes to which slice, dispatch or hold,
+and retry or stop are forks that need no thinker. A sharp fork — a valid action at or above
+the confidence threshold that every safety gate accepts — is applied in code without a model
+turn. A split fork returns to the main session, which decides and records why. Forks never
+reach the advisor.
 
 The engine receives a bounded `DecisionContext` and returns a typed `Decision`. The
 deterministic viStack policy runs first. An optional local Laya-MLX answer may refine it only
@@ -195,14 +219,15 @@ An overnight handoff also records:
 
 ## Step 4. Choose the role contract
 
-Roles carry their model in agent frontmatter. Do not override it per run. Use the role whose
-uncertainty matches the work.
+Roles carry their model and effort in agent frontmatter. Do not override either per run. Use
+the role whose uncertainty matches the work, from the agent tree above.
 
-| Work | Role |
-|---|---|
-| Judgment, decomposition, prose, ambiguity, and review decisions | `opus` roles |
-| Precisely specified implementation and QA driving | `sonnet` roles |
-| Mechanical work and adversarial acceptance checks | `haiku` roles |
+The planner sets each slice's tier. Mechanical work — repetitive edits, basic utilities, unit
+tests, a change that follows a named pattern — goes to `implementer`. Complex work — a
+changed data shape or public contract, a boundary crossing, concurrency, auth, money, a
+measured hot path, or no pattern to follow — goes to `senior-implementer`. An unclear tier is
+complex. A mechanical owner that finds complex work reports `tier-mismatch`, and the
+coordinator re-dispatches the slice to `senior-implementer` in the same worktree.
 
 Every brief is standalone. It names the goal, writable files, forbidden files, context
 references, acceptance checks, verification commands, timebox, and report shape. A missing
@@ -224,6 +249,20 @@ Count commits, pushes, check deltas, captured artifacts, and reports as progress
 that reaches its expected runtime with no side effect is stalled. Route it to `unblock` or
 replace it according to the playbook. Do not let a polite completion notification become the
 only wake mechanism.
+
+## Advisor checkpoints
+
+The advisor reads the whole session and speaks three times. Follow `skills/advisor/SKILL.md`.
+
+| Moment | Question |
+|---|---|
+| Before a plan with more than one slice, a cross-boundary fix, or an unattended run dispatches | Is this the right approach? |
+| When the same error text comes back after a change meant to fix it | Am I digging in the wrong place? |
+| Before a multi-step or unattended run is reported done or merge-ready | What did I miss? |
+
+The matched playbook names the step where each checkpoint runs. The advisor never edits,
+merges, or opens a fence. The main session applies each point or rebuts it with evidence. An
+unavailable advisor is recorded and never blocks the run.
 
 ## The four fences
 

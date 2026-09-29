@@ -39,8 +39,12 @@ enabled.
 7. Turn the matrix into a schedule of waves. Empty cell → concurrent. Non-empty cell →
    serialized, the later slice starting from the earlier one's branch after its PR opens.
 8. Name the check for each slice — the command or the screen that settles it.
-9. Assign the role per slice: `implementer`, or `design-implementer` where the source of
-   truth is Figma.
+9. Assign the role and tier per slice. `implementer` (`tier: mechanical`) takes repetitive
+   edits, basic utilities, unit tests, and changes that follow a named pattern.
+   `senior-implementer` (`tier: complex`) takes a changed data shape or public contract, a
+   boundary crossing, concurrency, auth, money, a measured hot path, or a slice with no
+   pattern to follow. `design-implementer` takes Figma-sourced slices. An unclear tier is
+   complex.
 
 ## Judgement calls that are yours
 
@@ -54,7 +58,7 @@ enabled.
 ## Outputs
 
 - The slice list in `slice-plan`'s output shape: concern, files, estimated lines, check,
-  dependencies, agent.
+  dependencies, tier, agent.
 - The conflict matrix.
 - The wave schedule, as an ordered list.
 

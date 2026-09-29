@@ -73,9 +73,18 @@ The design is a **router → playbook → agent** chain, with all coordination s
    forces a re-match; `stop`/`pause` runs `pause-safely`.
 3. **`coordinate`** (`skills/coordinate/SKILL.md`) owns dispatch, the state file and the
    ledger from Step 5 onward. It never edits product code.
-4. **Agents** are per-role and carry their model in frontmatter (opus for judgment/prose,
-   sonnet for precisely-specified implementation, haiku for the adversarial health check).
-   Models are never overridden per-run — change the agent file instead.
+4. **Agents** are per-role and carry their model, and effort where the tree sets it, in
+   frontmatter. The main session runs Opus 5.5 at xhigh and plans, decides, and verifies.
+   `analyst` (explorer) and `researcher` run on opus at medium. Code goes by tier: sonnet
+   `implementer` for mechanical work — repetitive edits, basic utils, unit tests — and opus
+   `senior-implementer` at xhigh for complex work. Haiku runs the adversarial health check.
+   Models and effort are never overridden per-run — change the agent file instead.
+5. **Advisor on call.** Fable 5.1 reads the whole session and speaks at three checkpoints
+   (`skills/advisor/SKILL.md`). It reviews; the main session ships. When the advisor tool is
+   off, the `advisor` agent reviews a dossier instead.
+6. **Laya is the fork layer.** Forks that need no thinker — which playbook, which file,
+   retry or stop — go to `laya-decision`. Sharp forks run in code; split forks go to the main
+   session. Forks never reach the advisor.
 
 ### Run state (schema-bearing — see "Versioning")
 
@@ -100,6 +109,9 @@ everywhere it appears:
   written to a tracked file). Outside those four, runs are unattended and report at phase
   boundaries only.
 - **Stops at merge-ready, never merges.** Every PR is left a draft. Merging is FENCE 3.
+- **Advisor at three checkpoints.** Consult the advisor before a large plan, when an error
+  repeats, and before calling a long task done. It never edits, merges, or opens a fence,
+  and an unavailable advisor never blocks a run.
 - **≤500 changed lines per PR**, excluding lockfiles and generated files; over that,
   `stack-split` makes a parent→child chain.
 - **One worktree per slice** at `.claude/worktrees/<slug>`; slices sharing a file are

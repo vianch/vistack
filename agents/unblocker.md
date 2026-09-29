@@ -30,6 +30,10 @@ condition, and the dossier shape.
 learning; the cause is upstream of everything being changed. That is a knowledge gap, and
 attempts 4 through 20 produce the same row.
 
+**On the second identical result, run the advisor `repeat` checkpoint** before the next
+hypothesis (`skills/advisor/SKILL.md`). It shapes the next attempt; it does not reset the
+budget or the abort count.
+
 ## Never
 
 Widen scope. Skip, delete, or `.skip` a test. Loosen a type, add `any`, or add a blanket

@@ -21,8 +21,8 @@ the same playbooks, principles, and skill names across the two hosts.
 
 | Host | Version | Manifest |
 |---|---:|---|
-| Claude Code | `0.9.0` | `.claude-plugin/plugin.json` |
-| Codex | `0.9.0` | `.codex-plugin/plugin.json` |
+| Claude Code | `0.10.0` | `.claude-plugin/plugin.json` |
+| Codex | `0.10.0` | `.codex-plugin/plugin.json` |
 
 ### Claude Code
 
@@ -166,6 +166,84 @@ fence.
 For a queue of independent items, say `full autopilot` and name each item and its finish
 check. That matches `autopilot-full`, which runs one owner per item and leaves every PR as a
 draft.
+
+### A long run, reported at a phase boundary
+
+```
+/vistack Consolidate the open PR stack for https://github.com/ORG/REPO/issues/456 into
+the fewest reviewable PRs. Done means every PR sits on the one below, merges cleanly into
+the newest main, and has green CI. Keep every existing screenshot. You may rebuild and
+push the stack branches, close absorbed PRs with a link to their new home, request
+re-reviews, mark the PRs ready for review, and post the new list in the review thread.
+Do not merge.
+```
+
+A long run reports only at phase boundaries. This is one boundary report from a run that
+folded 26 open PRs into 9. Names, numbers, and endpoints are placeholders.
+
+```text
+Done
+- Pushes: 8 branches rebuilt and pushed, 3 minutes apart. All 9 PRs sit in order, each on
+  the one below, and all merge cleanly into the newest main, including a PR that merged
+  meanwhile.
+- Closed: 17 absorbed PRs, each with a comment linking the PR that now holds its commits.
+- Descriptions: all 9 rewritten, each with what was folded in, production vs test lines,
+  and a commit-by-commit review guide. All 38 existing screenshots carried over.
+- Readiness: all 9 ready for review and mergeable, with the reviewer teams requested.
+- Re-reviews: requested on the 5 PRs that grew after they were approved.
+- Review thread: replied with the new list.
+
+PR                            Approvals             CI
+#101 card                     4                     green
+#102 cart and confirmation    2 (re-review asked)   green
+#103 pre-cart step            3 (re-review asked)   green
+#104 labels and prompt skip   3 (re-review asked)   green
+#105 detail sheet             2 (re-review asked)   running
+#106 quantities and add       2 (re-review asked)   running
+#107 scheduled time           0                     running
+#108 seat add-ons             0                     running
+#109 price categories         0                     running
+
+Waiting on the GitHub rate limit, spent until 12:45Z and shared with the other sessions on
+the account. Scheduled for right after: relink the 9 PRs in the stack view, and archive the
+closed PRs' board cards.
+
+Monitor: E2E reruns for the 9 PRs → green on all 9, each on its first run. Monitor stopped.
+
+Live check on the new top preview (<sha>):
+1. The buy button creates the hold first: the cart call returns 201. Only then does the
+   add-on list open. The list itself creates nothing.
+2. On the add-on sheet, before a time is picked, Add is disabled and no rows show.
+3. The time list loads with the add-on list, not when the sheet opens: 6 times.
+4. Picking a time loads its inventory: three ticket types, each starting at 0.
+5. Add stays disabled until at least one unit is chosen.
+Screenshot at step 4. This morning's failures were staging outages, not the code.
+
+Next: posting the QA result on the top PR needs the screenshots attached first. Asked,
+not assumed.
+```
+
+The owners ran as parallel lanes beside the main session, which ran Opus 5.5 with 1M
+context at xhigh:
+
+```text
+◯ review-climber           handles the open human review threads          4h 16m
+◯ main-climber             runs climb 6 of the stack                       3h 01m
+◯ stack-consolidator-plan  plans how to consolidate the stack              2h 09m
+◯ consolidator             executes the chosen consolidation option        1h 44m
+◯ body-writer              drafts titles and descriptions for the 9 PRs      43m
+```
+
+The report has four parts and no narration: what changed, the evidence table, what is
+waiting and why, and what is next. A rate limit is a scheduled wait, not a fence. The
+monitor stopped as soon as its predicate held. The live check names every assertion point
+and the call behind it. Only side effects counted as progress: pushes, closed PRs, and
+green runs. For a run this long, keep the Mac awake from a side terminal with
+`caffeinate -d -i -m -s -u`.
+
+The prompt granted rebuilding and pushing branches, closing absorbed PRs, re-review
+requests, ready-for-review, and the thread post. Without that grant viStack stops at
+draft PRs and posts nothing.
 
 ### A read-only investigation
 
@@ -384,22 +462,52 @@ and inspecting the local workflow observer.
 
 ### Agents
 
-| Agent | Owns | Model |
-|---|---|---|
-| [`coordinator`](agents/coordinator.md) | phase transitions, dispatch, state file, ledger, session comment. Never edits code | `opus` |
-| [`groomer`](agents/groomer.md) | raw request → specified ticket, through the readiness gate | `opus` |
-| [`analyst`](agents/analyst.md) | read-only: call sites, blast radius, existing patterns, coverage | `opus` |
-| [`planner`](agents/planner.md) | slices ≤500 lines, file-level ownership, the conflict matrix | `opus` |
-| [`implementer`](agents/implementer.md) | one slice, one worktree, repo conventions, green lint and tests | `sonnet` |
-| [`design-implementer`](agents/design-implementer.md) | the same, sourced from Figma; reports deviations instead of inventing values | `sonnet` |
-| [`unblocker`](agents/unblocker.md) | the bounded blocker loop and its escalation dossier | `opus` |
-| [`pr-author`](agents/pr-author.md) | draft PRs, the stacked chain over 500 lines, reviewer assignment | `opus` |
-| [`qa-verifier`](agents/qa-verifier.md) | the QA contract: scenarios from the diff, screenshots, results table | `sonnet` |
-| [`health-check`](agents/health-check.md) | adversarial audit of the diff against the acceptance criteria | `haiku` |
+| Agent | Owns | Model | Effort |
+|---|---|---|---|
+| [`coordinator`](agents/coordinator.md) | phase transitions, dispatch, state file, ledger, session comment. Never edits code | `opus` | session |
+| [`groomer`](agents/groomer.md) | raw request → specified ticket, through the readiness gate | `opus` | session |
+| [`analyst`](agents/analyst.md) | explorer: read-only call sites, blast radius, existing patterns, coverage | `opus` | `medium` |
+| [`researcher`](agents/researcher.md) | researcher: external docs pinned to the installed version, cited | `opus` | `medium` |
+| [`planner`](agents/planner.md) | slices ≤500 lines, file-level ownership, tiers, the conflict matrix | `opus` | session |
+| [`implementer`](agents/implementer.md) | worker, mechanical tier: repetitive edits, basic utils, unit tests | `sonnet` | session |
+| [`senior-implementer`](agents/senior-implementer.md) | worker, complex tier: data shapes, contracts, boundaries, hot paths | `opus` | `xhigh` |
+| [`design-implementer`](agents/design-implementer.md) | the same, sourced from Figma; reports deviations instead of inventing values | `sonnet` | session |
+| [`unblocker`](agents/unblocker.md) | the bounded blocker loop and its escalation dossier | `opus` | session |
+| [`pr-author`](agents/pr-author.md) | draft PRs, the stacked chain over 500 lines, reviewer assignment | `opus` | session |
+| [`qa-verifier`](agents/qa-verifier.md) | the QA contract: scenarios from the diff, screenshots, results table | `sonnet` | session |
+| [`health-check`](agents/health-check.md) | adversarial audit of the diff against the acceptance criteria | `haiku` | — |
+| [`advisor`](agents/advisor.md) | fallback reviewer when the advisor tool is off: plan, repeat, done | `fable` | `xhigh` |
 
-Models sit in agent frontmatter, not in a run. The rule behind the split: put the model
-where the *uncertainty* is. Judgment and prose to Opus; precisely-specified implementation
-to Sonnet; mechanical work and the adversarial audit to Haiku.
+Models and effort sit in agent frontmatter, not in a run. The rule behind the split: put the
+model where the *uncertainty* is. The main session runs Opus 5.5 at `xhigh` and plans,
+decides, and verifies. Reading and doc lookups run on Opus at `medium`. Mechanical code goes
+to Sonnet and complex code to Opus at `xhigh`. The adversarial audit stays on Haiku. Fable
+5.1 advises at three checkpoints and never writes code.
+
+```text
+AGENT TREE · OPUS 5.5 WORKS · FABLE 5.1 ON CALL
+
+Fable 5.1 · advisor · on call           Opus 5.5 · main session · xhigh
+reads the whole session                 plans + decides
+  ◇ before a plan ───────────────────▶        │
+                                              ▼
+                                 laya · fork layer
+                                 which playbook · which file · retry or stop
+                                 sharp → runs in code     split → Opus
+                                              │
+                          delegate · medium effort, complex code at xhigh
+                  ┌───────────────────────────┼──────────────────────────┐
+                  ▼                           ▼                          ▼
+               worker                      explorer                 researcher
+     implementer · sonnet               analyst · opus           researcher · opus
+     senior-implementer · opus xhigh    medium                   medium
+     edits + runs tests                 reads the code           pulls the docs
+  ◇ error repeats ──▶ worker                  │                          │
+                  └───────────────────────────┼──────────────────────────┘
+                                              ▼
+  ◇ before done ─────────────────────▶ back to main session · xhigh
+                                       review + verify
+```
 
 ### Principles
 
@@ -410,6 +518,7 @@ invokes a principle must name the decision the principle changed.
 ### Specialist skills
 
 [`coordinate`](skills/coordinate/SKILL.md) (dispatch, state, ledger) ·
+[`advisor`](skills/advisor/SKILL.md) (the three checkpoints) ·
 [`slice-plan`](skills/slice-plan/SKILL.md) (decomposition, conflict matrix) ·
 [`unblock`](skills/unblock/SKILL.md) (the bounded loop) ·
 [`qa-verify`](skills/qa-verify/SKILL.md) (the QA contract) ·

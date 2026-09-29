@@ -22,7 +22,10 @@ plan a fresh coordinator can execute. Do not implement while writing it.
    separate worktrees. Re-cut a plan whose matrix is dense.
 7. Choose `autopilot-stack`, `autopilot-full`, or `overnight` as the execution playbook and
    state who may merge. viStack's default is draft PRs and no merge.
-8. Validate the plan with the repository's structural checker when one exists. Otherwise
+8. Run the advisor `plan` checkpoint on the plan sections and conflict matrix
+   (`skills/advisor/SKILL.md`). Revise the plan, or record the evidence that rebuts each
+   point.
+9. Validate the plan with the repository's structural checker when one exists. Otherwise
    run `scripts/check-playbooks.mjs` and inspect every referenced path.
-9. Record the plan path and evidence in the ledger. Stop planning here. Execution begins only
-   when the chosen execution playbook is entered.
+10. Record the plan path and evidence in the ledger. Stop planning here. Execution begins only
+    when the chosen execution playbook is entered.

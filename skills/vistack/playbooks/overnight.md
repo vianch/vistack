@@ -23,29 +23,35 @@ predicate. It never merges.
    current phase, and last progress time before dispatching work.
 6. Establish exactly one live monitor. Verify its owner and wake mechanism. A persisted
    active flag is not proof that a monitor is running.
-7. Create one worktree per slice and dispatch only slices allowed by the conflict matrix.
+7. Run the advisor `plan` checkpoint on the slices, tiers, and conflict matrix before
+   dispatch (`skills/advisor/SKILL.md`). Apply or rebut each point with evidence.
+8. Create one worktree per slice and dispatch only slices allowed by the conflict matrix.
    Every owner receives a complete brief with scope, checks, timebox, forbidden actions,
    and report shape.
-8. At every iteration, check the finish predicate, make the smallest evidence-backed
+9. At every iteration, check the finish predicate, make the smallest evidence-backed
    change, verify against the real artifact, and record one ledger row. Commit only when
    the predicate moved. Discard a change that did not help.
-9. Drain completions without waiting for a human. Route side fixes, review noise, tooling
-   failures, and broken skill contracts through the appropriate playbook. Keep unrelated
-   fixes in their own branch or PR and return to the original predicate.
-10. Treat a lane with no commit, captured artifact, check delta, or report within its
+10. Drain completions without waiting for a human. Route side fixes, review noise, tooling
+    failures, and broken skill contracts through the appropriate playbook. Keep unrelated
+    fixes in their own branch or PR and return to the original predicate.
+11. Treat a lane with no commit, captured artifact, check delta, or report within its
     expected runtime as stalled. Run `unblock` with a distinct hypothesis, or replace the
-    lane after its retry limit. Do not repeat an identical attempt.
-11. Reconcile state before every resume or monitor pass. If state, branches, worktrees,
+    lane after its retry limit. Do not repeat an identical attempt. When the same error
+    text returns, run the advisor `repeat` checkpoint before the next hypothesis.
+12. Reconcile state before every resume or monitor pass. If state, branches, worktrees,
     PRs, comments, or live owners disagree, record each divergence before taking action.
-12. Raise each finished slice as a draft PR immediately. Keep each PR to one concern and
+13. Raise each finished slice as a draft PR immediately. Keep each PR to one concern and
     at most 500 changed lines excluding lockfiles and generated files. Run QA and the
     adversarial health check before calling it merge-ready.
-13. Keep the finish predicate fixed. A plateau changes the approach, not the target. Stop
+14. Keep the finish predicate fixed. A plateau changes the approach, not the target. Stop
     only when the predicate is met or a fence is reached.
-14. Stop the monitor and record the terminal state. For a fence, include the full dossier.
+15. Run the advisor `done` checkpoint on the PR set, evidence, and final predicate result
+    before calling the run merge-ready (`skills/advisor/SKILL.md`). Resolve each gap it
+    names or record why it does not apply.
+16. Stop the monitor and record the terminal state. For a fence, include the full dossier.
     For success, include the PRs, evidence, discarded attempts, and the final predicate
     result.
-15. Run the morning audit from the ledger. Check that every row maps to a real action, every
+17. Run the morning audit from the ledger. Check that every row maps to a real action, every
     evidence pointer resolves, and every important pivot or abandoned approach is recorded.
 
 ## Finish condition

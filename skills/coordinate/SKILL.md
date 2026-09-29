@@ -101,8 +101,8 @@ ts	phase	slice	decision	reason	evidence	result
 ```
 
 Log playbook matches, skipped steps, dispatches, transitions, attempts, side fixes, monitor
-restarts, reconciliations, and verification results. Evidence is a path, URL, SHA, command
-output, or artifact. It is not a paragraph.
+restarts, reconciliations, advisor consultations, tier escalations, and verification
+results. Evidence is a path, URL, SHA, command output, or artifact. It is not a paragraph.
 
 Use `decision: step-skipped` for every retained step that does not run. A decision without
 a ledger row did not happen.
@@ -110,6 +110,12 @@ a ledger row did not happen.
 ## Dispatch rules
 
 - One slice uses one worktree, one branch, and one owning agent.
+- Dispatch each slice to its tier's owner: `implementer` for mechanical, `senior-implementer`
+  for complex. A `tier-mismatch` report re-dispatches the same slice, worktree, and branch to
+  `senior-implementer`; record `tier-escalated`.
+- Run the advisor `plan` checkpoint before the first wave and the `done` checkpoint before
+  reporting merge-ready (`skills/advisor/SKILL.md`). Record `advisor-consulted` or
+  `advisor-unavailable`.
 - Before each wave, the number of worktree directories must equal the number of in-flight
   slices. A mismatch stops dispatch.
 - Read the conflict matrix before every wave. Shared files serialize. Disjoint slices may

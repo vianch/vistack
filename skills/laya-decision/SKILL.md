@@ -29,3 +29,10 @@ Use the long-lived `serve` command for repeated decisions. Use the `override`, `
 and `feedback` commands to record human corrections and reviewable improvement proposals.
 Never use model output to merge, force-push, deploy, delete data, change secrets, or bypass
 an explicit human decision.
+
+Laya is the fork layer: it takes the choices that need no thinker, so the main session spends
+reasoning where it changes the outcome. A sharp fork — a valid action at or above the
+confidence threshold that every safety gate accepts — is applied in code. A split fork
+returns to the main session, which decides and records why. Forks never reach the advisor
+(`skills/advisor/SKILL.md`). Move a fork from split to sharp only through the held-out
+hillclimb in `docs/guide/laya-decision-engine.md`.

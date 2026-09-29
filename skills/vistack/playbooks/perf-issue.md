@@ -13,8 +13,9 @@ sustained search against a target uses `overnight` or a separately scoped queue.
    form hypotheses. Do not claim a bottleneck from source inspection alone.
 4. Choose one hypothesis and one variable to change. Prefer deletion before caching,
    batching, indirection, lazy work, or scheduling. Name the mechanism the trace supports.
-5. If the fix crosses a function or service boundary, record the design decision before
-   implementation. Dispatch one owner in one worktree with a precise scope.
+5. If the fix crosses a function or service boundary, record the design decision and run the
+   advisor `plan` checkpoint on it before implementation (`skills/advisor/SKILL.md`).
+   Dispatch one owner in one worktree with a precise scope.
 6. Capture the post-fix artifact with the same workload and measurement procedure. Run the
    regression checks.
 7. Compare baseline and post-fix artifacts. An inconclusive or wrong-surface result is not a
@@ -22,4 +23,7 @@ sustained search against a target uses `overnight` or a separately scoped queue.
 8. Record the baseline, post-fix value, delta, and artifact paths in the ledger and PR.
 9. Run `pr-stack` or the PR creation procedure. Keep the PR draft, scoped, and below 500
    changed lines.
-10. Report the metric, baseline, result, delta, artifact, and any remaining hypothesis.
+10. Run the advisor `done` checkpoint on the baseline, post-fix artifact, and delta before
+    calling the run merge-ready (`skills/advisor/SKILL.md`). Resolve each gap it names or
+    record why it does not apply.
+11. Report the metric, baseline, result, delta, artifact, and any remaining hypothesis.

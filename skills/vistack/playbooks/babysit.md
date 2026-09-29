@@ -18,7 +18,8 @@ coordination state, not product code, and never merges.
    owning slice with exact evidence. Do not fix product code here.
 7. Reject passes with no screenshot, criteria with no diff hunk, and claims such as "should
    work". Return them to the owner under `evidence-over-inference`.
-8. Record retries and escalate at the playbook's limit with a FENCE 1 dossier.
+8. Record retries. When a lane fails again with the same evidence, run the advisor `repeat`
+   checkpoint before the next retry. Escalate at the playbook's limit with a FENCE 1 dossier.
 9. Update `last_pass_at`, state, ledger, and session record. A clean pass still gets a
    `monitor-pass` row.
 10. Stop the monitor when all slices are merge-ready or fenced. Report the frontier, evidence,

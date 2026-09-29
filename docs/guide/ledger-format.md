@@ -54,6 +54,9 @@ Free text is allowed, but these carry meaning elsewhere in the plugin:
 | `monitor-restarted` | `coordinate` or `session-pickup` | the prior monitor was not live and one new owner was established |
 | `queue-item-added` | `autopilot-full` | an independent item entered the queue after reconciliation |
 | `discarded` | any execution role | a change was reverted because its evidence did not improve the predicate |
+| `advisor-consulted` | main session or `coordinator` | the advisor reviewed a checkpoint; `reason` is `plan`, `repeat`, or `done` |
+| `advisor-unavailable` | any | a checkpoint ran with no advisor; `result` is `skipped` |
+| `tier-escalated` | `coordinator` | a mechanical slice was re-dispatched to `senior-implementer` after `tier-mismatch` |
 
 ### Worked rows
 

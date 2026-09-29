@@ -6,7 +6,21 @@ viStack installation therefore has no MLX, NumPy, tokenizer, or model download d
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Mapping
+
+
+def split_model(model: str) -> tuple[str, str | None]:
+    """Split ``owner/repo/subfolder`` into a Hub id and a checkpoint subfolder.
+
+    ``convaiinnovations/laya`` bundles its English, ``multilingual``, and ``typed-decisions``
+    checkpoints in one repository. A local directory is passed through unchanged.
+    """
+
+    parts = model.split("/")
+    if len(parts) == 3 and all(parts) and not model.startswith((".", "~")) and not Path(model).exists():
+        return f"{parts[0]}/{parts[1]}", parts[2]
+    return model, None
 
 
 class LayaUnavailable(RuntimeError):
@@ -68,8 +82,10 @@ class MLXBackend:
         except Exception as exc:  # pragma: no cover - depends on the host Python
             raise LayaUnavailable("laya-mlx is not installed in this Python environment") from exc
         try:
+            repo, subfolder = split_model(self.model)
             return laya_mlx.load(
-                self.model,
+                repo,
+                subfolder=subfolder,
                 dtype=self.dtype,
                 device=self.device,
                 batch_size=self.batch_size,

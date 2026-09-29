@@ -10,28 +10,40 @@ change state, merge pull requests, or replace the deterministic rules in the pla
 viStack context
     |
     v
-DecisionContext -> deterministic policy -> refinement ladder -> safety gate -> typed Decision
-                         ^                 |       |       |                         |
-                         |                 |       |       |                         v
-                         |              Laya MLX  Kev  host CLI                 coordinator
-                         |                 (local) (local) (opt-in)
-                         +------------------- deterministic fallback
+DecisionContext -> deterministic policy --sharp--> typed Decision (fork: sharp) -> runs in code
+                         |
+                       split
+                         v
+                  refinement ladder: Jev (opt-in) -> Laya-MLX -> Kev -> host CLI (opt-in)
+                         |
+                  safety gates --pass--> typed Decision (fork: sharp) -> runs in code
+                         |
+                       fail -> deterministic fallback (fork: split) -> main session decides
 ```
 
 The implementation lives in `laya/`. The command-line adapter is
 `scripts/vistack-decision.py`. A caller may use the library directly or keep one process
 alive with the JSONL server.
 
-The deterministic policy is always evaluated first. A configured refinement backend can
-refine the recommendation only when all of these checks pass:
+The deterministic policy is always evaluated first. When its confidence meets the threshold
+(`--min-confidence`, default 0.65) the fork is **sharp**: it runs in code and no model is
+asked. Only a **split** fork climbs the refinement ladder, and a tier's answer settles it
+only when all of these checks pass:
 
 1. The answer is a valid typed answer for the decision type.
 2. The action is in the caller's available action set.
 3. Confidence meets the configured threshold.
-4. The result does not violate deterministic readiness, dependency, evidence, or
-   shared-file gates.
+4. The result does not violate deterministic readiness, dependency, evidence, size,
+   irreversibility, or shared-file gates.
 
-Otherwise the deterministic result is returned with `fallback_used: true` and a reason.
+Otherwise the next tier is asked, and after the last one the deterministic result is
+returned with `fallback_used: true`, a reason, and `fork: split`. When a tier agrees with the
+policy's own lean, the decision keeps the policy's rationale and the higher confidence.
+
+Models do not re-read sharp forks because, on the labelled scenarios, every time hosted Jev
+overrode a confident deterministic answer the override was wrong (6 of 6), and deterministic
+accuracy fell from 100% to 91%. `--consult always` still asks the ladder on sharp forks and
+records its answer in `outputs.model_opinion` for evaluation, without applying it.
 
 ## Runtime research
 
@@ -47,29 +59,65 @@ MLX implementations are interchangeable.
 | [Laya model card](https://huggingface.co/convaiinnovations/laya) | The model is a bidirectional decision model, not a text generator. Choice options share a context budget and confidence is not a guarantee of correctness. |
 | [MLX checkpoint card](https://huggingface.co/aac6fef/laya-mlx) | The published MLX weights preserve the upstream checkpoint format but are an independent port. |
 
-The initial adapter uses the English checkpoint when configured. The model is not trained on
-viStack-specific outcomes, so historical overrides and final outcomes are recorded for
-evaluation rather than treated as automatic retraining data.
+| [TypeSafe API](https://docs.typesafe.ai/api) | Jev serves the same System One protocol at `POST https://api.typesafe.ai/v1/systemone` with a bearer key. Jev 1.13 costs $0.042 per million input tokens; output tokens are free. |
+| [TypeSafe patterns](https://docs.typesafe.ai/patterns) | Keep deterministic work in code, ask narrow independent questions, and gate actions on confidence per consequence. |
+
+The model is not trained on viStack-specific outcomes, so historical overrides and final
+outcomes are recorded for evaluation rather than treated as automatic retraining data.
+
+### Runtime and checkpoint choice
+
+**Runtime: `laya-mlx`, not the upstream `laya` package.** Both load the same Convai
+Innovations weights; `laya-mlx` reports 63/63 argmax parity with the upstream model at FP16.
+`laya-mlx` needs only MLX, NumPy, `huggingface_hub`, and `tokenizers`, and imports as
+`laya_mlx`. The upstream package pulls in PyTorch and Transformers, and it imports as `laya` —
+the same name as viStack's own `laya/` package, which shadows it on `sys.path`. Upstream is
+therefore reachable only out of process (`laya-serve`, whose `POST /predict` is a different
+protocol). Upstream's hooks, schema-driven `decide`, and LangChain components are in-process
+Python conveniences; viStack's typed questions, gates, and history already cover what they
+would add here. `laya-mlx` is an independent beta port, so pin it in the runtime venv.
+
+**Checkpoint: `convaiinnovations/laya` (English, the repository root).** Measured on this
+guide's 67 labelled scenarios on 2026-09-29 (M3-class Mac, FP16, raw answers before gates):
+
+| Checkpoint | Raw accuracy | Correct when confidence ≥ 0.65 | Warm p50 |
+|---|---|---|---|
+| `convaiinnovations/laya` | 53.7% | 5 of 5 | 54 ms |
+| `convaiinnovations/laya/multilingual` | 40.3% | 9 of 13 | 23 ms |
+| `convaiinnovations/laya/typed-decisions` | 52.2% | never confident | 56 ms |
+| hosted `jev-latest` | 67.2% | 34 of 41 | 342 ms |
+
+The English checkpoint is the only local one whose confident answers were all right. The
+multilingual checkpoint overrode correct answers with confidence above 0.9, and the
+typed-decisions fine-tune never cleared any threshold. Jev is the strongest reader but is
+over-confident: its precision stayed between 83% and 89% at every threshold from 0.65 to
+0.95, which is why the gates, not a higher threshold, protect sharp forks. Name a bundled
+checkpoint as `owner/repo/subfolder`.
 
 ## Requirements and installation
 
 The deterministic engine needs only Python 3.11 or newer and the standard library. It runs
 on the same machines that run the plugin and is the default when no model is configured.
 
-For local MLX inference on Apple Silicon, install the runtime in the Python environment that
-will run the sidecar:
+For local MLX inference on Apple Silicon, let viStack build a dedicated runtime. A system
+Python is often externally managed (PEP 668) and refuses `pip install`:
 
 ```bash
-python3 -m pip install laya-mlx
-export VISTACK_LAYA_MODEL=aac6fef/laya-mlx
+python3 scripts/vistack-decision.py laya setup --dry-run   # show the plan
+python3 scripts/vistack-decision.py laya setup             # venv + laya-mlx + checkpoint
+export VISTACK_LAYA_MODEL=convaiinnovations/laya
+export VISTACK_LAYA_PYTHON="$HOME/.cache/vistack/laya-venv/bin/python"
 ```
 
-The first configured MLX request downloads the checkpoint through Hugging Face Hub. Download
-the checkpoint before an offline run. Inference after the checkpoint is present is local.
-Use a local checkpoint directory instead of the Hub id when network access is not wanted.
+`setup` creates a Python 3.12 venv in `~/.cache/vistack/laya-venv` (with `uv` when present),
+installs `laya-mlx`, and downloads the checkpoint once, about 850 MB. Every entry script —
+`vistack-decision.py`, `evaluate-laya.py`, `benchmark-laya.py` — re-executes itself in that
+venv when the current interpreter cannot import `laya_mlx`, so hosts keep calling plain
+`python3`. `VISTACK_LAYA_PYTHON` pins another interpreter. Inference after the download is
+local; use a local checkpoint directory instead of a Hub id when network access is not wanted.
 
-The default model is not downloaded implicitly by `--backend auto`; auto mode stays
-deterministic unless `VISTACK_LAYA_MODEL` or `--model` is set.
+The model is not downloaded implicitly by `--backend auto`; auto mode stays deterministic
+unless `VISTACK_LAYA_MODEL`, `--model`, a Kev URL, or Jev is configured.
 
 ## Local model fallback: Kev
 
@@ -98,7 +146,32 @@ python3 scripts/vistack-decision.py decision grooming \
 With a configured Laya-MLX model, the order is Laya-MLX, Kev, then deterministic policy.
 Without Laya-MLX, `--backend auto --kev-url ...` uses Kev directly. If Kev is not running,
 the deterministic policy still returns a decision. No local server is contacted unless its
-URL is configured.
+URL is configured, and `--fallback none` keeps the primary tier only.
+
+## Hosted fork tier: Jev
+
+[Jev](https://docs.typesafe.ai/models) is TypeSafe's hosted System One model. It answers the
+same typed questions as Laya and Kev. On the labelled scenarios it settled 7 of the 10 split
+forks, all correctly, and left the other 3 split for the main session. It is opt-in, because
+it sends the bounded, redacted decision state to TypeSafe:
+
+```bash
+python3 scripts/vistack-decision.py laya on --jev        # this project
+export VISTACK_LAYA_JEV=1                                # every project in this shell
+```
+
+The key is read from `TYPESAFE_API_KEY`, then `TYPESAFE_KEY`, and never written to a file. An
+opted-in Jev leads the ladder: it answers a split fork in about 350 ms warm and about 0.5 s
+from a cold CLI call, and the local checkpoint then loads only when Jev cannot answer.
+Without Jev, the local tiers lead. TypeSafe publishes no balance endpoint, so a 401, 402, or
+403 is taken to mean the key or credits are gone: Jev is skipped for an hour, recorded in
+`~/.cache/vistack/jev-status.json`, and the local tiers answer instead. A 429 or 529 is a
+normal transient failure. `laya status --probe` makes one single-question call to prove the
+key and remaining credits.
+
+The TypeSafe agent skill is not installed: both of its install paths clone from a GitHub
+organisation outside the allowed origin realm. This adapter follows the published API
+documentation instead.
 
 ## Cost-aware host fallback
 
@@ -155,20 +228,26 @@ python3 scripts/vistack-decision.py laya on
 python3 scripts/vistack-decision.py laya status
 ```
 
-The default project switch is `.codex/vistack/laya.json`. Use
-`--config .claude/vistack/laya.json` for a Claude-hosted run. A one-request emergency
+The switch lives in the host's state root: `.claude/vistack/laya.json` under Claude Code
+(detected from `CLAUDECODE`) and `.codex/vistack/laya.json` elsewhere. Under Claude Code a
+switch written earlier to the Codex root is still read until `laya on` or `laya off` writes
+the Claude one. `decision`, `serve`, and the history commands use the same root, so a toggle
+and the decisions it governs never disagree. A one-request emergency
 override is `--disable-laya`. The environment variable `VISTACK_LAYA_ENABLED=0` disables
 refinement for every invocation in that environment and takes precedence over the file.
 These switches select deterministic policy; they do not disable viStack routing, state,
 evidence, or safety rules.
 
 The same choices can be committed to a machine-local, ignored config file. The file is
-created by `laya on`/`laya off`; the optional backend fields can be added by the project owner:
+created by `laya on`/`laya off`; `laya on --model <id> --jev` records those two fields, and
+the other backend fields can be added by the project owner:
 
 ```json
 {
   "schema_version": 1,
   "enabled": true,
+  "model": "convaiinnovations/laya",
+  "jev": true,
   "fallback": "kev",
   "kev_url": "http://127.0.0.1:8009",
   "kev_model": "kev-latest",
@@ -176,6 +255,10 @@ created by `laya on`/`laya off`; the optional backend fields can be added by the
   "host_model": "gpt-5.4-mini"
 }
 ```
+
+`laya status` reports what will actually run: the ladder, the interpreter, whether
+`laya_mlx` imports, whether the checkpoint is cached, whether a Jev key is present or was
+refused, and the fork tally from the decision history.
 
 Keep this file and `.codex/vistack/decision-history.jsonl` out of version control. An ignored
 file is also the safest place for a developer-specific host model choice.
@@ -193,7 +276,15 @@ python3 scripts/vistack-decision.py decision grooming \
 The supported decision types are:
 
 `intake-analysis`, `grooming`, `playbook-selection`, `decomposition`, `tier-selection`,
-`dispatch-readiness`, `runtime-progress`, `verification`, and `skill-improvement`.
+`dispatch-readiness`, `runtime-progress`, `verification`, `skill-improvement`,
+`tool-selection`, and `file-selection`. The last two choose among options the caller lists
+in `available_actions`, described by `task.tools` or `task.file_summaries`.
+
+Tally the forks recorded in the history — per type, how many ran in code and who answered:
+
+```bash
+python3 scripts/vistack-decision.py forks
+```
 
 For repeated orchestration events, keep the model resident:
 
@@ -242,7 +333,8 @@ include an `id`; reusing that id makes history recording idempotent across retri
 Every response is a `Decision` with `decision_id`, `decision_type`, `action`, bounded
 `confidence`, concise `rationale`, `evidence_considered`, `risks`, `required_evidence`,
 `alternatives`, `change_conditions`, machine-readable `outputs`, probability data, backend,
-and fallback metadata. `authority` is always `advisory-only`.
+and fallback metadata, and `fork`: `sharp` runs in code, `split` goes to the main session.
+`authority` is always `advisory-only`.
 
 ### Inputs the deterministic policy reads
 
@@ -257,7 +349,8 @@ may not change a `state` or `handoff` route or invent an unattended one.
 |---|---|---|
 | `grooming` | `task.open_questions`, `task.estimated_changed_lines` | Open questions return `needs-decision`; an estimate above 500 returns `split`. |
 | `decomposition` | `task.slices[].files`, `task.slices[].depends_on`, `task.dependencies` | Overlapping slice files or a dependency return `sequence`; `outputs.shared_files` names the overlap. Textual estimates such as `"about 300"` are parsed. |
-| `tier-selection` | `task.pattern`, `task.changes_data_shape`, `task.changes_public_contract`, `task.crosses_boundary`, `current_state.tier_mismatch` | A reported mismatch, a flag, or complex-work terms in the request return `complex` with `outputs.role` `senior-implementer`. Mechanical terms or a named pattern return `mechanical` with `implementer`. Neither returns `complex` below the refinement threshold, so the main session decides. A model may raise a slice to `complex` but never lower evidenced complex work. |
+| `tier-selection` | `task.pattern`, `task.changes_data_shape`, `task.changes_public_contract`, `task.crosses_boundary`, `current_state.tier_mismatch` | A reported mismatch, a flag, or complex-work terms in the request return `complex` with `outputs.role` `senior-implementer`. Mechanical terms or a named pattern return `mechanical` with `implementer`. Neither returns `complex` below the refinement threshold, a split fork a model may settle either way; a model never lowers evidenced complex work. |
+| `tool-selection`, `file-selection` | `available_actions` (required), `task.tools` or `task.file_summaries`, `current_state.failed_tools` or `failed_files` | One option, or a request that names exactly one option (a file by path or basename), is sharp. Anything else is split with the first unfailed option as a placeholder. An option whose name or description is irreversible (merge, production deploy, data deletion) is never chosen in code or by a model. Choices are capped at 10 options. |
 | `runtime-progress` | `current_state.attempts`, `identical_results`, `unblock_exhausted`, `next_action`, `credentials_missing`, `credentials_expired`, `contract_ambiguity` | Each fence returns `escalate` with `outputs.fence` set to 1-4. Twenty attempts or three identical results is FENCE 1; an irreversible `next_action` such as a merge is FENCE 3. |
 | `verification` | `evidence[].criterion`, `evidence[].status` | `criterion` (1-based index or exact criterion text) covers that criterion only. `status` `fail` or a summary such as `3 tests failed` returns `request-evidence`; `status` `unavailable` returns `block`. Duplicate refs count once. `outputs.uncovered_criteria` lists the gaps. |
 
@@ -276,6 +369,7 @@ Use the hook only when a choice affects the workflow path.
 | planner | tier selection | the tier rule in `agents/planner.md` |
 | coordinator | dispatch readiness, runtime progress | state transitions, dependencies, monitor and ledger rules |
 | QA verifier | verification | captured artifacts tied to acceptance criteria |
+| implementer, unblocker | tool selection, file selection | the slice's writable files and the fence rules |
 | feedback review | skill improvement | explicit human review of historical patterns |
 
 The caller validates the result before acting. A recommendation is not a permission to
@@ -294,14 +388,16 @@ changes the outcome.
 | dispatch or hold | `dispatch-readiness` |
 | retry, rescope, or stop | `runtime-progress` |
 | accept or ask for more evidence | `verification` |
+| which tool the next step uses | `tool-selection` |
+| which file the next step opens or changes | `file-selection` |
 
-A fork is **sharp** when the returned action is valid, its confidence meets the configured
-threshold, and every safety gate accepts it, whether the deterministic policy or a
-refinement backend produced it. A sharp fork is applied in code and its decision id is
-recorded. Any other fork is **split**: the main session decides it and records why. Judge a
-decision type sharp from held-out scenario accuracy, not from confidence alone. Which tool a
-step uses has no decision type: no contract names a tool fork with labelled outcomes to
-measure it against.
+Every `Decision` carries `fork`. It is **sharp** when the returned action is valid, its
+confidence meets the configured threshold, and every safety gate accepts it, whether the
+deterministic policy or a ladder tier produced it. A sharp fork is applied in code and its
+decision id is recorded. Any other fork is **split**: the main session decides it and records
+why. Judge a decision type sharp from held-out scenario precision and coverage, not from
+confidence alone: `evaluate-laya.py` counts a wrong sharp fork as an error and a split fork
+as a deferral.
 
 Laya never calls the advisor. The advisor's three checkpoints — before a plan, on a
 repeating error, before done — are not forks (`skills/advisor/SKILL.md`).
@@ -331,7 +427,7 @@ reviewable workflow change.
 
 The engine returns the deterministic policy result when the configured refinement backends
 are missing, cannot load, time out, return malformed output, fall below the confidence
-threshold, or fail a safety gate. If configured, the fallback order is local Laya-MLX,
+threshold, or fail a safety gate. If configured, the order is opted-in Jev, local Laya-MLX,
 local Kev, explicit host CLI, then deterministic policy. The sidecar also converts malformed
 JSONL requests into an error response and keeps serving subsequent requests.
 
@@ -360,8 +456,15 @@ python3 scripts/evaluate-laya.py --check
 python3 scripts/evaluate-laya.py --backend mlx --model "$VISTACK_LAYA_MODEL"
 ```
 
-The report includes accuracy, per-type counts, and every mismatch; `--check` exits non-zero
-on a mismatch, and the unit suite runs the same check for the deterministic policy. Add a
+The report includes sharp precision, sharp coverage, per-type counts, and every sharp
+mismatch; `--check` exits non-zero on one, and the unit suite runs the same check for the
+deterministic policy. `--raw` also scores each tier's first answer before any gate.
+
+On 2026-09-29 the 80 labelled scenarios gave: deterministic policy alone, 70 sharp forks, all
+right (87.5% coverage); with `convaiinnovations/laya`, unchanged, because it cleared the
+threshold on none of the ten split forks; with Jev, 77 sharp, all right (96.25% coverage),
+the remaining three split. Before two tool labels were made unambiguous, Jev picked `grep`
+for both at 0.99 confidence — the confidence gave no warning. Add a
 scenario for every corrected decision, and compare deterministic policy, model
 recommendation, human choice, and final outcome before raising the confidence threshold or
 enabling more automatic refinement.
@@ -416,12 +519,17 @@ fallback and evidence predicate are independently testable.
 
 ## Known limitations
 
-- The MLX runtime is optional and currently targets Apple Silicon/macOS.
+- The MLX runtime is optional and currently targets Apple Silicon/macOS. A cold CLI call
+  that has to load the local checkpoint takes about 0.7 s; keep `serve` running for repeated
+  local decisions.
+- Jev is hosted and opt-in; it can incur a small cost and it receives the redacted decision
+  state.
 - Kev is a separate local service; it is not installed by this plugin and its current Qwen3.5
   server path is slower on Apple Silicon than the older Qwen3 checkpoints.
 - Host-LLM fallback is opt-in and can incur cost or transmit redacted decision context to the
   configured provider. It is never selected implicitly by `laya on`.
-- The default English checkpoint is not a viStack-fine-tuned model.
+- The default English checkpoint is not a viStack-fine-tuned model, and on these scenarios
+  it answered no split fork confidently.
 - Laya choice quality can degrade with large option sets, so question schemas keep choices
   small and route candidates are prefiltered.
 - Confidence is used as a safety threshold, not as proof of correctness.

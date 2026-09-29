@@ -1,7 +1,14 @@
-"""Decision engine with deterministic policy, optional Laya-MLX refinement, and gates."""
+"""Decision engine: deterministic policy, a refinement ladder, and safety gates.
+
+The deterministic policy answers every fork first. A sharp answer runs in code without a
+model turn. Only a split answer climbs the ladder — Jev when opted in, then Laya-MLX, Kev,
+and the host CLI — and the first typed answer that clears the confidence threshold and every
+safety gate makes the fork sharp. Anything else stays split and goes back to the main session.
+"""
 
 from __future__ import annotations
 
+from dataclasses import replace
 import os
 import signal
 import threading
@@ -11,17 +18,24 @@ from typing import Any, Mapping
 
 from .history import HistoryStore
 from .mlx_backend import InferenceTimeout, LayaUnavailable, MLXBackend
-from .policy import PolicyDraft, evaluate, verification_sufficient
+from .policy import PolicyDraft, evaluate, irreversible, option_descriptions, verification_sufficient
 from .questions import questions_for, state_for_laya
 from .schema import (
     ACTIONS_BY_TYPE,
     Decision,
     DecisionContext,
     Alternative,
+    OPEN_ACTION_TYPES,
     TIER_ROLES,
     default_actions,
     utc_now,
 )
+
+
+BACKENDS = ("auto", "deterministic", "mlx", "kev", "jev", "host-llm")
+FALLBACKS = ("none", "kev", "jev", "host-llm")
+CONSULT_MODES = ("split", "always")
+TRUE_VALUES = {"1", "true", "on", "yes", "enabled"}
 
 
 def _answer(result: Mapping[str, Any], name: str) -> Mapping[str, Any] | None:
@@ -45,8 +59,14 @@ def _noul_probability(answer: Mapping[str, Any] | None) -> float | None:
 
 
 def _confidence(answer: Mapping[str, Any] | None) -> float:
+    if not answer:
+        return 0.0
+    if "confidence" not in answer:
+        # Hosted Jev returns only P(true) for a noul; its confidence is the distance from 0.5.
+        probability = _noul_probability(answer)
+        return max(probability, 1.0 - probability) if probability is not None else 0.0
     try:
-        value = float(answer.get("confidence", 0.0)) if answer else 0.0
+        value = float(answer.get("confidence", 0.0))
     except (TypeError, ValueError):
         return 0.0
     return max(0.0, min(1.0, value))
@@ -68,12 +88,35 @@ def _requested_actions(context: DecisionContext) -> tuple[str, ...]:
     return context.available_actions or default_actions(context.decision_type)
 
 
+def _flag(value: str | None) -> bool:
+    return (value or "").strip().lower() in TRUE_VALUES
+
+
+class _Unavailable:
+    """A configured backend that cannot run; every call falls through to the next tier."""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+
+    def predict(self, state: Mapping[str, Any], questions: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
+        raise LayaUnavailable(self.reason)
+
+
 # The HTTP and subprocess adapters are imported only when configured, so the default
 # deterministic path does not pay for urllib or subprocess at startup.
 def _kev_backend(url: str, *, model: str, timeout_ms: int) -> Any:
-    from .kev_backend import KevBackend
+    from .system_one import KevBackend
 
     return KevBackend(url, model=model, timeout_ms=timeout_ms)
+
+
+def _jev_backend(*, model: str | None, timeout_ms: int) -> Any:
+    from .system_one import JevBackend, jev_api_key
+
+    key = jev_api_key()
+    if not key:
+        return _Unavailable("Jev is enabled but neither TYPESAFE_API_KEY nor TYPESAFE_KEY is set")
+    return JevBackend(api_key=key, model=model, timeout_ms=timeout_ms)
 
 
 def _host_backend(host: str, *, model: str | None, effort: str, timeout_ms: int, workdir: str | None) -> Any:
@@ -85,10 +128,10 @@ def _host_backend(host: str, *, model: str | None, effort: str, timeout_ms: int,
 class DecisionEngine:
     """A safe advisory decision engine.
 
-    ``backend='auto'`` uses deterministic policy unless a local model or an explicitly
-    configured local/host fallback is available. A single instance keeps the optional MLX
-    Agent resident, which avoids model reloads for the JSONL server and library callers that
-    make repeated decisions.
+    ``backend='auto'`` uses deterministic policy unless a local model, a local Kev server, an
+    opted-in Jev key, or an explicit host fallback is configured. A single instance keeps the
+    optional MLX Agent resident, which avoids model reloads for the JSONL server and library
+    callers that make repeated decisions.
     """
 
     def __init__(
@@ -102,6 +145,9 @@ class DecisionEngine:
         fallback: str | None = None,
         kev_url: str | None = None,
         kev_model: str = "kev-latest",
+        jev: bool | None = None,
+        jev_model: str | None = None,
+        consult: str | None = None,
         dtype: str = "float16",
         device: str | None = None,
         min_confidence: float = 0.65,
@@ -110,12 +156,15 @@ class DecisionEngine:
         failure_threshold: int = 2,
         cooldown_s: float = 30.0,
     ) -> None:
-        if backend not in {"auto", "deterministic", "mlx", "kev", "host-llm"}:
-            raise ValueError("backend must be auto, deterministic, mlx, kev, or host-llm")
+        if backend not in BACKENDS:
+            raise ValueError(f"backend must be one of: {', '.join(BACKENDS)}")
         if effort not in {"low", "medium", "high"}:
             raise ValueError("effort must be low, medium, or high")
-        if fallback not in {None, "none", "kev", "host-llm"}:
-            raise ValueError("fallback must be none, kev, or host-llm")
+        if fallback not in {None, *FALLBACKS}:
+            raise ValueError(f"fallback must be one of: {', '.join(FALLBACKS)}")
+        consult = consult or os.environ.get("VISTACK_LAYA_CONSULT") or "split"
+        if consult not in CONSULT_MODES:
+            raise ValueError("consult must be split or always")
         if not 0.0 <= min_confidence <= 1.0:
             raise ValueError("min_confidence must be between 0 and 1")
         if timeout_ms < 0:
@@ -134,6 +183,11 @@ class DecisionEngine:
         self.fallback_mode = fallback or os.environ.get("VISTACK_LAYA_FALLBACK")
         self.kev_url = kev_url or os.environ.get("VISTACK_LAYA_KEV_URL")
         self.kev_model = kev_model or os.environ.get("VISTACK_LAYA_KEV_MODEL", "kev-latest")
+        # Jev sends the bounded, redacted state to TypeSafe, so it joins the ladder only when
+        # asked for: the setting, VISTACK_LAYA_JEV, or --fallback jev. A key alone is not intent.
+        self.jev = (_flag(os.environ.get("VISTACK_LAYA_JEV")) if jev is None else jev) or self.fallback_mode == "jev" or backend == "jev"
+        self.jev_model = jev_model or os.environ.get("VISTACK_LAYA_JEV_MODEL")
+        self.consult = consult
         self.min_confidence = min_confidence
         self.timeout_ms = timeout_ms
         self.history = HistoryStore(history_path) if history_path else None
@@ -143,21 +197,13 @@ class DecisionEngine:
         self.cooldown_s = cooldown_s
         self._failures: dict[str, int] = {}
         self._open_until: dict[str, float] = {}
-        self._backend_name, self._backend = self._make_backend(
-            self.backend_mode,
-            dtype=dtype,
-            device=device,
-            workdir=os.environ.get("VISTACK_LAYA_WORKDIR"),
-        )
+        workdir = os.environ.get("VISTACK_LAYA_WORKDIR")
+        self._dtype, self._device = dtype, device
+        self._backend_name, self._backend = self._make_backend(self.backend_mode, dtype=dtype, device=device, workdir=workdir)
         # Kept as a small compatibility seam for embedders/tests that replace
         # the optional MLX adapter with a fake backend.
         self._mlx = self._backend if self._backend_name == "laya-mlx" else None
-        self._fallbacks = self._make_fallbacks(
-            self._backend_name,
-            dtype=dtype,
-            device=device,
-            workdir=os.environ.get("VISTACK_LAYA_WORKDIR"),
-        )
+        self._fallbacks = self._make_fallbacks(self._backend_name, workdir=workdir) if self._backend_name else []
         self._fallback_name, self._fallback_backend = self._fallbacks[0] if self._fallbacks else (None, None)
 
     def _make_backend(
@@ -171,7 +217,12 @@ class DecisionEngine:
         if mode == "deterministic":
             return None, None
         if mode == "auto":
-            if self.model:
+            # Opted-in Jev goes first: it settled 7 of 10 labelled split forks, all correctly, at
+            # about 340 ms, while the local checkpoint settled none and a cold load alone costs
+            # about 600 ms per CLI call. Laya-MLX then answers when Jev is refused or unreachable.
+            if self.jev:
+                mode = "jev"
+            elif self.model:
                 mode = "mlx"
             elif self.kev_url:
                 mode = "kev"
@@ -183,49 +234,49 @@ class DecisionEngine:
             return "laya-mlx", MLXBackend(self.model, dtype=dtype, device=device)
         if mode == "kev":
             return "kev", _kev_backend(self.kev_url or "http://127.0.0.1:8009", model=self.kev_model, timeout_ms=self.timeout_ms)
+        if mode == "jev":
+            return "jev", _jev_backend(model=self.jev_model, timeout_ms=self.timeout_ms)
         if not self.host:
             raise ValueError("host-llm backend requires --host or VISTACK_LAYA_HOST")
-        return "host-llm", _host_backend(
-            self.host,
+        return "host-llm", self._host(workdir)
+
+    def _host(self, workdir: str | None) -> Any:
+        return _host_backend(
+            self.host or "",
             model=self.host_model,
             effort=self.effort,
             timeout_ms=max(self.timeout_ms, 5000),
             workdir=workdir,
         )
 
-    def _make_fallbacks(
-        self,
-        primary_name: str | None,
-        *,
-        dtype: str,
-        device: str | None,
-        workdir: str | None,
-    ) -> list[tuple[str, Any]]:
-        mode = self.fallback_mode
-        if mode in {None, "", "none"}:
+    def _make_fallbacks(self, primary_name: str | None, *, workdir: str | None) -> list[tuple[str, Any]]:
+        """Every configured tier after the primary, in ladder order: Jev, Laya-MLX, Kev, host CLI."""
+
+        if self.fallback_mode == "none":
             return []
         fallbacks: list[tuple[str, Any]] = []
-        # When host fallback is explicitly enabled, prefer a configured local
-        # Kev service before sending the bounded context to a provider.
-        if mode == "kev" and primary_name != "kev" and self.kev_url:
+        if primary_name != "jev" and self.jev:
+            fallbacks.append(("jev", _jev_backend(model=self.jev_model, timeout_ms=self.timeout_ms)))
+        if primary_name != "laya-mlx" and self.model:
+            fallbacks.append(("laya-mlx", MLXBackend(self.model, dtype=self._dtype, device=self._device)))
+        if primary_name != "kev" and self.kev_url:
             fallbacks.append(("kev", _kev_backend(self.kev_url, model=self.kev_model, timeout_ms=self.timeout_ms)))
-        if mode == "host-llm":
-            if primary_name != "kev" and self.kev_url:
-                fallbacks.append(("kev", _kev_backend(self.kev_url, model=self.kev_model, timeout_ms=self.timeout_ms)))
-            if primary_name != "host-llm" and self.host:
-                fallbacks.append(
-                    (
-                        "host-llm",
-                        _host_backend(
-                            self.host,
-                            model=self.host_model,
-                            effort=self.effort,
-                            timeout_ms=max(self.timeout_ms, 5000),
-                            workdir=workdir,
-                        ),
-                    )
-                )
+        if primary_name != "host-llm" and self.fallback_mode == "host-llm" and self.host:
+            fallbacks.append(("host-llm", self._host(workdir)))
         return fallbacks
+
+    def ladder(self) -> list[tuple[str, Any]]:
+        """The refinement tiers a split fork climbs, in order."""
+
+        if self._backend is None or self._backend_name is None:
+            return []
+        primary = self._mlx if self._backend_name == "laya-mlx" else self._backend
+        fallbacks = list(self._fallbacks)
+        # Preserve the small adapter seam used by embedders that
+        # replace the first optional backend after construction.
+        if self._fallback_backend is not None and (not fallbacks or fallbacks[0][1] is not self._fallback_backend):
+            fallbacks.insert(0, (self._fallback_name or "fallback", self._fallback_backend))
+        return [(self._backend_name, primary), *fallbacks]
 
     def _id(self, request_id: str | None) -> str:
         return request_id or f"dec_{uuid.uuid4().hex[:16]}"
@@ -239,6 +290,7 @@ class DecisionEngine:
         fallback_used: bool,
         fallback_reason: str | None,
         decision_id: str,
+        fork: str,
     ) -> Decision:
         decision = Decision(
             decision_id=decision_id,
@@ -256,6 +308,7 @@ class DecisionEngine:
             backend=backend,
             fallback_used=fallback_used,
             fallback_reason=fallback_reason,
+            fork=fork,
         )
         decision.validate(available_actions=_requested_actions(context))
         return decision
@@ -269,17 +322,7 @@ class DecisionEngine:
         decision_id: str,
     ) -> Decision:
         risks = tuple(draft.risks) + (f"Laya refinement was not used: {reason}.",)
-        fallback_draft = PolicyDraft(
-            action=draft.action,
-            confidence=draft.confidence,
-            rationale=draft.rationale,
-            risks=risks,
-            required_evidence=draft.required_evidence,
-            alternatives=draft.alternatives,
-            change_conditions=draft.change_conditions,
-            outputs={**dict(draft.outputs), "fallback": True},
-            probabilities=draft.probabilities,
-        )
+        fallback_draft = replace(draft, risks=risks, outputs={**dict(draft.outputs), "fallback": True})
         return self._decision(
             context,
             fallback_draft,
@@ -287,6 +330,7 @@ class DecisionEngine:
             fallback_used=True,
             fallback_reason=reason,
             decision_id=decision_id,
+            fork="split",
         )
 
     def _model_draft(
@@ -321,17 +365,18 @@ class DecisionEngine:
                 selected = "ready-for-implementation" if baseline.action == "ready-for-implementation" else "ready-for-grooming"
             else:
                 selected = "ready-for-grooming"
-            outputs.update({"classification": task_type, "readiness": readiness})
-            confidence_parts = [_confidence(task_type_answer), _confidence(readiness_answer)]
+            outputs.update(
+                {"classification": task_type, "classification_confidence": round(_confidence(task_type_answer), 4), "readiness": readiness}
+            )
+            # The action follows readiness and ambiguity; the task class is reported, not decided.
+            confidence_parts = [_confidence(readiness_answer)]
             if ambiguity is not None:
                 confidence_parts.append(_confidence(_answer(result, "ambiguity")))
             probabilities = _probabilities(readiness_answer)
         elif decision_type == "grooming":
             answer = _answer(result, "readiness")
             decomposition = _choice(_answer(result, "decomposition"))
-            selected = {"ready": "ready", "needs-information": "needs-information", "needs-decision": "needs-decision"}.get(
-                _choice(answer) or ""
-            )
+            selected = _choice(answer) if _choice(answer) in ACTIONS_BY_TYPE[decision_type] else None
             if not selected:
                 return None, "invalid typed grooming answer"
             outputs.update({"ready": selected == "ready", "model_decomposition": decomposition})
@@ -375,9 +420,11 @@ class DecisionEngine:
             selected = _choice(answer)
             if selected not in ACTIONS_BY_TYPE[decision_type]:
                 return None, "invalid typed dispatch answer"
-            role = _choice(_answer(result, "role"))
-            outputs.update({"ready": selected == "dispatch", "role": role})
-            confidence_parts = [_confidence(answer), _confidence(_answer(result, "role"))]
+            role_answer = _answer(result, "role")
+            outputs.update(
+                {"ready": selected == "dispatch", "role": _choice(role_answer), "role_confidence": round(_confidence(role_answer), 4)}
+            )
+            confidence_parts = [_confidence(answer)]
             probabilities = _probabilities(answer)
         elif decision_type == "runtime-progress":
             answer = _answer(result, "next")
@@ -403,6 +450,15 @@ class DecisionEngine:
             confidence_parts = [_confidence(answer)]
             probabilities = _probabilities(answer)
             outputs.update({"model_change": selected})
+        elif decision_type in OPEN_ACTION_TYPES:
+            name = "tool" if decision_type == "tool-selection" else "file"
+            answer = _answer(result, name)
+            selected = _choice(answer)
+            if selected not in context.available_actions:
+                return None, f"invalid typed {name} answer"
+            confidence_parts = [_confidence(answer)]
+            probabilities = _probabilities(answer)
+            outputs.update({name: selected})
         if selected is None:
             return None, "no typed answer was selected"
         confidence = min(confidence_parts) if confidence_parts else 0.0
@@ -438,6 +494,8 @@ class DecisionEngine:
             return False, "deterministic dispatch readiness gate rejected dispatch"
         if context.decision_type == "grooming" and model_draft.action == "ready" and baseline.action != "ready":
             return False, "deterministic grooming gate rejected ready"
+        if context.decision_type == "grooming" and baseline.action == "split" and model_draft.action != "split":
+            return False, "deterministic size gate requires split above the changed-line limit"
         if context.decision_type == "intake-analysis" and model_draft.action == "ready-for-implementation" and baseline.action != "ready-for-implementation":
             return False, "deterministic intake gate rejected ready-for-implementation"
         if context.decision_type == "playbook-selection" and model_draft.action != baseline.action:
@@ -468,12 +526,17 @@ class DecisionEngine:
                 return False, "deterministic tier gate kept evidenced complex work on the complex tier"
         if context.decision_type == "skill-improvement" and model_draft.action == "propose-change" and baseline.action != "propose-change":
             return False, "deterministic history gate requires repeated evidence before proposing a change"
+        if context.decision_type in OPEN_ACTION_TYPES:
+            key = "tools" if context.decision_type == "tool-selection" else "file_summaries"
+            described = option_descriptions(context, key).get(model_draft.action, model_draft.action)
+            if irreversible(f"{model_draft.action} {described}"):
+                return False, "an irreversible option stays with the main session"
         return True, None
 
     def warm(self) -> None:
         """Load configured local models before the first request; failures stay fallbackable."""
 
-        for backend in (self._mlx if self._backend_name == "laya-mlx" else self._backend, *(item[1] for item in self._fallbacks)):
+        for _, backend in self.ladder():
             warm = getattr(backend, "warm", None)
             if callable(warm):
                 try:
@@ -549,6 +612,53 @@ class DecisionEngine:
             return None, safety_error or "safety gate rejected model output"
         return model_draft, None
 
+    def _climb(
+        self,
+        context: DecisionContext,
+        baseline: PolicyDraft,
+        ladder: list[tuple[str, Any]],
+    ) -> tuple[PolicyDraft | None, str | None, list[str]]:
+        """Ask each tier in order; return the first answer that clears every gate."""
+
+        state = state_for_laya(context)
+        questions = questions_for(context)
+        errors: list[str] = []
+        for name, backend in ladder:
+            draft, error = self._try_backend(context, baseline, name, backend, state, questions)
+            if draft is not None:
+                if draft.action == baseline.action:
+                    # Two independent reads of the same fork; keep the policy's explanation.
+                    draft = replace(
+                        draft,
+                        confidence=max(draft.confidence, baseline.confidence),
+                        rationale=f"{baseline.rationale} {name} agreed at {draft.confidence:.2f}.",
+                    )
+                return draft, name, errors
+            errors.append(f"{name} unavailable or rejected: {error}")
+        return None, None, errors
+
+    def _opinion(self, context: DecisionContext, baseline: PolicyDraft, ladder: list[tuple[str, Any]]) -> dict[str, Any]:
+        """A model's answer on a sharp fork, recorded for evaluation and never applied."""
+
+        state = state_for_laya(context)
+        questions = questions_for(context)
+        errors = []
+        for name, backend in ladder:
+            try:
+                raw = self._predict_with_timeout(backend, state, questions)
+                draft, error = self._model_draft(context, raw, baseline, name)
+            except Exception as exc:
+                draft, error = None, str(exc) or type(exc).__name__
+            if draft is not None:
+                return {
+                    "backend": name,
+                    "action": draft.action,
+                    "confidence": round(float(draft.confidence), 4),
+                    "agrees": draft.action == baseline.action,
+                }
+            errors.append(f"{name}: {error}")
+        return {"error": "; ".join(errors) or "no refinement backend is configured"}
+
     def decide(
         self,
         context: DecisionContext | Mapping[str, Any],
@@ -559,83 +669,38 @@ class DecisionEngine:
         ctx = context if isinstance(context, DecisionContext) else DecisionContext.from_dict(context, decision_type=decision_type)
         decision_id = self._id(request_id)
         baseline = evaluate(ctx)
+        sharp = baseline.confidence >= self.min_confidence
+        ladder = self.ladder()
         final: Decision
-        if self._backend is None or self._backend_name is None:
+        if sharp or not ladder:
+            # A sharp fork runs in code without a model turn. ``consult=always`` still asks the
+            # ladder so history can compare the policy with a model, but never applies the answer.
+            draft = baseline
+            if sharp and ladder and self.consult == "always":
+                draft = replace(baseline, outputs={**dict(baseline.outputs), "model_opinion": self._opinion(ctx, baseline, ladder)})
             final = self._decision(
                 ctx,
-                baseline,
+                draft,
                 backend="deterministic",
                 fallback_used=False,
                 fallback_reason=None,
                 decision_id=decision_id,
+                fork="sharp" if sharp else "split",
             )
         else:
-            primary_backend = self._mlx if self._backend_name == "laya-mlx" else self._backend
-            state = state_for_laya(ctx)
-            questions = questions_for(ctx)
-            model_draft, primary_error = self._try_backend(
-                ctx, baseline, self._backend_name, primary_backend, state, questions
-            )
-            if model_draft is not None:
+            model_draft, name, errors = self._climb(ctx, baseline, ladder)
+            if model_draft is not None and name is not None:
                 final = self._decision(
                     ctx,
                     model_draft,
-                    backend=self._backend_name,
-                    fallback_used=False,
-                    fallback_reason=None,
+                    backend=name,
+                    fallback_used=bool(errors),
+                    fallback_reason="; ".join(errors) or None,
                     decision_id=decision_id,
+                    fork="sharp",
                 )
             else:
-                fallbacks = list(self._fallbacks)
-                # Preserve the small adapter seam used by embedders that
-                # replace the first optional backend after construction.
-                if self._fallback_backend is not None and (
-                    not fallbacks or fallbacks[0][1] is not self._fallback_backend
-                ):
-                    fallbacks.insert(0, (self._fallback_name or "fallback", self._fallback_backend))
-                if not fallbacks:
-                    final = self._fallback(
-                        ctx,
-                        baseline,
-                        reason=f"{self._backend_name}: {primary_error}",
-                        decision_id=decision_id,
-                    )
-                else:
-                    fallback_draft = None
-                    fallback_error = None
-                    fallback_name = None
-                    for candidate_name, candidate_backend in fallbacks:
-                        fallback_name = candidate_name
-                        fallback_draft, fallback_error = self._try_backend(
-                            ctx,
-                            baseline,
-                            candidate_name,
-                            candidate_backend,
-                            state,
-                            questions,
-                        )
-                        if fallback_draft is not None:
-                            break
-                    if fallback_draft is not None:
-                        final = self._decision(
-                            ctx,
-                            fallback_draft,
-                            backend=fallback_name or "fallback",
-                            fallback_used=True,
-                            fallback_reason=f"{self._backend_name} unavailable or rejected: {primary_error}",
-                            decision_id=decision_id,
-                        )
-                    else:
-                        fallback_label = fallback_name or self._fallback_name or "fallback"
-                        final = self._fallback(
-                            ctx,
-                            baseline,
-                            reason=(
-                                f"{self._backend_name}: {primary_error}; "
-                                f"{fallback_label}: {fallback_error}"
-                            ),
-                            decision_id=decision_id,
-                        )
+                final = self._fallback(ctx, baseline, reason="; ".join(errors), decision_id=decision_id)
         if self.history:
             self.history.append_decision(final, ctx)
         return final

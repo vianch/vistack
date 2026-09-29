@@ -369,6 +369,70 @@ def _slice_dependencies(context: DecisionContext) -> bool:
     return any(isinstance(item, Mapping) and _items(item.get("depends_on") or item.get("dependencies")) for item in slices)
 
 
+def irreversible(text: str) -> bool:
+    return bool(_IRREVERSIBLE.search(text.lower()))
+
+
+def option_descriptions(context: DecisionContext, key: str) -> dict[str, str]:
+    """Map each candidate option to the caller's description, or to itself."""
+
+    described = context.task.get(key)
+    described = described if isinstance(described, Mapping) else {}
+    return {item: str(described.get(item) or item) for item in context.available_actions}
+
+
+def _named_options(request: str, options: tuple[str, ...], *, basenames: bool = False) -> list[str]:
+    text = request.lower()
+    named = []
+    for option in options:
+        forms = {option.lower()}
+        if basenames:
+            forms.add(option.lower().rsplit("/", 1)[-1])
+        if any(re.search(rf"(?<![\w./-]){re.escape(form)}(?![\w/-])", text) for form in forms):
+            named.append(option)
+    return named
+
+
+def _open_choice(context: DecisionContext, *, noun: str, key: str, basenames: bool = False) -> PolicyDraft:
+    options = context.available_actions
+    descriptions = option_descriptions(context, key)
+    unsafe = [item for item in options if irreversible(f"{item} {descriptions[item]}")]
+    failed = {str(item) for item in _items(context.current_state.get(f"failed_{noun}s"))}
+    uniform = {item: round(1.0 / len(options), 4) for item in options}
+    base = {"options": list(options), "irreversible_options": unsafe}
+    if len(options) == 1 and not unsafe:
+        return _common(
+            context,
+            action=options[0],
+            confidence=0.95,
+            rationale=f"Only one {noun} is available.",
+            outputs={**base, "signal": "single-option"},
+        )
+    named = _named_options(_request(context), options, basenames=basenames)
+    if len(named) == 1 and named[0] not in unsafe:
+        exact = named[0].lower() in _request(context).lower()
+        return _common(
+            context,
+            action=named[0],
+            confidence=0.95 if exact else 0.88,
+            rationale=f"The request names the {noun} {named[0]!r}.",
+            outputs={**base, "signal": "named"},
+        )
+    preferred = [item for item in options if item not in unsafe and item not in failed] or list(options)
+    risks = (f"Irreversible {noun}s stay with the main session: {', '.join(unsafe)}.",) if unsafe else ()
+    return _common(
+        context,
+        action=preferred[0],
+        confidence=0.5,
+        rationale=f"No explicit signal picks one {noun}; the fork layer or the main session chooses.",
+        risks=risks,
+        required=(f"the {noun} a step needs, from its intent",),
+        alternatives=tuple((item, f"Candidate {noun}.") for item in preferred[1:3]),
+        outputs={**base, "signal": "none", "failed": sorted(failed)},
+        probabilities=uniform,
+    )
+
+
 def _tier_outputs(base: Mapping[str, Any], tier: str) -> dict[str, Any]:
     return {**base, "tier": tier, "role": TIER_ROLES[tier]}
 
@@ -852,5 +916,11 @@ def evaluate(context: DecisionContext) -> PolicyDraft:
             required=("more decisions with recorded outcomes or overrides",),
             outputs={"override_count": overrides, "repeated_pattern": repeated},
         )
+
+    if decision_type == "tool-selection":
+        return _open_choice(context, noun="tool", key="tools")
+
+    if decision_type == "file-selection":
+        return _open_choice(context, noun="file", key="file_summaries", basenames=True)
 
     raise AssertionError(f"unhandled decision type {decision_type}")

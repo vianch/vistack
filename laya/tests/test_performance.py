@@ -13,8 +13,9 @@ from laya.history import HistoryStore
 from laya.mlx_backend import LayaUnavailable, MLXBackend
 
 
-CONTINUE = {"answers": {"next": {"type": "choice", "choice": "continue", "confidence": 0.9}}}
-RUNTIME = {"decision_type": "runtime-progress", "task": {"request": "Finish the slice"}, "current_state": {"phase": "implementing"}}
+MECHANICAL = {"answers": {"tier": {"type": "choice", "choice": "mechanical", "confidence": 0.9}}}
+# An unclear tier is a split fork (0.6), so it climbs the refinement ladder.
+SPLIT_FORK = {"decision_type": "tier-selection", "task": {"request": "Update the order summary panel"}}
 
 
 class HistoryIndexTests(unittest.TestCase):
@@ -54,7 +55,7 @@ class HistoryIndexTests(unittest.TestCase):
             timings = []
             for _ in range(1500):
                 started = time.perf_counter()
-                engine.decide(RUNTIME)
+                engine.decide(SPLIT_FORK)
                 timings.append(time.perf_counter() - started)
             early = sum(timings[:200]) / 200
             late = sum(timings[-200:]) / 200
@@ -74,11 +75,11 @@ class BackendLifecycleTests(unittest.TestCase):
 
             def predict(self, state, questions):
                 self.warm()
-                return CONTINUE
+                return MECHANICAL
 
         engine = DecisionEngine(backend="mlx", model="configured", timeout_ms=20)
         engine._mlx = SlowLoadBackend()
-        result = engine.decide(RUNTIME)
+        result = engine.decide(SPLIT_FORK)
         self.assertEqual(result.backend, "laya-mlx")
         self.assertFalse(result.fallback_used)
 
@@ -107,9 +108,9 @@ class BackendLifecycleTests(unittest.TestCase):
         engine = DecisionEngine(backend="mlx", model="configured", failure_threshold=2, cooldown_s=60)
         failing = FailingBackend()
         engine._mlx = failing
-        results = [engine.decide(RUNTIME) for _ in range(4)]
+        results = [engine.decide(SPLIT_FORK) for _ in range(4)]
         self.assertEqual(failing.calls, 2)
-        self.assertTrue(all(item.action == "continue" and item.fallback_used for item in results))
+        self.assertTrue(all(item.action == "complex" and item.fallback_used for item in results))
         self.assertIn("skipped", results[-1].fallback_reason)
 
     def test_backend_recovers_after_cooldown(self):
@@ -120,18 +121,18 @@ class BackendLifecycleTests(unittest.TestCase):
                 self.calls += 1
                 if self.calls <= 1:
                     raise LayaUnavailable("connection refused")
-                return CONTINUE
+                return MECHANICAL
 
         engine = DecisionEngine(backend="mlx", model="configured", failure_threshold=1, cooldown_s=0)
         engine._mlx = FlakyBackend()
-        self.assertTrue(engine.decide(RUNTIME).fallback_used)
-        self.assertEqual(engine.decide(RUNTIME).backend, "laya-mlx")
+        self.assertTrue(engine.decide(SPLIT_FORK).fallback_used)
+        self.assertEqual(engine.decide(SPLIT_FORK).backend, "laya-mlx")
 
     def test_deterministic_cli_does_not_import_network_or_subprocess_adapters(self):
         root = Path(__file__).resolve().parents[2]
         code = (
             "import sys; import laya.cli; "
-            "print(','.join(m for m in ('laya.kev_backend', 'laya.host_llm', 'urllib.request') if m in sys.modules))"
+            "print(','.join(m for m in ('laya.system_one', 'laya.host_llm', 'urllib.request') if m in sys.modules))"
         )
         output = subprocess.run([sys.executable, "-c", code], cwd=root, capture_output=True, text=True, check=True)
         self.assertEqual(output.stdout.strip(), "")

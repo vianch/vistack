@@ -1,6 +1,6 @@
 ---
-description: "Disable the default-on local Laya decision refinement for this consuming project"
-argument-hint: "[optional config path]"
+description: "Turn off the Laya/Jev fork layer for this consuming project"
+argument-hint: "[--config <path>]"
 ---
 
 # /vistack:laya-off
@@ -8,8 +8,9 @@ argument-hint: "[optional config path]"
 Run:
 
 ```bash
-python3 scripts/vistack-decision.py laya off
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/vistack-decision.py" laya off $ARGUMENTS
 ```
 
-Use `--config .claude/vistack/laya.json` when the consuming project uses Claude state. This
-turns off optional Laya refinement while keeping the deterministic viStack policy active.
+Every fork then gets the deterministic viStack policy: sharp forks still run in code and
+split forks go to the main session. The model, Jev choice, and other fields in the switch
+file are kept for the next `laya on`.

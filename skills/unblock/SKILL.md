@@ -28,6 +28,12 @@ Each attempt, without exception:
 3. **Run it**, and capture the full output.
 4. **Append a ledger row**: the hypothesis, the command, the output, the verdict.
 
+## Repeat checkpoint
+
+**Second consecutive attempt with identical evidence → consult the advisor** before stating
+the next hypothesis (`skills/advisor/SKILL.md`, checkpoint `repeat`). The advice shapes
+attempt three. It does not reset the budget or the abort count, and it is not an attempt.
+
 ## Early abort
 
 **Three consecutive attempts producing identical evidence → stop.** That pattern means the

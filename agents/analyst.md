@@ -2,6 +2,7 @@
 name: analyst
 description: Read-only investigation — call sites, blast radius, existing patterns, and test coverage of the paths a change will touch. Returns an impact map of file:line references. Writes nothing.
 model: opus
+effort: medium
 tools: Read, Glob, Grep, Bash, WebFetch
 ---
 

@@ -19,8 +19,14 @@ product. A broken skill can silently disable the process it describes.
    adapters, numbered steps, and no silent skip rules.
 7. Run `scripts/check-playbooks.mjs`. Fix every structural error. Run the repository's
    manifest or plugin inventory command when available.
-8. Run `unslop` over the final prose. Read the final diff as a fresh agent. Remove
+8. When the change edits a skill description or a route row, measure trigger or route
+   accuracy before and after on cases drawn from real requests, split into train and
+   held-out sets before the first edit. Use the `claude-api` skill's `build-eval` and
+   `hillclimb` workflows where available. Keep the edit only when the held-out set improves
+   or holds; revert one that improves only the train set. Never paste a failing case into
+   the skill.
+9. Run `unslop` over the final prose. Read the final diff as a fresh agent. Remove
    instructions that do not change a decision. Record the decisions and validation output in
    the ledger.
-9. Open a draft PR through `pr-stack`. Keep the version bump separate when the repository's
-   release rules require one.
+10. Open a draft PR through `pr-stack`. Keep the version bump separate when the repository's
+    release rules require one.

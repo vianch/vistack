@@ -15,12 +15,19 @@ feature becomes a separate unit.
 6. Delete dead code and duplicate paths before adding the new structure.
 7. Dispatch `planner` for independently verifiable slices, file ownership, and the conflict
    matrix. Migrate callers and remove an obsolete internal API in the same planned wave.
-8. Serialize shared files. Dispatch one implementer per isolated worktree. No bundled fixes,
-   new behavior, or compatibility shims without a recorded external-compatibility reason.
-9. Keep the baseline green after every slice. Run lint, tests, and an equivalence check on
-   the matching surface.
-10. Open a draft PR per slice, one concern and at most 500 changed lines. Include the baseline
+8. Run the advisor `plan` checkpoint on the pin, target shape, slices, tiers, and conflict
+   matrix before dispatch (`skills/advisor/SKILL.md`). Apply or rebut each point with
+   evidence.
+9. Serialize shared files. Dispatch one owner per isolated worktree at its planned tier. No
+   bundled fixes, new behavior, or compatibility shims without a recorded
+   external-compatibility reason.
+10. Keep the baseline green after every slice. Run lint, tests, and an equivalence check on
+    the matching surface.
+11. Open a draft PR per slice, one concern and at most 500 changed lines. Include the baseline
     evidence and reader-load improvement.
-11. Run QA spot checks and `health-check` for hidden behavior changes. Update state, ledger,
+12. Run QA spot checks and `health-check` for hidden behavior changes. Update state, ledger,
     and session record.
-12. Stop at merge-ready. Report the structure, pin, equivalence proof, and discarded work.
+13. Run the advisor `done` checkpoint on the PR set, pin, and equivalence evidence before
+    calling the run merge-ready (`skills/advisor/SKILL.md`). Resolve each gap it names or
+    record why it does not apply.
+14. Stop at merge-ready. Report the structure, pin, equivalence proof, and discarded work.

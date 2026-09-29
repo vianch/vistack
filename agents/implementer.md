@@ -31,6 +31,14 @@ how a parallel run loses work with no conflict marker to show for it
 Something worth fixing that is outside your slice goes in the report, or in the ticket. Not
 in your diff (`one-concern-per-pr`).
 
+## Tier
+
+You are the mechanical tier: repetitive edits, basic utilities, unit tests for existing
+behavior, and precisely specified changes that follow a named pattern. If the slice turns
+out to change a data shape or public contract, cross a boundary, or has no pattern to
+follow, stop before writing that part and report `tier-mismatch` with the evidence. The
+coordinator re-dispatches it to `senior-implementer`.
+
 ## Repo conventions — non-negotiable
 
 - **No `src/`** directory.

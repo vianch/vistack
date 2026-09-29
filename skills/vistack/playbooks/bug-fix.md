@@ -16,13 +16,20 @@ runtime or test evidence is not complete.
    mechanism to `file:line` before planning the fix.
 6. State the root cause in one sentence. A workaround is a ledger decision with a reason.
 7. Check every other caller of the faulty code and record the blast radius.
-8. Dispatch `implementer` in its own worktree. The scope names the cause, files, test, and
-   unchanged behavior. No bundled cleanup.
-9. Run the original reproduction, the regression test, the suite, and lint. Pass the diff
-   through comment cleanup.
-10. Open the draft PR with failing-then-passing evidence, root cause, fix, and regression
+8. When the fix touches more than one caller or crosses a boundary, run the advisor `plan`
+   checkpoint on the root cause, blast radius, and fix scope before dispatch
+   (`skills/advisor/SKILL.md`). Otherwise skip it with that reason.
+9. Dispatch the slice owner at its tier in its own worktree: `implementer`, or
+   `senior-implementer` when the fix crosses a boundary or changes a contract. The scope
+   names the cause, files, test, and unchanged behavior. No bundled cleanup.
+10. Run the original reproduction, the regression test, the suite, and lint. Pass the diff
+    through comment cleanup.
+11. Open the draft PR with failing-then-passing evidence, root cause, fix, and regression
     test. Assign the configured reviewers.
-11. Run QA on the PR preview and capture the original behavior at the assertion point.
-12. Run `health-check` to confirm the test fails when the fix is absent. Route defects back
+12. Run QA on the PR preview and capture the original behavior at the assertion point.
+13. Run `health-check` to confirm the test fails when the fix is absent. Route defects back
     to the owning slice.
-13. Update state, ledger, and session record. Stop at merge-ready.
+14. Run the advisor `done` checkpoint on the fix, regression test, and QA evidence before
+    calling the run merge-ready (`skills/advisor/SKILL.md`). Resolve each gap it names or
+    record why it does not apply.
+15. Update state, ledger, and session record. Stop at merge-ready.

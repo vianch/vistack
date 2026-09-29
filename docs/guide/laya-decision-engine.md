@@ -279,6 +279,30 @@ Use the hook only when a choice affects the workflow path.
 The caller validates the result before acting. A recommendation is not a permission to
 dispatch, merge, push, deploy, delete, change secrets, or bypass a fence.
 
+## Fork layer
+
+Laya takes the forks that need no thinker, so the main session spends its reasoning where it
+changes the outcome.
+
+| Fork | Decision type |
+|---|---|
+| which playbook | `playbook-selection` |
+| which file goes to which slice; serialize or parallelize | `decomposition` |
+| dispatch or hold | `dispatch-readiness` |
+| retry, rescope, or stop | `runtime-progress` |
+| accept or ask for more evidence | `verification` |
+
+A fork is **sharp** when the returned action is valid, its confidence meets the configured
+threshold, and every safety gate accepts it, whether the deterministic policy or a
+refinement backend produced it. A sharp fork is applied in code and its decision id is
+recorded. Any other fork is **split**: the main session decides it and records why. Judge a
+decision type sharp from held-out scenario accuracy, not from confidence alone. Which tier a
+slice gets and which tool a step uses have no decision type yet; the planner's tier rule
+decides the first.
+
+Laya never calls the advisor. The advisor's three checkpoints — before a plan, on a
+repeating error, before done — are not forks (`skills/advisor/SKILL.md`).
+
 ## History and human overrides
 
 The CLI records JSONL history at `.codex/vistack/decision-history.jsonl` by default. Pass a
@@ -346,6 +370,31 @@ it is not an MLX model-load or GPU inference measurement. With history enabled, 
 decisions took 23.0 s before the history index change and 0.56 s after it; the mean of the
 last 100 appends fell from 16.0 ms to 0.20 ms. No MLX checkpoint was installed in
 that run, so the MLX benchmark remains a machine-specific follow-up.
+
+### Hillclimbing the fork layer
+
+Move a fork from split to sharp with a measured loop, not by editing rules until today's
+failures pass.
+
+1. Build scenarios from real runs first: ledger rows, `override` records, and corrected
+   decisions. Hand-written cases come second. A case enters only when a person can say which
+   action is right.
+2. Split the scenarios into train and held-out sets before the first change. Keep the split
+   fixed.
+3. Check headroom and noise. A decision type above 95% held-out accuracy has no room to
+   climb; aim at latency or cost instead. Repeat a model-backed run to measure variance.
+4. Change one surface per round: one policy rule, one question schema, or one threshold.
+   Read train failures only, and fix the cause, not the case.
+5. Run both sets. Keep the change only when held-out accuracy improves or holds while train
+   improves. Revert a change that lifts train and leaves held-out flat.
+6. Never copy scenario text or its expected action into a policy rule. Keywords lifted from
+   a failing case are leakage.
+7. After two or three flat rounds, stop and sort the remaining failures by cause: ambiguous
+   case, wrong label, missing input field, or a fork that belongs to the main session.
+8. Report held-out accuracy against the baseline, and flag any gain inside the noise margin.
+
+`scripts/evaluate-laya.py` scores the full scenario set today. A fixed train and held-out
+split in that script is a follow-up.
 
 ## Adding a decision type
 

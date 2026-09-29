@@ -10,13 +10,16 @@ attempts and aborts early when evidence stops changing.
 3. Record the baseline command, full output, commit, worktree, and branch.
 4. For each attempt, state a distinct hypothesis, change exactly one variable, run the
    command, capture full output, and append one ledger row.
-5. Abort after three consecutive attempts with identical evidence. Do not burn the remaining
+5. On the second consecutive attempt with identical evidence, run the advisor `repeat`
+   checkpoint before choosing the next hypothesis (`skills/advisor/SKILL.md`). It shapes the
+   next attempt; it does not reset the budget or the abort count.
+6. Abort after three consecutive attempts with identical evidence. Do not burn the remaining
    budget on a loop that is not learning.
-6. Never widen scope, skip or delete tests, loosen types, add a blanket catch, force-push,
+7. Never widen scope, skip or delete tests, loosen types, add a blanket catch, force-push,
    reset shared work, or rerun an identical command. Such an attempt is void.
-7. On resolution, state the root cause with `file:line`, apply the cause-level fix, and
+8. On resolution, state the root cause with `file:line`, apply the cause-level fix, and
    rerun the original baseline. Record `root-cause-fixed` and return to the prior phase.
-8. On abort or exhaustion, write the six-part FENCE 1 dossier: blocker, baseline, attempts,
+9. On abort or exhaustion, write the six-part FENCE 1 dossier: blocker, baseline, attempts,
    ruled-out causes, remaining candidates, and the check that would settle each.
-9. Park the slice as `blocked`, update the state and session record, and let independent
-   slices continue.
+10. Park the slice as `blocked`, update the state and session record, and let independent
+    slices continue.

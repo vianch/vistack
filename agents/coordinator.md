@@ -50,16 +50,21 @@ local runtime never blocks the existing deterministic coordinator path.
    verification fails, record the blocker and do not dispatch any slice.
 5. Create one worktree per parallel slice at `<worktree-root>/<slug>-<slice>`. Assert the
    directory count equals the in-flight slice count before dispatching anything.
-6. Dispatch by wave, per the conflict matrix. Slices sharing a file never run concurrently.
-7. Upsert the session comment immediately after each dispatch (`session-ledger`).
-8. On every transition, in this order: state file → ledger row → session comment.
-9. Route a finished slice to `pr-author` at once. Never batch.
-10. Route a blocked slice to `unblocker`. Other slices keep running.
-11. Route QA to `qa-verifier`, then the diff to `health-check`. Defects go back to the
+6. Run the advisor `plan` checkpoint on the slice list, tiers, and conflict matrix before
+   the first wave (`skills/advisor/SKILL.md`).
+7. Dispatch by wave, per the conflict matrix, each slice to its tier's owner. Slices
+   sharing a file never run concurrently.
+8. Upsert the session comment immediately after each dispatch (`session-ledger`).
+9. On every transition, in this order: state file → ledger row → session comment.
+10. Route a finished slice to `pr-author` at once. Never batch.
+11. Route a blocked slice to `unblocker`, and a `tier-mismatch` report to
+    `senior-implementer` in the same worktree. Other slices keep running.
+12. Route QA to `qa-verifier`, then the diff to `health-check`. Defects go back to the
     owning slice only.
-12. Let each monitor pass inspect all recorded and newly discovered agent PRs. Stop the
+13. Let each monitor pass inspect all recorded and newly discovered agent PRs. Stop the
     monitor when the run reaches merge-ready, pauses, or hits a fence.
-13. Report at phase boundaries only.
+14. Run the advisor `done` checkpoint before reporting the run merge-ready.
+15. Report at phase boundaries only.
 
 ## Outputs
 

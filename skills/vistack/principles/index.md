@@ -16,6 +16,7 @@ The linked skill carries the rule and the failure it prevents.
 | `keep-origins-in-realm` | Every remote is `the project organization and its approved repositories`. Nothing is cloned, vendored, or fetched from outside it. |
 | `autonomy-has-fences` | Run unattended everywhere except four named cases. Inside those four, stop. |
 | `never-block-on-the-human` | Proceed with reversible work. Ask only when the answer changes behavior, a public contract, or an irreversible action. |
+| `advisor` | Consult the advisor before a large plan, when an error repeats, and before calling a long task done. Stay silent on routine turns. |
 | `make-operations-idempotent` | Reconcile before acting so retries and crashes converge to one state. |
 | `model-the-domain` | Put phases, modes, ownership, and legal transitions in data structures instead of scattered branches. |
 | `foundational-thinking` | Choose the data shape, ownership boundary, and shared scaffolding before writing dependent logic. |

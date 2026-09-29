@@ -23,24 +23,29 @@ safe. The terminal state is merge-ready draft PRs because viStack never merges.
 6. Verify the conflict matrix. Independent items branch from the base branch and run in
    parallel. Items that share a file serialize. Dependent items start from their declared
    parent after the parent reaches its required state.
-7. Dispatch one owner per item. The owner builds, tests, lints, commits, and reports the
+7. Run the advisor `plan` checkpoint on the queue, briefs, and conflict matrix before
+   dispatch (`skills/advisor/SKILL.md`). Apply or rebut each point with evidence.
+8. Dispatch one owner per item. The owner builds, tests, lints, commits, and reports the
    branch head. The coordinator remains the only writer of queue topology and run state.
-8. Drain completions as queue events. Verify the report against the branch and captured
+9. Drain completions as queue events. Verify the report against the branch and captured
    artifacts. Dispatch the next eligible item immediately. Do not wait for a human between
    reversible phases.
-9. Open a draft PR as soon as each owner finishes. Keep one concern per PR and at most 500
-   changed lines excluding lockfiles and generated files. Assign the configured reviewers.
-10. Run QA on the PR's own environment and capture evidence at every assertion point. Run
+10. Open a draft PR as soon as each owner finishes. Keep one concern per PR and at most 500
+    changed lines excluding lockfiles and generated files. Assign the configured reviewers.
+11. Run QA on the PR's own environment and capture evidence at every assertion point. Run
     the health check against the acceptance criteria and diff hunks. A green build without
     behavioral evidence is not merge-ready.
-11. When a PR is merge-ready, record its exact head SHA, evidence, and owner. Do not merge,
+12. When a PR is merge-ready, record its exact head SHA, evidence, and owner. Do not merge,
     arm auto-merge, retarget a branch, or rewrite history. Those are fences.
-12. On a failed check, failed QA scenario, review finding, stalled owner, or broken tool,
+13. On a failed check, failed QA scenario, review finding, stalled owner, or broken tool,
     route the item to its owner or `unblock`. Other independent items keep running.
-13. At each monitor tick, reread this playbook and the state file, inspect every owner and
+14. At each monitor tick, reread this playbook and the state file, inspect every owner and
     PR, and count only side effects as progress. Replace a lane that exceeds its timebox
     without a side effect. Record the replacement and reason.
-14. Stop the monitor when every queue item is merge-ready or fenced. Report the queue, owner,
+15. Run the advisor `done` checkpoint on every merge-ready item and its evidence before
+    calling the run merge-ready (`skills/advisor/SKILL.md`). Resolve each gap it names or
+    record why it does not apply.
+16. Stop the monitor when every queue item is merge-ready or fenced. Report the queue, owner,
     PR, head SHA, verdict, evidence, open gates, and ledger path.
 
 ## Finish condition

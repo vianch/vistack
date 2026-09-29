@@ -71,7 +71,8 @@ Slice: <name>
   Est. lines: <n>
   Check:      <the command or screen that verifies it>
   Depends on: <slices that must open their PR first, or none>
-  Agent:      implementer | design-implementer
+  Tier:       mechanical | complex
+  Agent:      implementer | senior-implementer | design-implementer
 ```
 
 Then the matrix, then the schedule as an ordered list of waves.

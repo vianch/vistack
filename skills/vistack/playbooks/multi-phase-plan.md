@@ -17,7 +17,8 @@ plan a fresh coordinator can execute. Do not implement while writing it.
    product decision or public contract that no experiment can settle. Record unresolved
    readings and their consequences as FENCE 2 dossiers.
 5. Write one plan section per PR or independently verifiable unit. Every section names the
-   files, owner, dependency, check, evidence, and rollback or stop condition.
+   files, owner, dependency, check, evidence, and rollback or stop condition. A unit whose
+   shape is contested or expensive to reverse gets `architect` before its section is final.
 6. Build the conflict matrix. Shared files serialize. Disjoint units may run in parallel in
    separate worktrees. Re-cut a plan whose matrix is dense.
 7. Choose `autopilot-stack`, `autopilot-full`, or `overnight` as the execution playbook and

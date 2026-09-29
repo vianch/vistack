@@ -26,8 +26,9 @@ $vistack:run|orchestrator|coordinator <request> # equivalent aliases
 ```
 
 Verification after any edit is the inventory and the structural checker:
-`node scripts/check-playbooks.mjs`. A skill or agent that fails frontmatter or path rules
-loads as *nothing*, silently, with no error.
+`node scripts/check-playbooks.mjs`, plus `python3 -m unittest discover -t .` when Python
+changed. A skill or agent that fails frontmatter or path rules loads as *nothing*, silently,
+with no error.
 
 ## Layout and load rules
 
@@ -46,6 +47,8 @@ loads as *nothing*, silently, with no error.
 | `skills/vistack/principles/index.md` | data read first on every run |
 | `agents/<name>.md` | a subagent |
 | `docs/guide/*.md` | reference prose linked from skills |
+| `skills/<name>/references/*.md` | data read by that skill, **not** skills |
+| `laya/`, `prwatch/` | Python packages behind `scripts/vistack-decision.py` and `scripts/watch-pr.py` |
 
 Codex discovers the same top-level `skills/<name>/SKILL.md` files. It does not execute the
 Claude-only `commands/` or `agents/` directories; `skills/vistack/SKILL.md` contains the host
@@ -83,8 +86,8 @@ The design is a **router → playbook → agent** chain, with all coordination s
    (`skills/advisor/SKILL.md`). It reviews; the main session ships. When the advisor tool is
    off, the `advisor` agent reviews a dossier instead.
 6. **Laya is the fork layer.** Forks that need no thinker — which playbook, which file,
-   retry or stop — go to `laya-decision`. Sharp forks run in code; split forks go to the main
-   session. Forks never reach the advisor.
+   which tier, retry or stop — go to `laya-decision`. Sharp forks run in code; split forks
+   go to the main session. Forks never reach the advisor.
 
 ### Run state (schema-bearing — see "Versioning")
 
@@ -118,6 +121,8 @@ everywhere it appears:
   serialized by the conflict matrix from `slice-plan`, never run concurrently.
 - **Host-specific state.** Codex uses `.codex/vistack/state/` and
   `.codex/vistack/worktrees/`. A run does not switch state roots when it changes hosts.
+- **Codex lanes.** Codex roles run in the thread; only a read-only or scratch-directory lane
+  fans out as its own `codex exec --ephemeral` process.
 - **Repo-agnostic.** Nothing hardcodes a repository, branch, reviewer team, or service. The
   three per-repo inputs are base branch, reviewer team, and verification target.
 - **Reuse, do not reimplement.** viStack supplies only the coordinator layer, state file,

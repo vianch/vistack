@@ -16,6 +16,7 @@ DECISION_TYPES = (
     "grooming",
     "playbook-selection",
     "decomposition",
+    "tier-selection",
     "dispatch-readiness",
     "runtime-progress",
     "verification",
@@ -44,19 +45,26 @@ PLAYBOOKS = (
     "worktree-cleanup",
     "authoring-skill",
     "automate-me",
+    "agent-design",
 )
 
 ROLES = (
     "groomer",
     "analyst",
+    "researcher",
     "planner",
     "implementer",
+    "senior-implementer",
     "design-implementer",
     "unblocker",
     "pr-author",
     "qa-verifier",
     "health-check",
     "coordinator",
+    "design-runner",
+    "reviewer",
+    "agent-designer",
+    "advisor",
 )
 
 ACTIONS_BY_TYPE = {
@@ -70,11 +78,14 @@ ACTIONS_BY_TYPE = {
     "grooming": ("ready", "needs-information", "needs-decision", "split"),
     "playbook-selection": PLAYBOOKS,
     "decomposition": ("single-slice", "sequence", "parallelize", "split"),
+    "tier-selection": ("mechanical", "complex"),
     "dispatch-readiness": ("dispatch", "hold", "clarify", "serialize"),
     "runtime-progress": ("continue", "retry", "rescope", "block", "pause", "escalate"),
     "verification": ("accept", "request-evidence", "block", "escalate"),
     "skill-improvement": ("no-change", "collect-evidence", "propose-change"),
 }
+
+TIER_ROLES = {"mechanical": "implementer", "complex": "senior-implementer"}
 
 _SENSITIVE_KEY = re.compile(r"(token|secret|password|cookie|credential|private.?key)", re.I)
 

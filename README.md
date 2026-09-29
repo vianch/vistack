@@ -21,8 +21,8 @@ the same playbooks, principles, and skill names across the two hosts.
 
 | Host | Version | Manifest |
 |---|---:|---|
-| Claude Code | `0.10.0` | `.claude-plugin/plugin.json` |
-| Codex | `0.10.0` | `.codex-plugin/plugin.json` |
+| Claude Code | `0.11.0` | `.claude-plugin/plugin.json` |
+| Codex | `0.11.0` | `.codex-plugin/plugin.json` |
 
 ### Claude Code
 
@@ -335,7 +335,7 @@ The hook is available at these decision boundaries:
 |---|---|---|
 | Intake and grooming | `intake-analysis`, `grooming` | readiness fields and FENCE 2 |
 | Route matching | `playbook-selection` | the playbook table and selected playbook |
-| Slice planning | `decomposition` | file ownership, conflict matrix, 500-line limit |
+| Slice planning | `decomposition`, `tier-selection` | file ownership, conflict matrix, 500-line limit, tier rule |
 | Pre-dispatch and monitoring | `dispatch-readiness`, `runtime-progress` | coordinator state, dependencies, monitor, ledger |
 | QA | `verification` | artifacts mapped to acceptance criteria |
 | Retrospective review | `skill-improvement` | explicit human review and an evidence-backed change |
@@ -452,6 +452,7 @@ files are the source of truth, so they are not restated here.
 | [`multi-phase-plan`](skills/vistack/playbooks/multi-phase-plan.md) | large or cross-cutting work that needs a durable execution plan |
 | [`authoring-skill`](skills/vistack/playbooks/authoring-skill.md) | creating or modifying a workflow contract |
 | [`automate-me`](skills/vistack/playbooks/automate-me.md) | capturing working preferences in a reusable mode skill |
+| [`agent-design`](skills/vistack/playbooks/agent-design.md) | a new agent, bot, or subagent for Claude Code, Codex, or OpenCode |
 | [`worktree-cleanup`](skills/vistack/playbooks/worktree-cleanup.md) | an evidence-based audit of stale worktrees |
 
 Specialist skills include [`visualizer`](skills/visualizer/SKILL.md) for starting, stopping,
@@ -477,6 +478,9 @@ and inspecting the local workflow observer.
 | [`qa-verifier`](agents/qa-verifier.md) | the QA contract: scenarios from the diff, screenshots, results table | `sonnet` | session |
 | [`health-check`](agents/health-check.md) | adversarial audit of the diff against the acceptance criteria | `haiku` | — |
 | [`advisor`](agents/advisor.md) | fallback reviewer when the advisor tool is off: plan, repeat, done | `fable` | `xhigh` |
+| [`design-runner`](agents/design-runner.md) | one independent `architect` candidate: usage first, then types and a rationale | `opus` | session |
+| [`reviewer`](agents/reviewer.md) | one independent `interrogate` reviewer, or the `architect` judge. Read-only | `opus` | session |
+| [`agent-designer`](agents/agent-designer.md) | designs one new Claude Code, Codex, or OpenCode agent and verifies it loads | `opus` | session |
 
 Models and effort sit in agent frontmatter, not in a run. The rule behind the split: put the
 model where the *uncertainty* is. The main session runs Opus 5.5 at `xhigh` and plans,
@@ -492,7 +496,7 @@ reads the whole session                 plans + decides
   ◇ before a plan ───────────────────▶        │
                                               ▼
                                  laya · fork layer
-                                 which playbook · which file · retry or stop
+                                 which playbook · which file · which tier · retry or stop
                                  sharp → runs in code     split → Opus
                                               │
                           delegate · medium effort, complex code at xhigh
@@ -519,6 +523,9 @@ invokes a principle must name the decision the principle changed.
 
 [`coordinate`](skills/coordinate/SKILL.md) (dispatch, state, ledger) ·
 [`advisor`](skills/advisor/SKILL.md) (the three checkpoints) ·
+[`architect`](skills/architect/SKILL.md) (design before code) ·
+[`interrogate`](skills/interrogate/SKILL.md) (adversarial multi-reviewer pass) ·
+[`figma-sync`](skills/figma-sync/SKILL.md) (the live Figma line) ·
 [`slice-plan`](skills/slice-plan/SKILL.md) (decomposition, conflict matrix) ·
 [`unblock`](skills/unblock/SKILL.md) (the bounded loop) ·
 [`qa-verify`](skills/qa-verify/SKILL.md) (the QA contract) ·
@@ -529,8 +536,11 @@ invokes a principle must name the decision the principle changed.
 [`build-the-lever`](skills/build-the-lever/SKILL.md) (rerunnable checks) ·
 [`unslop`](skills/unslop/SKILL.md) (concrete prose).
 
-Direct entries include [`overnight`](skills/overnight/SKILL.md) and
-[`automate-me`](skills/automate-me/SKILL.md).
+Direct entries include [`overnight`](skills/overnight/SKILL.md),
+[`automate-me`](skills/automate-me/SKILL.md), [`design-agent`](skills/design-agent/SKILL.md),
+[`transcript-healthcheck`](skills/transcript-healthcheck/SKILL.md), and
+[`routine-healthcheck`](skills/routine-healthcheck/SKILL.md). How much design a change deserves:
+[`docs/guide/design.md`](docs/guide/design.md).
 
 ---
 

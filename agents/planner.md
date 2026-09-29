@@ -25,6 +25,10 @@ permits parallel writers when the matrix shows a conflict. If the hook is disabl
 unavailable, use the deterministic slice-plan rules and record that fallback when history is
 enabled.
 
+Call `tier-selection` per slice with its request, the named pattern, and the
+`changes_data_shape`, `changes_public_contract`, and `crosses_boundary` flags. Apply a sharp
+answer. Decide a split one yourself, and treat an unclear tier as complex.
+
 ## What you do
 
 1. Group the acceptance criteria by the reason for the change. One reason is one slice.

@@ -9,7 +9,8 @@ owner stays responsible for the design and reviews delegated implementation.
    criterion that changes behavior or a public contract is FENCE 2.
 2. State the finish predicate and unchanged behavior.
 3. Run a read-only architecture pass over the affected subsystem. Name the data shape and
-   organizing structure before logic. Reuse existing patterns.
+   organizing structure before logic. Reuse existing patterns. When the change crosses
+   function boundaries or moves ownership, run `architect` (`skills/architect/SKILL.md`).
 4. Write the throughput checkpoint with four entries: blocking steps, independent
    workstreams, shared mutable state, and the smallest safe decomposition. Keep an `n/a`
    reason for a dimension that does not apply.

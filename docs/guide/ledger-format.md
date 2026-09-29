@@ -57,6 +57,8 @@ Free text is allowed, but these carry meaning elsewhere in the plugin:
 | `advisor-consulted` | main session or `coordinator` | the advisor reviewed a checkpoint; `reason` is `plan`, `repeat`, or `done` |
 | `advisor-unavailable` | any | a checkpoint ran with no advisor; `result` is `skipped` |
 | `tier-escalated` | `coordinator` | a mechanical slice was re-dispatched to `senior-implementer` after `tier-mismatch` |
+| `design-synthesized` | `architect` | the synthesized design and its rationale exist; `evidence` is the rationale path |
+| `interrogated` | `interrogate` | a multi-reviewer verdict exists; `evidence` is the verdict path |
 
 ### Worked rows
 

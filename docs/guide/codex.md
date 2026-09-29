@@ -42,6 +42,10 @@ Codex does not load Claude's `commands/` or `agents/` directories as executable 
 The shared router therefore adapts the same playbooks to the current Codex thread:
 
 - `Dispatch <role>` means adopt that role's contract in the current thread.
+- A read-only or scratch-directory lane — a reviewer, a design runner, a judge — runs as its
+  own `codex exec --ephemeral -m <model>` process so it keeps an independent context. The
+  model is the one Codex runs, Luna (`gpt-6-luna`). Roles that write to a worktree stay in
+  the thread.
 - Playbook steps remain the source of truth and are followed in order.
 - Run state and the decision ledger live under `.codex/vistack/state/`.
 - Slice worktrees live under `.codex/vistack/worktrees/`.

@@ -21,8 +21,9 @@ the same playbooks, principles, and skill names across the two hosts.
 
 | Host | Version | Manifest |
 |---|---:|---|
-| Claude Code | `0.11.0` | `.claude-plugin/plugin.json` |
-| Codex | `0.11.0` | `.codex-plugin/plugin.json` |
+| Claude Code | `0.12.0` | `.claude-plugin/plugin.json` |
+| Codex | `0.12.0` | `.codex-plugin/plugin.json` |
+| Grok | `0.12.0` | `.grok-plugin/plugin.json` |
 
 ### Claude Code
 

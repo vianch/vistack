@@ -59,3 +59,30 @@ def proposals(path: str | Path, *, minimum_repeats: int = 3) -> list[dict[str, A
             }
         )
     return result
+
+
+def fork_summary(path: str | Path) -> dict[str, Any]:
+    """How many forks each decision type saw, how many ran in code, and who answered them."""
+
+    decisions = [item.get("decision", {}) for item in HistoryStore(path).records() if item.get("kind") == "decision"]
+    by_type: dict[str, dict[str, Any]] = {}
+    for decision in decisions:
+        bucket = by_type.setdefault(
+            decision.get("decision_type", "unknown"),
+            {"forks": 0, "sharp": 0, "split": 0, "confidence_sum": 0.0, "backends": Counter()},
+        )
+        # Records written before the fork field existed count as neither.
+        fork = decision.get("fork")
+        bucket["forks"] += 1
+        if fork in ("sharp", "split"):
+            bucket[fork] += 1
+        bucket["confidence_sum"] += float(decision.get("confidence", 0.0) or 0.0)
+        bucket["backends"][decision.get("backend", "unknown")] += 1
+    for bucket in by_type.values():
+        bucket["mean_confidence"] = round(bucket.pop("confidence_sum") / bucket["forks"], 4)
+        bucket["sharp_rate"] = round(bucket["sharp"] / bucket["forks"], 4)
+        bucket["backends"] = dict(bucket["backends"])
+    total = sum(bucket["forks"] for bucket in by_type.values())
+    sharp = sum(bucket["sharp"] for bucket in by_type.values())
+    split = sum(bucket["split"] for bucket in by_type.values())
+    return {"forks": total, "sharp": sharp, "split": split, "by_type": dict(sorted(by_type.items()))}

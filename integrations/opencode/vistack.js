@@ -10,10 +10,13 @@ const DECISION_TYPES = [
   "grooming",
   "playbook-selection",
   "decomposition",
+  "tier-selection",
   "dispatch-readiness",
   "runtime-progress",
   "verification",
   "skill-improvement",
+  "tool-selection",
+  "file-selection",
 ]
 
 function runPython(directory, arguments_, input, timeoutMs = 3000) {

@@ -91,13 +91,40 @@ class DecisionEngineTests(unittest.TestCase):
         )
         self.assertEqual(accepted.action, "accept")
 
+    def split_fork(self):
+        return self.context("tier-selection", task={"request": "Update the order summary panel"})
+
     def test_unavailable_mlx_falls_back(self):
-        result = DecisionEngine(backend="mlx", model="/definitely/missing/model").decide(
-            self.context("runtime-progress", current_state={"phase": "implementing"})
-        )
+        result = DecisionEngine(backend="mlx", model="/definitely/missing/model").decide(self.split_fork())
         self.assertEqual(result.backend, "deterministic-fallback")
         self.assertTrue(result.fallback_used)
+        self.assertEqual(result.action, "complex")
+        self.assertEqual(result.fork, "split")
+
+    def test_sharp_fork_runs_in_code_without_a_model_turn(self):
+        class RecordingBackend:
+            calls = 0
+
+            def predict(self, state, questions):
+                self.calls += 1
+                return {"answers": {"next": {"type": "choice", "choice": "pause", "confidence": 0.99}}}
+
+        engine = DecisionEngine(backend="mlx", model="configured")
+        engine._mlx = RecordingBackend()
+        result = engine.decide(self.context("runtime-progress", current_state={"phase": "implementing"}))
+        self.assertEqual((result.action, result.backend, result.fork), ("continue", "deterministic", "sharp"))
+        self.assertEqual(engine._mlx.calls, 0)
+
+    def test_consult_always_records_a_model_opinion_without_applying_it(self):
+        class DisagreeingBackend:
+            def predict(self, state, questions):
+                return {"answers": {"next": {"type": "choice", "choice": "pause", "confidence": 0.99}}}
+
+        engine = DecisionEngine(backend="mlx", model="configured", consult="always")
+        engine._mlx = DisagreeingBackend()
+        result = engine.decide(self.context("runtime-progress", current_state={"phase": "implementing"}))
         self.assertEqual(result.action, "continue")
+        self.assertEqual(result.outputs["model_opinion"], {"backend": "laya-mlx", "action": "pause", "confidence": 0.99, "agrees": False})
 
     def test_environment_disable_cannot_be_bypassed_by_explicit_mlx(self):
         previous = os.environ.get("VISTACK_LAYA_ENABLED")
@@ -122,7 +149,7 @@ class DecisionEngineTests(unittest.TestCase):
 
         engine = DecisionEngine(backend="mlx", model="configured", timeout_ms=5)
         engine._mlx = SlowBackend()
-        result = engine.decide(self.context("runtime-progress", current_state={"phase": "implementing"}))
+        result = engine.decide(self.split_fork())
         self.assertTrue(result.fallback_used)
         self.assertIn("exceeded", result.fallback_reason)
 
@@ -131,21 +158,22 @@ class DecisionEngineTests(unittest.TestCase):
             def predict(self, state, questions):
                 return {
                     "answers": {
-                        "next": {
+                        "tier": {
                             "type": "choice",
-                            "choice": "continue",
+                            "choice": "mechanical",
                             "confidence": 0.91,
-                            "probabilities": {"continue": 0.91, "block": 0.09},
+                            "probabilities": {"mechanical": 0.91, "complex": 0.09},
                         }
                     }
                 }
 
         engine = DecisionEngine(backend="mlx", model="configured")
         engine._mlx = FakeBackend()
-        result = engine.decide(self.context("runtime-progress", current_state={"phase": "implementing"}))
+        result = engine.decide(self.split_fork())
         self.assertEqual(result.backend, "laya-mlx")
         self.assertFalse(result.fallback_used)
-        self.assertEqual(result.action, "continue")
+        self.assertEqual(result.action, "mechanical")
+        self.assertEqual(result.fork, "sharp")
 
     def test_configured_local_fallback_can_refine_after_primary_failure(self):
         class FailingBackend:
@@ -156,11 +184,11 @@ class DecisionEngineTests(unittest.TestCase):
             def predict(self, state, questions):
                 return {
                     "answers": {
-                        "next": {
+                        "tier": {
                             "type": "choice",
-                            "choice": "continue",
+                            "choice": "mechanical",
                             "confidence": 0.91,
-                            "probabilities": {"continue": 0.91, "block": 0.09},
+                            "probabilities": {"mechanical": 0.91, "complex": 0.09},
                         }
                     }
                 }
@@ -174,7 +202,7 @@ class DecisionEngineTests(unittest.TestCase):
         engine._mlx = FailingBackend()
         engine._fallback_backend = KevBackend()
         engine._fallbacks = [("kev", engine._fallback_backend)]
-        result = engine.decide(self.context("runtime-progress", current_state={"phase": "implementing"}))
+        result = engine.decide(self.split_fork())
         self.assertEqual(result.backend, "kev")
         self.assertTrue(result.fallback_used)
         self.assertIn("laya-mlx unavailable", result.fallback_reason)
@@ -184,18 +212,18 @@ class DecisionEngineTests(unittest.TestCase):
             def predict(self, state, questions):
                 return {
                     "answers": {
-                        "next": {
+                        "tier": {
                             "type": "choice",
-                            "choice": "continue",
+                            "choice": "mechanical",
                             "confidence": 0.2,
-                            "probabilities": {"continue": 0.6, "block": 0.4},
+                            "probabilities": {"mechanical": 0.6, "complex": 0.4},
                         }
                     }
                 }
 
         engine = DecisionEngine(backend="mlx", model="configured")
         engine._mlx = FakeBackend()
-        result = engine.decide(self.context("runtime-progress", current_state={"phase": "implementing"}))
+        result = engine.decide(self.split_fork())
         self.assertEqual(result.backend, "deterministic-fallback")
         self.assertIn("below", result.fallback_reason)
 

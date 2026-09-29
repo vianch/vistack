@@ -7,15 +7,16 @@ import json
 from pathlib import Path
 import sys
 
-from .engine import DecisionEngine
-from .config import DEFAULT_CONFIG_PATH, read_settings, write_enabled
-from .feedback import analyze, proposals
+from .engine import BACKENDS, CONSULT_MODES, FALLBACKS, DecisionEngine
+from .config import default_history_path, read_settings, resolve_config_path, write_enabled
+from .feedback import analyze, fork_summary, proposals
 from .history import HistoryStore
 from .schema import DECISION_TYPES
 from .server import serve
 
 
-DEFAULT_HISTORY = ".codex/vistack/decision-history.jsonl"
+def _history(args: argparse.Namespace) -> str:
+    return args.history or default_history_path()
 
 
 def _engine(args: argparse.Namespace) -> DecisionEngine:
@@ -29,12 +30,15 @@ def _engine(args: argparse.Namespace) -> DecisionEngine:
         effort=args.effort,
         kev_url=args.kev_url or settings.kev_url,
         kev_model=args.kev_model or settings.kev_model or "kev-latest",
+        jev=settings.jev if args.jev is None else args.jev,
+        jev_model=args.jev_model or settings.jev_model,
+        consult=args.consult or settings.consult,
         fallback=args.fallback or settings.fallback,
         dtype=args.dtype,
         device=args.device,
         min_confidence=args.min_confidence,
         timeout_ms=args.timeout_ms,
-        history_path=None if args.no_history else args.history,
+        history_path=None if args.no_history else _history(args),
     )
 
 
@@ -47,21 +51,24 @@ def _json_context(args: argparse.Namespace) -> dict:
 
 
 def _add_runtime_options(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--backend", choices=("auto", "deterministic", "mlx", "kev", "host-llm"), default="auto")
-    parser.add_argument("--model", help="local checkpoint directory or Hugging Face model id")
+    parser.add_argument("--backend", choices=BACKENDS, default="auto")
+    parser.add_argument("--model", help="Hugging Face id, owner/repo/subfolder, or a local checkpoint directory")
     parser.add_argument("--host", choices=("claude", "codex"), help="host CLI for the explicit cloud fallback")
     parser.add_argument("--host-model", help="host fallback model override")
     parser.add_argument("--effort", choices=("low", "medium", "high"), default="low")
-    parser.add_argument("--fallback", choices=("none", "kev", "host-llm"), help="fallback after MLX is unavailable")
+    parser.add_argument("--fallback", choices=FALLBACKS, help="tiers after the primary; none keeps the primary only")
     parser.add_argument("--kev-url", help="local Kev server URL, e.g. http://127.0.0.1:8009")
     parser.add_argument("--kev-model", help="Kev model name")
+    parser.add_argument("--jev", action=argparse.BooleanOptionalAction, default=None, help="opt into hosted TypeSafe Jev")
+    parser.add_argument("--jev-model", help="Jev model, default jev-latest")
+    parser.add_argument("--consult", choices=CONSULT_MODES, help="always also records a model opinion on sharp forks")
     parser.add_argument("--dtype", choices=("float16", "float32", "bfloat16"), default="float16")
     parser.add_argument("--device", choices=("cpu", "gpu", "metal"))
     parser.add_argument("--min-confidence", type=float, default=0.65)
     parser.add_argument("--timeout-ms", type=int, default=2000)
-    parser.add_argument("--config", default=DEFAULT_CONFIG_PATH)
+    parser.add_argument("--config", help="switch file; defaults to the host's state root")
     parser.add_argument("--disable-laya", action="store_true", help="force deterministic policy for this request")
-    parser.add_argument("--history", default=DEFAULT_HISTORY)
+    parser.add_argument("--history", help="decision history; defaults to the host's state root")
     parser.add_argument("--no-history", action="store_true")
 
 
@@ -84,22 +91,75 @@ def build_parser() -> argparse.ArgumentParser:
     override.add_argument("--reason", required=True)
     override.add_argument("--outcome")
     override.add_argument("--recommended-action")
-    override.add_argument("--history", default=DEFAULT_HISTORY)
+    override.add_argument("--history")
 
     outcome = commands.add_parser("outcome", help="record a decision outcome")
     outcome.add_argument("decision_id")
     outcome.add_argument("outcome")
     outcome.add_argument("--evidence", action="append", default=[])
-    outcome.add_argument("--history", default=DEFAULT_HISTORY)
+    outcome.add_argument("--history")
 
     feedback = commands.add_parser("feedback", help="summarize decisions and propose policy reviews")
-    feedback.add_argument("--history", default=DEFAULT_HISTORY)
+    feedback.add_argument("--history")
     feedback.add_argument("--minimum-repeats", type=int, default=3)
 
-    toggle = commands.add_parser("laya", help="show or change the default-on Laya switch")
-    toggle.add_argument("action", choices=("on", "off", "status"))
-    toggle.add_argument("--config", default=DEFAULT_CONFIG_PATH)
+    forks = commands.add_parser("forks", help="tally forks per decision type: sharp, split, backend")
+    forks.add_argument("--history")
+
+    toggle = commands.add_parser("laya", help="show, change, or install the default-on Laya refinement")
+    toggle.add_argument("action", choices=("on", "off", "status", "setup"))
+    toggle.add_argument("--config", help="switch file; defaults to the host's state root")
+    toggle.add_argument("--model", help="on/setup: the checkpoint to use")
+    toggle.add_argument("--jev", action=argparse.BooleanOptionalAction, default=None, help="on: opt this project into Jev")
+    toggle.add_argument("--probe", action="store_true", help="status: make one tiny Jev call to prove key and credits")
+    toggle.add_argument("--dry-run", action="store_true", help="setup: print the commands only")
     return parser
+
+
+def _status(args: argparse.Namespace) -> dict:
+    from . import runtime
+    from .system_one import default_status_path, jev_api_key, read_status
+
+    settings = read_settings(args.config)
+    engine = DecisionEngine(
+        backend="auto" if settings.enabled else "deterministic",
+        model=settings.model,
+        kev_url=settings.kev_url,
+        jev=settings.jev,
+        fallback=settings.fallback,
+        host=settings.host,
+        consult=settings.consult,
+    )
+    refused = read_status(default_status_path())
+    report = {
+        "enabled": settings.enabled,
+        "config": str(resolve_config_path(args.config)),
+        "source": settings.source,
+        "ladder": ["deterministic", *(name for name, _ in engine.ladder())],
+        "consult": engine.consult,
+        "python": sys.executable,
+        "laya_mlx": runtime.runtime_available(),
+        "model": engine.model,
+        "checkpoint_cached": runtime.checkpoint_cached(engine.model),
+        "jev": {"enabled": engine.jev, "key": bool(jev_api_key()), "refused": refused or None},
+        "fallback": settings.fallback,
+        "host": settings.host,
+        "host_model": settings.host_model,
+        "kev_url": settings.kev_url,
+        "kev_model": settings.kev_model,
+    }
+    tally = fork_summary(default_history_path())
+    report["forks"] = {
+        "forks": tally["forks"],
+        "sharp": tally["sharp"],
+        "split": tally["split"],
+        "by_type": {name: {key: bucket[key] for key in ("forks", "sharp", "mean_confidence")} for name, bucket in tally["by_type"].items()},
+    }
+    if engine.model and not report["laya_mlx"]:
+        report["hint"] = "run `vistack-decision.py laya setup`, or set VISTACK_LAYA_PYTHON to a Python with laya-mlx"
+    if args.probe:
+        report["jev"]["probe"] = runtime.probe_jev()
+    return report
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -116,28 +176,23 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.command == "laya":
         if args.action in {"on", "off"}:
-            path = write_enabled(args.config, args.action == "on")
-            print(json.dumps({"enabled": args.action == "on", "config": str(path)}, sort_keys=True))
+            path = write_enabled(args.config, args.action == "on", model=args.model, jev=args.jev)
+            print(json.dumps({**_status(argparse.Namespace(config=str(path), probe=False)), "config": str(path)}, sort_keys=True))
+        elif args.action == "setup":
+            from .runtime import setup
+
+            result = setup(args.model or read_settings(args.config).model, dry_run=args.dry_run)
+            print(json.dumps(result, indent=2, sort_keys=True))
+            if not result["ok"]:
+                raise SystemExit(1)
         else:
-            settings = read_settings(args.config)
-            print(
-                json.dumps(
-                    {
-                        "enabled": settings.enabled,
-                        "model": settings.model,
-                        "fallback": settings.fallback,
-                        "host": settings.host,
-                        "host_model": settings.host_model,
-                        "kev_url": settings.kev_url,
-                        "kev_model": settings.kev_model,
-                        "source": settings.source,
-                        "config": args.config,
-                    },
-                    sort_keys=True,
-                )
-            )
+            print(json.dumps(_status(args), sort_keys=True))
         return
-    store = HistoryStore(args.history)
+    if args.command == "forks":
+        print(json.dumps(fork_summary(_history(args)), indent=2, sort_keys=True))
+        return
+    history = _history(args)
+    store = HistoryStore(history)
     if args.command == "override":
         changed = store.record_override(
             args.decision_id,
@@ -146,16 +201,16 @@ def main(argv: list[str] | None = None) -> None:
             args.outcome,
             args.recommended_action,
         )
-        print(json.dumps({"recorded": changed, "history": args.history}, sort_keys=True))
+        print(json.dumps({"recorded": changed, "history": history}, sort_keys=True))
         return
     if args.command == "outcome":
         changed = store.record_outcome(args.decision_id, args.outcome, args.evidence)
-        print(json.dumps({"recorded": changed, "history": args.history}, sort_keys=True))
+        print(json.dumps({"recorded": changed, "history": history}, sort_keys=True))
         return
     if args.command == "feedback":
         print(
             json.dumps(
-                {"summary": analyze(args.history), "proposals": proposals(args.history, minimum_repeats=args.minimum_repeats)},
+                {"summary": analyze(history), "proposals": proposals(history, minimum_repeats=args.minimum_repeats)},
                 indent=2,
                 sort_keys=True,
             )

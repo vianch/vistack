@@ -66,18 +66,17 @@ class TierSelectionTests(unittest.TestCase):
 
     def test_model_cannot_downgrade_evidenced_complex_work(self):
         result = refined(tier_context("Rotate the refresh token on every request"), "mechanical")
-        self.assertEqual(result.action, "complex")
-        self.assertTrue(result.fallback_used)
+        self.assertEqual((result.action, result.fork, result.backend), ("complex", "sharp", "deterministic"))
 
     def test_model_can_settle_an_unclear_tier(self):
         result = refined(tier_context("Update the order summary panel"), "mechanical")
         self.assertEqual(result.action, "mechanical")
         self.assertEqual(result.outputs["role"], "implementer")
 
-    def test_model_can_raise_mechanical_work_to_complex(self):
+    def test_sharp_mechanical_work_is_not_re_read_by_a_model(self):
         result = refined(tier_context("Add unit tests for the date util", pattern="lib/date.test.ts:3"), "complex")
-        self.assertEqual(result.action, "complex")
-        self.assertEqual(result.outputs["role"], "senior-implementer")
+        self.assertEqual((result.action, result.fork), ("mechanical", "sharp"))
+        self.assertEqual(result.outputs["role"], "implementer")
 
     def test_dispatch_keeps_the_senior_implementer_role(self):
         result = decide(

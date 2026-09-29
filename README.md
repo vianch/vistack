@@ -286,12 +286,16 @@ The data flow is deliberately one-way:
 ```text
 task and viStack state
         -> DecisionContext
-        -> deterministic policy
-        -> optional local Laya typed questions
-        -> safety validation
-        -> advisory Decision
+        -> deterministic policy          sharp -> runs in code
+        -> split forks only: Jev (opt-in) -> local Laya -> Kev -> host CLI
+        -> safety validation             sharp -> runs in code
+        -> advisory Decision             split -> the main session decides
         -> existing viStack rule and coordinator
 ```
+
+Every `Decision` says `fork: sharp` or `fork: split`. Sharp forks — which playbook, which
+file, which tool, which tier, retry or stop — are applied without a model turn; only split
+forks reach the main session.
 
 The engine is enabled by default. Default-on means the decision hook is allowed to run; it
 does not mean a model download or cloud request happens automatically. With no configured
@@ -352,22 +356,30 @@ To reduce latency for repeated decisions, run one resident process:
 python3 scripts/vistack-decision.py serve
 ```
 
-The optional MLX runtime is installed separately on Apple Silicon:
+The optional MLX runtime is installed into its own venv on Apple Silicon:
 
 ```bash
-python3 -m pip install laya-mlx
-export VISTACK_LAYA_MODEL=aac6fef/laya-mlx
+python3 scripts/vistack-decision.py laya setup      # or /vistack:laya-setup
+export VISTACK_LAYA_MODEL=convaiinnovations/laya
 ```
 
-The first model setup downloads weights; subsequent inference is local. A missing runtime,
-bad checkpoint, malformed result, timeout, low-confidence result, or failed safety gate all
-return the deterministic fallback. No cloud LLM is required for the decision layer.
+The setup downloads the weights once; subsequent inference is local, and the entry scripts
+switch to that venv on their own. A missing runtime, bad checkpoint, malformed result,
+timeout, low-confidence result, or failed safety gate all return the deterministic fallback.
+No cloud LLM is required for the decision layer.
+
+Hosted [Jev](https://docs.typesafe.ai/models) is the strongest split-fork reader measured so
+far — 7 of 10 labelled split forks settled, none wrong, in about 350 ms — and it is opt-in
+because it sends the redacted decision state to TypeSafe: `laya on --jev` for a project or
+`VISTACK_LAYA_JEV=1` for a shell, with the key in `TYPESAFE_API_KEY` or `TYPESAFE_KEY`. An
+opted-in Jev leads the ladder, and the local checkpoint answers when Jev is refused or
+offline. See the guide for the checkpoint comparison.
 
 If MLX is not available, [Kev](https://github.com/jaredpalmer/kev) is the recommended local
 fallback. Kev uses the same typed decision primitives and serves on localhost. Start its
 server separately, then configure `--kev-url http://127.0.0.1:8009`; with `--fallback kev`,
-the order is Laya-MLX, Kev, and deterministic policy. Kev is a separate PyTorch service, so
-it remains optional and does not enlarge the normal viStack install. Its 0.8B checkpoint is
+the order is Laya-MLX, Kev, and deterministic policy, after Jev when it is opted in. Kev is
+a separate PyTorch service, so it remains optional and does not enlarge the normal viStack install. Its 0.8B checkpoint is
 the sensible latency-first starting point on Apple Silicon; benchmark the exact checkpoint
 and machine before making it a resident service.
 
@@ -396,8 +408,9 @@ schema, runtime research, benchmarks, failure behavior, and extension procedure.
 
 ### Host integrations
 
-- Claude Code and Codex use the shared Python CLI and `laya-on`, `laya-off`, and
-  `laya-status` commands.
+- Claude Code and Codex use the shared Python CLI and `laya-on`, `laya-off`,
+  `laya-status`, and `laya-setup` commands. The Claude commands run the plugin's script
+  through `${CLAUDE_PLUGIN_ROOT}`, so they work from any consuming project.
 - Grok Build support is declared in `.grok-plugin/plugin.json` and uses the same skills,
   agents, commands, and local decision switch. The xAI marketplace entry must be pinned to
   the published commit SHA; generate it with

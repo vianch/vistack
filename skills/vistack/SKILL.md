@@ -99,23 +99,26 @@ sequentially in the thread and the model column does not apply.
 ## Optional local decision engine
 
 The repository includes an advisory local decision engine at `laya/` and
-`scripts/vistack-decision.py`. It is enabled by default. When `laya-mlx` and a model are not
-configured, `auto` still returns the deterministic policy. Use it only when a choice changes routing, readiness,
+`scripts/vistack-decision.py`. It is enabled by default. When no model, Kev server, or
+opted-in Jev is configured, `auto` still returns the deterministic policy. Use it only when a choice changes routing, readiness,
 decomposition, dispatch, runtime recovery, verification, or future rule review. It is not a
 coding agent and it never replaces the router, coordinator, state, ledger, worktrees,
 evidence gates, or merge boundary.
 
-Laya is the fork layer. Which playbook, which file goes to which slice, which tier, dispatch
-or hold, and retry or stop are forks that need no thinker. A sharp fork — a valid action at
+Laya is the fork layer. Which playbook, which file goes to which slice, which file or tool
+the next step uses, which tier, dispatch or hold, and retry or stop are forks that need no
+thinker. A sharp fork — a valid action at
 or above the confidence threshold that every safety gate accepts — is applied in code
 without a model turn. A split fork returns to the main session, which decides and records
 why. Forks never reach the advisor.
 
 The engine receives a bounded `DecisionContext` and returns a typed `Decision`. The
-deterministic viStack policy runs first. An optional local Laya-MLX answer may refine it only
-when the action is valid, confidence meets the configured threshold, and the existing
-deterministic safety gates accept it. A missing model, unavailable MLX runtime, timeout,
-malformed answer, low confidence, or rejected gate uses the deterministic result.
+deterministic viStack policy runs first; a confident answer is sharp and no model is asked.
+A split answer climbs the ladder — opted-in Jev, then local Laya-MLX, Kev, and an opted-in
+host CLI — and a tier settles it only when the action is valid, confidence meets the
+configured threshold, and the existing deterministic safety gates accept it. A missing
+model, refused key, timeout, malformed answer, low confidence, or rejected gate leaves the
+fork split, and the `Decision` says so in `fork`.
 
 Call the hook at these boundaries:
 
@@ -126,6 +129,7 @@ Call the hook at these boundaries:
 | slice planning | `decomposition`, `tier-selection` | file ownership, conflict matrix, the 500-line limit, and the planner's tier rule |
 | pre-dispatch and monitoring | `dispatch-readiness`, `runtime-progress` | coordinator state, dependencies, monitor, and ledger |
 | QA | `verification` | captured artifacts tied to each acceptance criterion |
+| a step inside a slice | `tool-selection`, `file-selection` | the slice's writable files and the fences |
 | retrospective review | `skill-improvement` | explicit human review; no automatic skill edits |
 
 Record the returned decision id, backend, confidence, fallback status, and evidence pointer

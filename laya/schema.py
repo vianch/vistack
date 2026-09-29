@@ -21,7 +21,14 @@ DECISION_TYPES = (
     "runtime-progress",
     "verification",
     "skill-improvement",
+    "tool-selection",
+    "file-selection",
 )
+
+# These forks choose among options the caller supplies in ``available_actions``: the tools a
+# step may use, or the candidate files it may open. They have no fixed vocabulary.
+OPEN_ACTION_TYPES = ("tool-selection", "file-selection")
+FORKS = ("sharp", "split")
 
 PLAYBOOKS = (
     "intake",
@@ -83,6 +90,8 @@ ACTIONS_BY_TYPE = {
     "runtime-progress": ("continue", "retry", "rescope", "block", "pause", "escalate"),
     "verification": ("accept", "request-evidence", "block", "escalate"),
     "skill-improvement": ("no-change", "collect-evidence", "propose-change"),
+    "tool-selection": (),
+    "file-selection": (),
 }
 
 TIER_ROLES = {"mechanical": "implementer", "complex": "senior-implementer"}
@@ -171,6 +180,8 @@ class DecisionContext:
         available = value.get("available_actions", ())
         if not isinstance(available, (list, tuple)) or not all(isinstance(item, str) for item in available):
             raise ValueError("available_actions must be a list of strings")
+        if selected_type in OPEN_ACTION_TYPES and not available:
+            raise ValueError(f"{selected_type} requires the candidate options in available_actions")
         return cls(
             decision_type=selected_type,
             task=redact(value.get("task", {})),
@@ -215,6 +226,8 @@ class Decision:
     backend: str
     fallback_used: bool
     fallback_reason: str | None
+    # ``sharp`` runs in code; ``split`` goes back to the main session to decide.
+    fork: str = "split"
     created_at: str = field(default_factory=utc_now)
     schema_version: str = SCHEMA_VERSION
     authority: str = "advisory-only"
@@ -224,8 +237,13 @@ class Decision:
             raise ValueError(f"unsupported decision schema_version {self.schema_version!r}")
         if self.decision_type not in DECISION_TYPES:
             raise ValueError(f"unknown decision type {self.decision_type!r}")
-        if self.action not in ACTIONS_BY_TYPE[self.decision_type]:
+        if self.decision_type in OPEN_ACTION_TYPES:
+            if self.action not in available_actions:
+                raise ValueError(f"action {self.action!r} is not one of the supplied options")
+        elif self.action not in ACTIONS_BY_TYPE[self.decision_type]:
             raise ValueError(f"action {self.action!r} is not valid for {self.decision_type}")
+        if self.fork not in FORKS:
+            raise ValueError("fork must be sharp or split")
         if available_actions and self.action not in available_actions:
             raise ValueError(f"action {self.action!r} is not available in this context")
         if not 0.0 <= float(self.confidence) <= 1.0:

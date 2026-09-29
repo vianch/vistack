@@ -5,8 +5,25 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from .policy import score_classes, select_playbook
-from .schema import DecisionContext, PLAYBOOKS, ROLES, redact
+from .policy import option_descriptions, score_classes, select_playbook
+from .schema import DecisionContext, PLAYBOOKS, redact
+
+# Laya documents degradation above 20 options, and laya-mlx treats confidence from choices
+# with 11 or more options as uncalibrated. Keep each choice at 10 options or fewer.
+MAX_CHOICE_OPTIONS = 10
+# The roles a coordinator dispatches a slice to. Advisory and review roles are not dispatched.
+DISPATCH_ROLES = (
+    "implementer",
+    "senior-implementer",
+    "design-implementer",
+    "analyst",
+    "researcher",
+    "unblocker",
+    "qa-verifier",
+    "pr-author",
+    "groomer",
+    "planner",
+)
 
 
 def _choice(instructions: str, criteria: dict[str, str]) -> dict[str, Any]:
@@ -45,8 +62,13 @@ def candidate_playbooks(context: DecisionContext) -> tuple[str, ...]:
         # routes a human most often corrects toward.
         ranked = [item for item in score_classes(context).ranked()[:3] if item in PLAYBOOKS]
         candidates = [selected, *ranked, *family.get(selected, (selected, "intake", "investigation", "multi-phase-plan"))]
-    # Laya documents degradation above 20 options. Keep a deterministic, unique list.
-    return tuple(dict.fromkeys(item for item in candidates if item in PLAYBOOKS))[:10]
+    return tuple(dict.fromkeys(item for item in candidates if item in PLAYBOOKS))[:MAX_CHOICE_OPTIONS]
+
+
+def candidate_options(context: DecisionContext, key: str) -> dict[str, str]:
+    """The caller's options in its own order, described and capped to the choice budget."""
+
+    return dict(list(option_descriptions(context, key).items())[:MAX_CHOICE_OPTIONS])
 
 
 def questions_for(context: DecisionContext) -> dict[str, dict[str, Any]]:
@@ -86,6 +108,7 @@ def questions_for(context: DecisionContext) -> dict[str, dict[str, Any]]:
                     "ready": "the request, acceptance criteria, finish condition, and verification are present",
                     "needs-information": "a required ticket field is missing",
                     "needs-decision": "a product or public-contract choice is unresolved",
+                    "split": "the unit exceeds 500 changed lines or bundles several concerns",
                 },
             ),
             "decomposition": _choice(
@@ -149,7 +172,7 @@ def questions_for(context: DecisionContext) -> dict[str, dict[str, Any]]:
             ),
             "role": _choice(
                 "Which existing viStack role best fits this slice?",
-                {item: item for item in ROLES},
+                {item: item for item in DISPATCH_ROLES},
             ),
         }
     if decision_type == "runtime-progress":
@@ -194,6 +217,20 @@ def questions_for(context: DecisionContext) -> dict[str, dict[str, Any]]:
                 },
             ),
             "repeat": _noul("Does the history show a repeated override or failure pattern?"),
+        }
+    if decision_type == "tool-selection":
+        return {
+            "tool": _choice(
+                "Which tool should the next step use to make progress on the task?",
+                candidate_options(context, "tools"),
+            ),
+        }
+    if decision_type == "file-selection":
+        return {
+            "file": _choice(
+                "Which file should the next step open or change for this task?",
+                candidate_options(context, "file_summaries"),
+            ),
         }
     raise ValueError(f"no Laya question schema for {decision_type!r}")
 

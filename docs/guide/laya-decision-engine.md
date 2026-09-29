@@ -192,7 +192,7 @@ python3 scripts/vistack-decision.py decision grooming \
 
 The supported decision types are:
 
-`intake-analysis`, `grooming`, `playbook-selection`, `decomposition`,
+`intake-analysis`, `grooming`, `playbook-selection`, `decomposition`, `tier-selection`,
 `dispatch-readiness`, `runtime-progress`, `verification`, and `skill-improvement`.
 
 For repeated orchestration events, keep the model resident:
@@ -257,6 +257,7 @@ may not change a `state` or `handoff` route or invent an unattended one.
 |---|---|---|
 | `grooming` | `task.open_questions`, `task.estimated_changed_lines` | Open questions return `needs-decision`; an estimate above 500 returns `split`. |
 | `decomposition` | `task.slices[].files`, `task.slices[].depends_on`, `task.dependencies` | Overlapping slice files or a dependency return `sequence`; `outputs.shared_files` names the overlap. Textual estimates such as `"about 300"` are parsed. |
+| `tier-selection` | `task.pattern`, `task.changes_data_shape`, `task.changes_public_contract`, `task.crosses_boundary`, `current_state.tier_mismatch` | A reported mismatch, a flag, or complex-work terms in the request return `complex` with `outputs.role` `senior-implementer`. Mechanical terms or a named pattern return `mechanical` with `implementer`. Neither returns `complex` below the refinement threshold, so the main session decides. A model may raise a slice to `complex` but never lower evidenced complex work. |
 | `runtime-progress` | `current_state.attempts`, `identical_results`, `unblock_exhausted`, `next_action`, `credentials_missing`, `credentials_expired`, `contract_ambiguity` | Each fence returns `escalate` with `outputs.fence` set to 1-4. Twenty attempts or three identical results is FENCE 1; an irreversible `next_action` such as a merge is FENCE 3. |
 | `verification` | `evidence[].criterion`, `evidence[].status` | `criterion` (1-based index or exact criterion text) covers that criterion only. `status` `fail` or a summary such as `3 tests failed` returns `request-evidence`; `status` `unavailable` returns `block`. Duplicate refs count once. `outputs.uncovered_criteria` lists the gaps. |
 
@@ -272,6 +273,7 @@ Use the hook only when a choice affects the workflow path.
 | router and groomer | intake analysis, grooming | readiness fields and fence rules |
 | router | playbook selection | the route table in `skills/vistack/SKILL.md` |
 | planner | decomposition | 500-line limit, file ownership, conflict matrix |
+| planner | tier selection | the tier rule in `agents/planner.md` |
 | coordinator | dispatch readiness, runtime progress | state transitions, dependencies, monitor and ledger rules |
 | QA verifier | verification | captured artifacts tied to acceptance criteria |
 | feedback review | skill improvement | explicit human review of historical patterns |
@@ -288,6 +290,7 @@ changes the outcome.
 |---|---|
 | which playbook | `playbook-selection` |
 | which file goes to which slice; serialize or parallelize | `decomposition` |
+| which tier: mechanical or complex | `tier-selection` |
 | dispatch or hold | `dispatch-readiness` |
 | retry, rescope, or stop | `runtime-progress` |
 | accept or ask for more evidence | `verification` |
@@ -296,9 +299,9 @@ A fork is **sharp** when the returned action is valid, its confidence meets the 
 threshold, and every safety gate accepts it, whether the deterministic policy or a
 refinement backend produced it. A sharp fork is applied in code and its decision id is
 recorded. Any other fork is **split**: the main session decides it and records why. Judge a
-decision type sharp from held-out scenario accuracy, not from confidence alone. Which tier a
-slice gets and which tool a step uses have no decision type yet; the planner's tier rule
-decides the first.
+decision type sharp from held-out scenario accuracy, not from confidence alone. Which tool a
+step uses has no decision type: no contract names a tool fork with labelled outcomes to
+measure it against.
 
 Laya never calls the advisor. The advisor's three checkpoints — before a plan, on a
 repeating error, before done — are not forks (`skills/advisor/SKILL.md`).
@@ -393,8 +396,11 @@ failures pass.
    case, wrong label, missing input field, or a fork that belongs to the main session.
 8. Report held-out accuracy against the baseline, and flag any gain inside the noise margin.
 
-`scripts/evaluate-laya.py` scores the full scenario set today. A fixed train and held-out
-split in that script is a follow-up.
+`scripts/evaluate-laya.py --split train` and `--split held-out` score the two sets. The split
+comes from a stable hash of each scenario id, 30% held out by default
+(`--held-out-percent`), so adding a scenario never moves an existing one. A scenario pins
+itself with `"split": "train"` or `"split": "held-out"`. Each decision type reports its
+accuracy and mean confidence.
 
 ## Adding a decision type
 

@@ -41,16 +41,15 @@ coordinator re-dispatches it to `senior-implementer`.
 
 ## Repo conventions — non-negotiable
 
-- **No `src/`** directory.
-- **SASS** for styles.
-- **`axios` lives in `lib/`** — HTTP clients are not constructed in components.
-- **Strict TypeScript**, including `noUncheckedIndexedAccess` and
-  `exactOptionalPropertyTypes`. An indexed access is possibly `undefined` and the code has
-  to say so.
-- **`type` over `interface`.**
-- **camelCase constants.**
-- **Alphabetized props**, in the type and at the call site.
-- **No `let` in components.**
+The consuming repository's conventions decide: its `CLAUDE.md` or `AGENTS.md`, its lint,
+format, and type configuration, and the pattern the impact map names. Read them before the
+first edit. For a React frontend, `skills/frontend-code-style/SKILL.md` applies as well.
+Where the repository is silent:
+
+- **Keep the strictest type settings already enabled.** An indexed access that can be
+  `undefined` says so.
+- **One way of doing each thing.** Use the repository's existing file layout, style
+  language, and HTTP-client location; never introduce a second one.
 - **One component per file.**
 - **Early-return guards** — no nested conditional pyramids.
 

@@ -38,7 +38,7 @@ flowchart TD
 
 The diagram shows the common routes. The full route set includes intake, design
 implementation, blocker recovery, PR stacks, QA verification, session pickup, safe pause,
-babysitting, worktree cleanup, skill authoring, and preference capture.
+babysitting, worktree cleanup, skill authoring, agent design, and preference capture.
 
 ## Human-facing communication
 
@@ -64,6 +64,11 @@ background equivalent for a monitor when available. If the host cannot keep a pr
 after the thread ends, record that limitation and leave a resumable state file. Never claim
 that an overnight monitor is active without a live owner and wake mechanism.
 
+A read-only or scratch-directory lane — a reviewer, a design runner, a judge — may fan out on
+Codex as its own `codex exec --ephemeral -m <model>` process, so it keeps an independent
+context: `--sandbox read-only` for a reader, `--sandbox workspace-write -C <scratch dir>` for a
+runner. A role that writes to a worktree stays sequential in the thread.
+
 Claude-only steps remain in the task list when running on Codex. Mark them skipped in the
 ledger with the host-specific reason. In particular, do not run `/loop`, `claude attach`,
 Claude issue-comment upserts, or Claude-only agent declarations in Codex. Continue the
@@ -88,6 +93,7 @@ sequentially in the thread and the model column does not apply.
 | Worker, complex | `senior-implementer` | opus · xhigh | data shapes, contracts, boundaries, hot paths |
 | Judgment roles | `groomer`, `planner`, `pr-author`, `unblocker` | opus · session effort | tickets, slices, PRs, blockers |
 | Verification | `qa-verifier`, `health-check` | sonnet, haiku | QA evidence, adversarial audit |
+| Design and review | `design-runner`, `reviewer` | the host model: opus, or Luna on Codex | `architect` candidates, `interrogate` findings |
 | Advisor | advisor tool, else `advisor` | Fable 5.1 | before a plan, when an error repeats, before done |
 
 ## Optional local decision engine
@@ -99,11 +105,11 @@ decomposition, dispatch, runtime recovery, verification, or future rule review. 
 coding agent and it never replaces the router, coordinator, state, ledger, worktrees,
 evidence gates, or merge boundary.
 
-Laya is the fork layer. Which playbook, which file goes to which slice, dispatch or hold,
-and retry or stop are forks that need no thinker. A sharp fork — a valid action at or above
-the confidence threshold that every safety gate accepts — is applied in code without a model
-turn. A split fork returns to the main session, which decides and records why. Forks never
-reach the advisor.
+Laya is the fork layer. Which playbook, which file goes to which slice, which tier, dispatch
+or hold, and retry or stop are forks that need no thinker. A sharp fork — a valid action at
+or above the confidence threshold that every safety gate accepts — is applied in code
+without a model turn. A split fork returns to the main session, which decides and records
+why. Forks never reach the advisor.
 
 The engine receives a bounded `DecisionContext` and returns a typed `Decision`. The
 deterministic viStack policy runs first. An optional local Laya-MLX answer may refine it only
@@ -117,7 +123,7 @@ Call the hook at these boundaries:
 |---|---|---|
 | intake and grooming | `intake-analysis`, `grooming` | readiness fields and FENCE 2 |
 | route match | `playbook-selection` | this route table and the matched playbook |
-| slice planning | `decomposition` | file ownership, conflict matrix, and the 500-line limit |
+| slice planning | `decomposition`, `tier-selection` | file ownership, conflict matrix, the 500-line limit, and the planner's tier rule |
 | pre-dispatch and monitoring | `dispatch-readiness`, `runtime-progress` | coordinator state, dependencies, monitor, and ledger |
 | QA | `verification` | captured artifacts tied to each acceptance criterion |
 | retrospective review | `skill-improvement` | explicit human review; no automatic skill edits |
@@ -195,6 +201,7 @@ the task list with `skip: <reason>`, and the reason gets a `step-skipped` ledger
 | `worktree-cleanup` | Stale worktrees need an evidence-based cleanup audit. |
 | `authoring-skill` | A SKILL.md or a workflow contract is being created or changed. |
 | `automate-me` | The user wants working preferences captured in a reusable mode skill. |
+| `agent-design` | A new agent, bot, or subagent is being designed for Claude Code, Codex, or OpenCode. |
 
 Ties break toward the most specific route. A groomed ticket with no other signal is
 `autopilot-stack`. A large run the user will review later is `overnight` when the request
@@ -228,6 +235,10 @@ changed data shape or public contract, a boundary crossing, concurrency, auth, m
 measured hot path, or no pattern to follow — goes to `senior-implementer`. An unclear tier is
 complex. A mechanical owner that finds complex work reports `tier-mismatch`, and the
 coordinator re-dispatches the slice to `senior-implementer` in the same worktree.
+
+A change that crosses function boundaries or moves ownership gets `architect` before it is
+sliced; a risky finished change gets `interrogate` before done. `docs/guide/design.md` holds
+the ladder.
 
 Every brief is standalone. It names the goal, writable files, forbidden files, context
 references, acceptance checks, verification commands, timebox, and report shape. A missing

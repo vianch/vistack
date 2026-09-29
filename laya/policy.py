@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import re
 from typing import Any, Mapping
 
-from .schema import DECISION_TYPES, DecisionContext, Evidence, PLAYBOOKS, ROLES
+from .schema import DECISION_TYPES, DecisionContext, Evidence, PLAYBOOKS, ROLES, TIER_ROLES
 
 
 @dataclass(frozen=True)
@@ -38,6 +38,7 @@ CLASS_SIGNALS: tuple[tuple[str, tuple[tuple[str, float], ...]], ...] = (
     ("babysit", ((r"babysit", 2.0), (r"status of (?:the |my )?(?:\w+ )?(?:run|lanes?|prs?|pull requests?)", 2.0), (r"check on (?:the )?(?:run|lanes?|prs?)", 1.5), (r"monitor (?:the )?(?:run|lanes?|prs?)", 1.5))),
     ("session-pickup", ((r"session pickup", 2.0), (r"resume", 1.5), (r"pick (?:it |this |the run )?(?:back )?up", 1.5), (r"where (?:did )?we (?:leave|left) off", 1.5))),
     ("pause-safely", ((r"pause", 1.5), (r"stop safely", 2.0), (r"park (?:the |this )?(?:run|work|slice)", 1.5))),
+    ("agent-design", ((r"design (?:an? |the |my )?(?:new )?(?:agent|bot|subagent)s?", 2.0), (r"(?:create|make|build) (?:an? |the |my )?(?:new )?(?:agent|bot|subagent)s?", 2.0))),
     ("authoring-skill", ((r"skill\.md", 2.0), (r"skills?", 1.2), (r"playbooks?", 1.2), (r"workflow contract", 2.0), (r"agent (?:file|definition)", 1.2))),
     ("automate-me", ((r"preferences?", 1.2), (r"working style", 2.0), (r"mode skill", 2.0))),
     ("perf-issue", ((r"performance", 1.2), (r"perf", 1.0), (r"latency", 1.2), (r"slow(?:er|ness|ly)?", 1.2), (r"throughput", 1.2), (r"memory leak", 1.5), (r"p9[059]", 1.2), (r"takes? \d+(?:\.\d+)? ?(?:ms|s|sec|seconds|minutes)", 1.2), (r"optimi[sz](?:e|ation)", 0.6), (r"cpu usage", 1.2))),
@@ -62,6 +63,19 @@ _CROSS_CUTTING = re.compile(r"\b(?:large|cross-cutting|many services|program|mul
 _NEEDS_DECISION = re.compile(r"\b(?:product decision|choose between|ambiguous|tbd|to be decided|undecided)\b|\beither\b.{1,80}\bor\b")
 _SPLIT = re.compile(r"\b(?:split|decompose)\b")
 _INDEPENDENT = re.compile(r"\b(?:independent|separate directories|parallel(?:ize)?|disjoint)\b")
+# Tier signals decide which implementer owns a slice. Complex terms win over mechanical ones,
+# and a request with neither stays complex at a confidence below the refinement threshold.
+_COMPLEX_WORK = re.compile(
+    r"\b(?:concurren(?:t|cy)|race conditions?|deadlocks?|locking|auth(?:entication|orization)?|"
+    r"(?:auth|access|refresh) tokens?|permissions?|payments?|billing|refunds?|money|currency|"
+    r"migrations?|schema|data (?:shape|model)|public (?:api|contract)|breaking change|hot path|"
+    r"latency|performance|security|encryption)\b"
+)
+_MECHANICAL_WORK = re.compile(
+    r"\b(?:rename|repetitive|boilerplate|utils?|utilit(?:y|ies)|helpers?|unit tests?|add tests?|"
+    r"test coverage|typos?|copy change|lint(?:ing)?|formatting|constants?)\b"
+)
+TIER_FLAGS = ("changes_data_shape", "changes_public_contract", "crosses_boundary")
 _IRREVERSIBLE = re.compile(
     r"\b(?:merge|force[- ]push|history rewrite|rewrite history|deploy(?: to)? prod(?:uction)?|production deploy|"
     r"drop (?:table|database)|delete (?:data|rows|records|the database)|rotate (?:the )?secrets?|secret rotation|"
@@ -355,6 +369,10 @@ def _slice_dependencies(context: DecisionContext) -> bool:
     return any(isinstance(item, Mapping) and _items(item.get("depends_on") or item.get("dependencies")) for item in slices)
 
 
+def _tier_outputs(base: Mapping[str, Any], tier: str) -> dict[str, Any]:
+    return {**base, "tier": tier, "role": TIER_ROLES[tier]}
+
+
 def evaluate(context: DecisionContext) -> PolicyDraft:
     """Evaluate a context without importing MLX or making external calls."""
 
@@ -561,6 +579,86 @@ def evaluate(context: DecisionContext) -> PolicyDraft:
             outputs={**base, "parallelizable": False, "shared_file_conflict": False},
         )
 
+    if decision_type == "tier-selection":
+        request = _request(context).lower()
+        complex_terms = sorted({match.group(0) for match in _COMPLEX_WORK.finditer(request)})
+        mechanical_terms = sorted({match.group(0) for match in _MECHANICAL_WORK.finditer(request)})
+        flags = [name for name in TIER_FLAGS if context.task.get(name)]
+        pattern = bool(context.task.get("pattern"))
+        mismatch = bool(context.current_state.get("tier_mismatch"))
+        base = {
+            "complex_signals": complex_terms,
+            "flags": flags,
+            "mechanical_signals": mechanical_terms,
+            "pattern": pattern,
+            "tier_mismatch": mismatch,
+        }
+        if mismatch:
+            return _common(
+                context,
+                action="complex",
+                confidence=0.99,
+                rationale="The mechanical owner reported tier-mismatch, so the slice moves to the complex tier.",
+                required=("the tier-mismatch report and its evidence",),
+                outputs=_tier_outputs(base, "complex"),
+            )
+        if flags:
+            return _common(
+                context,
+                action="complex",
+                confidence=0.95,
+                rationale=f"The slice is flagged {', '.join(flags)}.",
+                risks=("A contract, data-shape, or boundary change needs design judgment, not a pattern copy.",),
+                outputs=_tier_outputs(base, "complex"),
+            )
+        if complex_terms:
+            return _common(
+                context,
+                action="complex",
+                confidence=0.9,
+                rationale=f"The request names complex-tier work ({', '.join(repr(term) for term in complex_terms[:3])}).",
+                risks=("A mechanical owner would copy a pattern where the slice needs a design decision.",),
+                alternatives=(("mechanical", "Use only when the named work follows an existing pattern unchanged."),),
+                outputs=_tier_outputs(base, "complex"),
+            )
+        if mechanical_terms and pattern:
+            return _common(
+                context,
+                action="mechanical",
+                confidence=0.9,
+                rationale=f"The request is mechanical work ({', '.join(repr(term) for term in mechanical_terms[:3])}) that follows a named pattern.",
+                conditions=("Report tier-mismatch if the slice turns out to change a contract or data shape.",),
+                outputs=_tier_outputs(base, "mechanical"),
+            )
+        if pattern:
+            return _common(
+                context,
+                action="mechanical",
+                confidence=0.8,
+                rationale="The slice follows a named pattern and names no complex-tier work.",
+                alternatives=(("complex", "Use if the named pattern does not cover the whole slice."),),
+                conditions=("Report tier-mismatch if the slice turns out to change a contract or data shape.",),
+                outputs=_tier_outputs(base, "mechanical"),
+            )
+        if mechanical_terms:
+            return _common(
+                context,
+                action="mechanical",
+                confidence=0.74,
+                rationale=f"The request is mechanical work ({', '.join(repr(term) for term in mechanical_terms[:3])}), but no pattern is named.",
+                required=("the pattern to follow, as file:line",),
+                alternatives=(("complex", "Use if no existing file shows the pattern."),),
+                outputs=_tier_outputs(base, "mechanical"),
+            )
+        return _common(
+            context,
+            action="complex",
+            confidence=0.6,
+            rationale="No pattern or mechanical signal is evidenced; an unclear tier is complex.",
+            required=("the pattern to follow, or the reason none exists",),
+            alternatives=(("mechanical", "Use once a named pattern covers the whole slice."),),
+            outputs=_tier_outputs(base, "complex"),
+        )
 
     if decision_type == "dispatch-readiness":
         criteria = _acceptance_criteria(context)

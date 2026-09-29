@@ -11,7 +11,8 @@ feature becomes a separate unit.
    Land the pin before moving structure.
 4. Inventory all callers, references, exports, tests, and generated files with `file:line`.
 5. Name the target data shape. Use a state machine, registry, or typed model only when it
-   removes branches or invalid states.
+   removes branches or invalid states. When the new shape moves ownership, run `architect`
+   (`skills/architect/SKILL.md`).
 6. Delete dead code and duplicate paths before adding the new structure.
 7. Dispatch `planner` for independently verifiable slices, file ownership, and the conflict
    matrix. Migrate callers and remove an obsolete internal API in the same planned wave.

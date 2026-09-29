@@ -10,8 +10,10 @@ coordination state, not product code, and never merges.
 2. Enumerate every recorded PR and discover new PRs linked to the run. Add new PRs to state
    before checking them.
 3. Check liveness. A lane with no live owner and no new ledger row or side effect is stalled.
-4. Check CI, draft state, size, concern scope, reviewer assignment, QA evidence, and health
-   verdict on every open PR.
+4. Read every open PR with `python3 scripts/watch-pr.py --pr <n,…> --status-only`:
+   conflicts, changes requested, checks, unresolved review threads, reviewer assignment, and
+   size. Then check concern scope, QA evidence, and health verdict. The pass reads once; it
+   never starts a second watcher.
 5. Check one-worktree-per-slice, shared-file serialization, approved remotes, and the
    finish predicate on every pass.
 6. Route stalled lanes to `blocker`. Route red CI, failed QA, and review findings to the

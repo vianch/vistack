@@ -125,6 +125,17 @@ def questions_for(context: DecisionContext) -> dict[str, dict[str, Any]]:
             "shared_conflict": _noul("Do candidate slices share a writable file?"),
             "too_large": _noul("Would the proposed unit exceed the 500 changed-line boundary?"),
         }
+    if decision_type == "tier-selection":
+        return {
+            "tier": _choice(
+                "Which implementation tier fits this slice?",
+                {
+                    "mechanical": "repetitive edits, basic utilities, unit tests, or a change that follows a named pattern",
+                    "complex": "a changed data shape or public contract, a boundary crossing, concurrency, auth, money, a hot path, or no pattern to follow",
+                },
+            ),
+            "contract_change": _noul("Does the slice change a data shape or a public contract?"),
+        }
     if decision_type == "dispatch-readiness":
         return {
             "readiness": _choice(

@@ -99,3 +99,4 @@ decision the principle changed**. Restating the name is not invoking it. See
 - Mistakes that cost the most: `common-mistakes.md`
 - Ledger column semantics: `ledger-format.md`
 - Overnight handoff: `overnight.md`
+- How much design a change deserves: `design.md`

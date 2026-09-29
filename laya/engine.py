@@ -18,6 +18,7 @@ from .schema import (
     Decision,
     DecisionContext,
     Alternative,
+    TIER_ROLES,
     default_actions,
     utc_now,
 )
@@ -355,6 +356,20 @@ class DecisionEngine:
             outputs.update({"shape": selected, "model_shared_conflict": _answer(result, "shared_conflict")})
             confidence_parts = [_confidence(answer)]
             probabilities = _probabilities(answer)
+        elif decision_type == "tier-selection":
+            answer = _answer(result, "tier")
+            selected = _choice(answer)
+            if selected not in ACTIONS_BY_TYPE[decision_type]:
+                return None, "invalid typed tier answer"
+            outputs.update(
+                {
+                    "tier": selected,
+                    "role": TIER_ROLES[selected],
+                    "model_contract_change": _answer(result, "contract_change"),
+                }
+            )
+            confidence_parts = [_confidence(answer)]
+            probabilities = _probabilities(answer)
         elif decision_type == "dispatch-readiness":
             answer = _answer(result, "readiness")
             selected = _choice(answer)
@@ -448,6 +463,9 @@ class DecisionEngine:
                 return False, "deterministic runtime gate rejected continuing"
             if model_draft.action == "continue" and baseline.action == "retry":
                 return False, "deterministic stall gate rejected continuing a stalled lane"
+        if context.decision_type == "tier-selection" and model_draft.action == "mechanical" and baseline.action == "complex":
+            if baseline.outputs.get("tier_mismatch") or baseline.outputs.get("flags") or baseline.outputs.get("complex_signals"):
+                return False, "deterministic tier gate kept evidenced complex work on the complex tier"
         if context.decision_type == "skill-improvement" and model_draft.action == "propose-change" and baseline.action != "propose-change":
             return False, "deterministic history gate requires repeated evidence before proposing a change"
         return True, None

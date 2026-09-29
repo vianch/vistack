@@ -20,7 +20,7 @@ Resolve these once at startup.
 | Host | State root | Worktree root | Recurring monitor |
 |---|---|---|---|
 | Claude Code | `.claude/state/` | `.claude/worktrees/` | `/loop 10m /vistack babysit <slug>` |
-| Codex | `.codex/vistack/state/` | `.codex/vistack/worktrees/` | the host's recurring-task or background equivalent |
+| Codex | `.codex/vistack/state/` | `.codex/vistack/worktrees/` | the host's recurring-task or background equivalent, or one `scripts/watch-pr.py` process |
 
 In the contracts below, `<state-root>` and `<worktree-root>` mean the resolved paths. Do not
 mix roots in one run. A run resumes only on the host that created it.
@@ -31,6 +31,14 @@ Establish exactly one live monitor before dispatching a slice or reviewing a PR.
 `monitor.status: active` value is only a claim. Verify the current owner and live mechanism.
 If either is missing, start one monitor and record it. If verification fails, record a
 blocker and do not dispatch.
+
+`scripts/watch-pr.py` reads PR state for every monitor pass (`--status-only`). On a host with
+no recurring monitor, one long-running `python3 scripts/watch-pr.py --pr <n,…> --timeout <s>`
+process may be the monitor: record it as `monitor.mechanism` and treat its exit as the wake.
+Its exit code names the verdict — 0 merge-ready or merged, 2 conflicts, 3 unresolved review
+threads, 4 failing checks, 5 timeout, 6 changes requested or closed, 7 query failure, 8 no
+reviewer. Claude Code, Codex, and OpenCode run the same command in their shell tool. It never
+runs beside another monitor, never writes to GitHub, and never merges.
 
 On pickup, the new coordinator reclaims the monitor explicitly. On pause, a fence, or the
 last merge-ready slice, stop it. Never start a second monitor to cover a stale first one.

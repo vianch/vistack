@@ -20,6 +20,9 @@ STRING_FIELDS = {
     "kev_url": "VISTACK_LAYA_KEV_URL",
     "kev_model": "VISTACK_LAYA_KEV_MODEL",
     "jev_model": "VISTACK_LAYA_JEV_MODEL",
+    "ollama_model": "VISTACK_LAYA_OLLAMA_MODEL",
+    "ollama_url": "VISTACK_LAYA_OLLAMA_URL",
+    "ollama_keep_alive": "VISTACK_LAYA_OLLAMA_KEEP_ALIVE",
     "consult": "VISTACK_LAYA_CONSULT",
 }
 
@@ -49,7 +52,7 @@ def cache_dir() -> Path:
 
 def resolve_config_path(path: str | Path | None = None) -> Path:
     """An explicit path wins. Otherwise the host's path, or the Codex-root file written before
-    the Claude root existed, so an earlier ``laya off`` keeps holding."""
+    the Claude root existed, so an earlier ``decisions off`` keeps holding."""
 
     if path is not None:
         return Path(path)
@@ -69,6 +72,10 @@ class Settings:
     kev_model: str | None = None
     jev: bool | None = None
     jev_model: str | None = None
+    # ``none`` is kept as written: it is how a project turns off a model the environment names.
+    ollama_model: str | None = None
+    ollama_url: str | None = None
+    ollama_keep_alive: str | None = None
     consult: str | None = None
     source: str = "default"
 
@@ -117,7 +124,7 @@ def read_settings(path: str | Path | None = None) -> Settings:
 
 
 def write_enabled(path: str | Path | None, enabled: bool, **updates: Any) -> Path:
-    """Flip the switch, and set any of ``model`` or ``jev`` given, keeping other fields."""
+    """Flip the switch, and set any setting given, keeping other fields."""
 
     source = resolve_config_path(path)
     config_path = Path(path) if path is not None else Path(default_config_path())

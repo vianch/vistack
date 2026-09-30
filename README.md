@@ -21,9 +21,9 @@ the same playbooks, principles, and skill names across the two hosts.
 
 | Host | Version | Manifest |
 |---|---:|---|
-| Claude Code | `0.12.0` | `.claude-plugin/plugin.json` |
-| Codex | `0.12.0` | `.codex-plugin/plugin.json` |
-| Grok | `0.12.0` | `.grok-plugin/plugin.json` |
+| Claude Code | `0.13.0` | `.claude-plugin/plugin.json` |
+| Codex | `0.13.0` | `.codex-plugin/plugin.json` |
+| Grok | `0.13.0` | `.grok-plugin/plugin.json` |
 
 ### Claude Code
 
@@ -288,7 +288,7 @@ The data flow is deliberately one-way:
 task and viStack state
         -> DecisionContext
         -> deterministic policy          sharp -> runs in code
-        -> split forks only: Jev (opt-in) -> local Laya -> Kev -> host CLI
+        -> split forks only: Jev (opt-in) -> Ollama (local) -> Laya-MLX -> Kev -> host CLI
         -> safety validation             sharp -> runs in code
         -> advisory Decision             split -> the main session decides
         -> existing viStack rule and coordinator
@@ -306,14 +306,14 @@ configured, the MLX agent is loaded lazily and reused by the long-lived JSONL se
 Turn refinement off for the current consuming project:
 
 ```bash
-python3 scripts/vistack-decision.py laya off
-python3 scripts/vistack-decision.py laya status
+python3 scripts/vistack-decision.py decisions off
+python3 scripts/vistack-decision.py decisions status
 ```
 
 Turn it back on:
 
 ```bash
-python3 scripts/vistack-decision.py laya on
+python3 scripts/vistack-decision.py decisions on
 ```
 
 For Claude-hosted state, use `--config .claude/vistack/laya.json`. For a single request,
@@ -360,7 +360,7 @@ python3 scripts/vistack-decision.py serve
 The optional MLX runtime is installed into its own venv on Apple Silicon:
 
 ```bash
-python3 scripts/vistack-decision.py laya setup      # or /vistack:laya-setup
+python3 scripts/vistack-decision.py decisions setup      # or /vistack:laya-setup
 export VISTACK_LAYA_MODEL=convaiinnovations/laya
 ```
 
@@ -371,10 +371,18 @@ No cloud LLM is required for the decision layer.
 
 Hosted [Jev](https://docs.typesafe.ai/models) is the strongest split-fork reader measured so
 far — 7 of 10 labelled split forks settled, none wrong, in about 350 ms — and it is opt-in
-because it sends the redacted decision state to TypeSafe: `laya on --jev` for a project or
+because it sends the redacted decision state to TypeSafe: `decisions on --jev` for a project or
 `VISTACK_LAYA_JEV=1` for a shell, with the key in `TYPESAFE_API_KEY` or `TYPESAFE_KEY`. An
-opted-in Jev leads the ladder, and the local checkpoint answers when Jev is refused or
+opted-in Jev leads the ladder, and the local tiers answer when Jev is refused or
 offline. See the guide for the checkpoint comparison.
+
+[Ollama](https://ollama.com/library/nimble) serves the same System One protocol locally, with
+no key, and the state never leaves the machine. Opt in with
+`decisions on --ollama-model nimble` (or `tev1:0.8b`, or `none` to turn it off). It answers
+any split fork Jev left unsettled. Measured on the 80 labelled scenarios, Jev then `nimble`
+settled 8 of 10 split forks with none wrong, at 1 to 4 s per fork `nimble` handles. The guide
+has the table, the load and memory costs, and the confidence-scale caveat:
+[`docs/guide/laya-decision-engine.md`](docs/guide/laya-decision-engine.md#local-fork-tier-ollama).
 
 If MLX is not available, [Kev](https://github.com/jaredpalmer/kev) is the recommended local
 fallback. Kev uses the same typed decision primitives and serves on localhost. Start its
@@ -389,7 +397,7 @@ explicitly configured. Claude uses the current active Haiku model; Codex default
 low-effort `gpt-5.4-mini` profile. The adapter uses read-only/plan execution, one turn, typed
 JSON validation, and a budget/timeout; it never becomes the executor. Set
 `VISTACK_LAYA_FALLBACK=host-llm`, `VISTACK_LAYA_HOST=claude|codex`, and optionally
-`VISTACK_LAYA_HOST_MODEL=...` for a long-lived server. `laya on` alone never creates a cloud
+`VISTACK_LAYA_HOST_MODEL=...` for a long-lived server. `decisions on` alone never creates a cloud
 request.
 
 Each decision can be recorded in local JSONL history. Use `override` when a human changes a
@@ -409,15 +417,15 @@ schema, runtime research, benchmarks, failure behavior, and extension procedure.
 
 ### Host integrations
 
-- Claude Code and Codex use the shared Python CLI and `laya-on`, `laya-off`,
-  `laya-status`, and `laya-setup` commands. The Claude commands run the plugin's script
+- Claude Code and Codex use the shared Python CLI and `decisions-on`, `decisions-off`,
+  `decisions-status`, and `laya-setup` commands. The Claude commands run the plugin's script
   through `${CLAUDE_PLUGIN_ROOT}`, so they work from any consuming project.
 - Grok Build support is declared in `.grok-plugin/plugin.json` and uses the same skills,
   agents, commands, and local decision switch. The xAI marketplace entry must be pinned to
   the published commit SHA; generate it with
   `python3 scripts/grok-marketplace-entry.py --sha <sha>`.
 - OpenCode support is in `integrations/opencode/vistack.js`. Copy it to
-  `.opencode/plugins/vistack.js` to expose `vistack_decision` and `vistack_laya_toggle`.
+  `.opencode/plugins/vistack.js` to expose `vistack_decision` and `vistack_decisions_toggle`.
 
 See [`docs/guide/grok-opencode.md`](docs/guide/grok-opencode.md) for marketplace and plugin
 installation details.
@@ -683,13 +691,14 @@ codex plugin marketplace list
 codex plugin list
 ```
 
-2. Refresh the installed plugin from the marketplace:
+2. Refresh the marketplace snapshot, then install/update the plugin:
 
 ```bash
+codex plugin marketplace upgrade vistack
 codex plugin add vistack@vistack
 ```
 
-3. Confirm `vistack` reports version `0.4.0` and is enabled:
+3. Confirm `vistack` reports version `0.13.0` and is enabled:
 
 ```bash
 codex plugin list

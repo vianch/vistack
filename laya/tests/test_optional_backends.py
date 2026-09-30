@@ -30,7 +30,7 @@ def response(payload):
 class OptionalBackendTests(unittest.TestCase):
     def test_kev_adapter_accepts_system_one_response(self):
         with patch("laya.system_one.urlopen", return_value=response({"answers": {"next": {"choice": "continue"}}})) as call:
-            result = KevBackend().predict({"phase": "implementing"}, {"next": {"type": "choice"}})
+            result = KevBackend().predict({"phase": "implementing"}, {"next": {"type": "choice", "criteria": {"continue": "go", "block": "stop"}}})
         self.assertIn("answers", result)
         self.assertNotIn("authorization", call.call_args.args[0].headers)
 
@@ -75,6 +75,9 @@ class JevTests(unittest.TestCase):
     def jev(self):
         return JevBackend(api_key="test-key", status_path=self.status)
 
+    # A request with no answerable question is refused before it is sent, so each call needs one.
+    QUESTION = {"q": {"type": "noul", "instructions": "?"}}
+
     def test_jev_sends_a_bearer_key_to_the_hosted_endpoint(self):
         with patch("laya.system_one.urlopen", return_value=response({"answers": {}})) as call:
             self.jev().predict({"task": "x"}, {"q": {"type": "noul", "instructions": "?"}})
@@ -87,17 +90,17 @@ class JevTests(unittest.TestCase):
         refusal = HTTPError("https://api.typesafe.ai/v1/systemone", 402, "Payment Required", {}, io.BytesIO(b""))
         with patch("laya.system_one.urlopen", side_effect=refusal):
             with self.assertRaises(LayaUnavailable):
-                self.jev().predict({}, {})
+                self.jev().predict({}, self.QUESTION)
         with patch("laya.system_one.urlopen") as call:
             with self.assertRaisesRegex(LayaUnavailable, "credits"):
-                self.jev().predict({}, {})
+                self.jev().predict({}, self.QUESTION)
         call.assert_not_called()
 
     def test_rate_limit_is_not_treated_as_exhausted_credits(self):
         limited = HTTPError("https://api.typesafe.ai/v1/systemone", 429, "Too Many Requests", {}, io.BytesIO(b""))
         with patch("laya.system_one.urlopen", side_effect=limited):
             with self.assertRaises(LayaUnavailable):
-                self.jev().predict({}, {})
+                self.jev().predict({}, self.QUESTION)
         self.assertFalse(self.status.exists())
 
     def test_key_lookup_prefers_the_sdk_variable(self):

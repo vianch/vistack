@@ -32,13 +32,16 @@ def split_of(scenario_id: str, held_out_percent: int = HELD_OUT_PERCENT) -> str:
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("scenario_file", nargs="?", default="examples/laya/scenarios.jsonl")
-    parser.add_argument("--backend", choices=("deterministic", "mlx", "kev", "jev", "host-llm", "auto"), default="deterministic")
+    parser.add_argument("--backend", choices=("deterministic", "mlx", "kev", "jev", "ollama", "host-llm", "auto"), default="deterministic")
     parser.add_argument("--model")
     parser.add_argument("--host", choices=("claude", "codex"))
     parser.add_argument("--host-model")
     parser.add_argument("--kev-url")
     parser.add_argument("--kev-model", default="kev-latest")
     parser.add_argument("--jev", action=argparse.BooleanOptionalAction, default=None)
+    parser.add_argument("--ollama-model", help="Ollama System One model, e.g. nimble")
+    parser.add_argument("--ollama-url")
+    parser.add_argument("--timeout-ms", type=int, default=2000, help="engine budget; Ollama waits at least 8000 ms")
     parser.add_argument("--fallback", choices=("none", "kev", "jev", "host-llm"))
     parser.add_argument("--effort", choices=("low", "medium", "high"), default="low")
     parser.add_argument("--min-confidence", type=float, default=0.65)
@@ -56,9 +59,12 @@ def main(argv: list[str] | None = None) -> None:
         kev_url=args.kev_url,
         kev_model=args.kev_model,
         jev=args.jev,
+        ollama_model=args.ollama_model,
+        ollama_url=args.ollama_url,
         fallback=args.fallback,
         effort=args.effort,
         min_confidence=args.min_confidence,
+        timeout_ms=args.timeout_ms,
     )
     rows = []
     for line in Path(args.scenario_file).read_text(encoding="utf-8").splitlines():

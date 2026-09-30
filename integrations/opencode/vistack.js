@@ -68,16 +68,24 @@ export const ViStackPlugin = async ({ directory }) => {
           )
         },
       }),
-      vistack_laya_toggle: tool({
-        description: "Turn default-on local Laya refinement on, off, or inspect its status.",
+      vistack_decisions_toggle: tool({
+        description: "Turn the default-on fork-layer decision models on, off, or inspect their status.",
         args: {
           action: tool.schema.string().describe("on, off, or status"),
+          ollama_model: tool.schema
+            .string()
+            .optional()
+            .describe("Ollama decision model tag, or none; used only when action is on"),
         },
         async execute(args) {
           if (!["on", "off", "status"].includes(args.action)) {
             throw new Error("action must be on, off, or status")
           }
-          return await runPython(directory, [helper, "laya", args.action, "--config", config], "")
+          const command = [helper, "decisions", args.action, "--config", config]
+          if (args.action === "on" && args.ollama_model) {
+            command.push("--ollama-model", args.ollama_model)
+          }
+          return await runPython(directory, command, "")
         },
       }),
     },

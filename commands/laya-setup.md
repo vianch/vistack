@@ -5,10 +5,10 @@ argument-hint: "[--model <hub-id>] [--dry-run]"
 
 # /vistack:laya-setup
 
-Show the plan first:
+Installs Laya-MLX only. Ollama models are installed with `ollama pull`. Show the plan first:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/vistack-decision.py" laya setup --dry-run $ARGUMENTS
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/vistack-decision.py" decisions setup --dry-run $ARGUMENTS
 ```
 
 It creates a Python 3.12 venv in `~/.cache/vistack/laya-venv`, installs `laya-mlx` there,

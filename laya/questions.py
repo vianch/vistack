@@ -11,6 +11,8 @@ from .schema import DecisionContext, PLAYBOOKS, redact
 # Laya documents degradation above 20 options, and laya-mlx treats confidence from choices
 # with 11 or more options as uncalibrated. Keep each choice at 10 options or fewer.
 MAX_CHOICE_OPTIONS = 10
+# The state budget for a backend that does not declare its own ``max_state_chars``.
+MAX_STATE_CHARS = 12000
 # The roles a coordinator dispatches a slice to. Advisory and review roles are not dispatched.
 DISPATCH_ROLES = (
     "implementer",
@@ -235,7 +237,7 @@ def questions_for(context: DecisionContext) -> dict[str, dict[str, Any]]:
     raise ValueError(f"no Laya question schema for {decision_type!r}")
 
 
-def state_for_laya(context: DecisionContext, *, max_chars: int = 12000) -> dict[str, Any]:
+def state_for_laya(context: DecisionContext, *, max_chars: int = MAX_STATE_CHARS) -> dict[str, Any]:
     """Build a bounded state payload; avoid sending whole ledgers or secrets to the model."""
 
     payload = {

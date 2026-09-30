@@ -13,19 +13,21 @@ needs structured reasoning. Supply the current task, state, evidence, constraint
 and available actions. The returned `Decision` is machine-consumable but never authorizes
 execution.
 
-Use `python3 scripts/vistack-decision.py laya off` to disable refinement for the consuming
-project, `laya on` to restore it, and `laya status` to inspect it. Use `--disable-laya` for a
+Use `python3 scripts/vistack-decision.py decisions off` to disable refinement for the
+consuming project, `decisions on` to restore it, and `decisions status` to inspect it. Use `--disable-laya` for a
 single request or `VISTACK_LAYA_ENABLED=0` for the current environment. These controls leave
 the deterministic viStack policy active.
 
 The deterministic policy runs first, and a confident answer is sharp without a model turn.
-Only a split answer climbs the ladder: hosted Jev when opted in (`laya on --jev` or
-`VISTACK_LAYA_JEV=1`), local Laya-MLX, local Kev, and then an explicitly opted-in read-only
+Only a split answer climbs the ladder: hosted Jev when opted in (`decisions on --jev` or
+`VISTACK_LAYA_JEV=1`), local Ollama when opted in (`decisions on --ollama-model <tag>` or
+`VISTACK_LAYA_OLLAMA_MODEL`), local Laya-MLX, local Kev, and then an explicitly opted-in read-only
 host CLI (Claude Haiku or a low-effort Codex model). If a tier is unavailable, refused,
 malformed, low-confidence, or incompatible with a fence, continue to the next one and finally
 the deterministic result with `fork: split`. The coordinator still validates every route,
-state transition, worktree, ledger update, check, and evidence artifact. `laya on` alone
-does not opt into cloud usage.
+state transition, worktree, ledger update, check, and evidence artifact. `decisions on` alone
+does not opt into cloud usage. Ollama runs on the machine and sends nothing off it; Jev
+sends the redacted state to TypeSafe.
 
 `tool-selection` and `file-selection` take the candidate tools or files in
 `available_actions`, described by `task.tools` or `task.file_summaries`. Read `fork` on every

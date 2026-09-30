@@ -1,7 +1,7 @@
 """Find, report, and install the interpreter that runs the optional local Laya model.
 
 A system Python is often externally managed (PEP 668) and cannot take ``pip install
-laya-mlx``. ``laya setup`` builds a dedicated venv under the viStack cache directory, and
+laya-mlx``. ``decisions setup`` builds a dedicated venv under the viStack cache directory, and
 every entry script re-executes itself in that venv when the current interpreter lacks the
 runtime. The deterministic engine never needs any of this.
 """
@@ -95,7 +95,7 @@ def setup(model: str | None = None, *, venv: Path | None = None, dry_run: bool =
     if sys.platform != "darwin" or platform.machine() != "arm64":
         return {
             "ok": False,
-            "reason": "laya-mlx needs Apple Silicon; use a Kev server or opt into Jev instead",
+            "reason": "laya-mlx needs Apple Silicon; use Ollama, a Kev server, or opt into Jev instead",
         }
     target = venv or default_venv()
     chosen = model or DEFAULT_MODEL
@@ -131,6 +131,23 @@ def probe_jev() -> dict[str, Any]:
         JevBackend(api_key=key, timeout_ms=5000).predict(
             {"build": "green"}, {"green": {"type": "noul", "instructions": "Is the build passing?"}}
         )
+    except LayaUnavailable as exc:
+        return {"ok": False, "reason": str(exc)}
+    return {"ok": True, "latency_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+
+def probe_ollama(model: str, url: str | None = None) -> dict[str, Any]:
+    """One single-question decision against the local model; free, and nothing leaves the
+    machine. The load runs first and untimed, so the latency is the decision alone."""
+
+    from .mlx_backend import LayaUnavailable
+    from .system_one import OllamaBackend
+
+    backend = OllamaBackend(model, url=url)
+    try:
+        backend.warm()
+        started = time.perf_counter()
+        backend.predict({"build": "green"}, {"green": {"type": "noul", "instructions": "Is the build passing?"}})
     except LayaUnavailable as exc:
         return {"ok": False, "reason": str(exc)}
     return {"ok": True, "latency_ms": round((time.perf_counter() - started) * 1000, 1)}

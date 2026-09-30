@@ -4,7 +4,9 @@ OpenCode loads JavaScript or TypeScript plugins from `.opencode/plugins/` or fro
 package. The bridge in `integrations/opencode/vistack.js` exposes two tools:
 
 - `vistack_decision` calls the local typed decision API.
-- `vistack_laya_toggle` runs `laya on`, `laya off`, or `laya status` for the current project.
+- `vistack_decisions_toggle` runs `decisions on`, `decisions off`, or `decisions status` for the
+  current project. With `action` set to `on`, the optional `ollama_model` argument is passed as
+  `--ollama-model`.
 
 For a local checkout, copy or symlink the bridge into the consuming project:
 

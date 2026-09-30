@@ -6,7 +6,7 @@ viStack carries host adapters for both plugin systems.
 
 Grok Build plugins can bundle skills, commands, agents, hooks, MCP servers, and LSP servers.
 The repository includes `.grok-plugin/plugin.json`, points its component paths at the existing
-viStack directories, and adds `laya-on`, `laya-off`, and `laya-status` commands. The commands
+viStack directories, and adds `decisions-on`, `decisions-off`, and `decisions-status` commands. The commands
 control the same default-on local decision engine as the Python CLI.
 
 The xAI marketplace requires remote plugin entries to pin a full 40-character commit SHA.
@@ -38,9 +38,9 @@ loads an npm package named in `opencode.json`. The native bridge is at
 `integrations/opencode/vistack.js`; installation instructions are in
 `integrations/opencode/README.md`.
 
-It exposes `vistack_decision` and `vistack_laya_toggle`. The first calls the typed decision
-API. The second runs the same `laya on`, `laya off`, and `laya status` commands used by the
-other hosts. The default is on, but the bridge still falls back to deterministic policy when
+It exposes `vistack_decision` and `vistack_decisions_toggle`. The first calls the typed decision
+API. The second runs the same `decisions on`, `decisions off`, and `decisions status` commands
+used by the other hosts, and passes `ollama_model` to `decisions on` as `--ollama-model`. The default is on, but the bridge still falls back to deterministic policy when
 the model or MLX runtime is unavailable.
 
 The bridge starts the Python helper per request. For high-frequency orchestration, run

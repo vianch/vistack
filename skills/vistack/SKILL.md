@@ -99,8 +99,8 @@ sequentially in the thread and the model column does not apply.
 ## Optional local decision engine
 
 The repository includes an advisory local decision engine at `laya/` and
-`scripts/vistack-decision.py`. It is enabled by default. When no model, Kev server, or
-opted-in Jev is configured, `auto` still returns the deterministic policy. Use it only when a choice changes routing, readiness,
+`scripts/vistack-decision.py`. It is enabled by default. When no model, Ollama model, Kev
+server, or opted-in Jev is configured, `auto` still returns the deterministic policy. Use it only when a choice changes routing, readiness,
 decomposition, dispatch, runtime recovery, verification, or future rule review. It is not a
 coding agent and it never replaces the router, coordinator, state, ledger, worktrees,
 evidence gates, or merge boundary.
@@ -114,8 +114,8 @@ why. Forks never reach the advisor.
 
 The engine receives a bounded `DecisionContext` and returns a typed `Decision`. The
 deterministic viStack policy runs first; a confident answer is sharp and no model is asked.
-A split answer climbs the ladder — opted-in Jev, then local Laya-MLX, Kev, and an opted-in
-host CLI — and a tier settles it only when the action is valid, confidence meets the
+A split answer climbs the ladder — opted-in Jev, then local Ollama (`nimble` or `tev1:0.8b`),
+Laya-MLX, Kev, and an opted-in host CLI — and a tier settles it only when the action is valid, confidence meets the
 configured threshold, and the existing deterministic safety gates accept it. A missing
 model, refused key, timeout, malformed answer, low confidence, or rejected gate leaves the
 fork split, and the `Decision` says so in `fork`.
@@ -138,8 +138,9 @@ the recommendation as input to the existing rule, not as permission to act. In p
 Laya cannot merge, force-push, deploy, delete data, modify secrets, bypass a fence, or invent
 evidence. See `docs/guide/laya-decision-engine.md` for installation, the JSONL server, and
 the schema. Disable refinement for a consuming project with `python3
-scripts/vistack-decision.py laya off`, restore it with `laya on`, or bypass it for one request
-with `--disable-laya`. `VISTACK_LAYA_ENABLED=0` is the environment-wide emergency switch.
+scripts/vistack-decision.py decisions off`, restore it with `decisions on`, or bypass it for one request
+with `--disable-laya`. `VISTACK_LAYA_ENABLED=0` is the environment-wide emergency switch. `/vistack:decisions-on`
+asks which local Ollama model backs Jev.
 
 ## Step 0. Sticky mode
 

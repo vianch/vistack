@@ -87,8 +87,9 @@ The design is a **router → playbook → agent** chain, with all coordination s
    off, the `advisor` agent reviews a dossier instead.
 6. **Laya is the fork layer.** Forks that need no thinker — which playbook, which file,
    which tool, which tier, retry or stop — go to `laya-decision`: deterministic policy
-   first, then opted-in Jev and local Laya for split forks only. Sharp forks run in code;
-   split forks go to the main session. Forks never reach the advisor.
+   first, then, for split forks only, opted-in Jev, local Ollama (nimble or tev1), and local
+   Laya. Sharp forks run in code; split forks go to the main session. Forks never reach the
+   advisor.
 
 ### Run state (schema-bearing — see "Versioning")
 

@@ -49,12 +49,15 @@ def context() -> dict:
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--backend", choices=("deterministic", "mlx", "kev", "host-llm", "auto"), default="deterministic")
+    parser.add_argument("--backend", choices=("deterministic", "mlx", "kev", "ollama", "host-llm", "auto"), default="deterministic")
     parser.add_argument("--model")
     parser.add_argument("--host", choices=("claude", "codex"))
     parser.add_argument("--host-model")
     parser.add_argument("--kev-url")
     parser.add_argument("--kev-model", default="kev-latest")
+    parser.add_argument("--ollama-model", help="Ollama System One model, e.g. nimble")
+    parser.add_argument("--ollama-url")
+    parser.add_argument("--timeout-ms", type=int, default=2000, help="engine budget; Ollama waits at least 8000 ms")
     parser.add_argument("--fallback", choices=("none", "kev", "host-llm"))
     parser.add_argument("--effort", choices=("low", "medium", "high"), default="low")
     parser.add_argument("--runs", type=int, default=25)
@@ -69,8 +72,11 @@ def main(argv: list[str] | None = None) -> None:
         host_model=args.host_model,
         kev_url=args.kev_url,
         kev_model=args.kev_model,
+        ollama_model=args.ollama_model,
+        ollama_url=args.ollama_url,
         fallback=args.fallback,
         effort=args.effort,
+        timeout_ms=args.timeout_ms,
     )
     cold = (time.perf_counter() - started) * 1000
     timings: list[float] = []

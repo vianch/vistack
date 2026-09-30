@@ -1,14 +1,16 @@
 """Decision engine: deterministic policy, a refinement ladder, and safety gates.
 
 The deterministic policy answers every fork first. A sharp answer runs in code without a
-model turn. Only a split answer climbs the ladder — Jev when opted in, then Laya-MLX, Kev,
-and the host CLI — and the first typed answer that clears the confidence threshold and every
-safety gate makes the fork sharp. Anything else stays split and goes back to the main session.
+model turn. Only a split answer climbs the ladder — Jev when opted in, then Ollama, Laya-MLX,
+Kev, and the host CLI — and the first typed answer that clears the confidence threshold and
+every safety gate makes the fork sharp. Anything else stays split and goes back to the main
+session.
 """
 
 from __future__ import annotations
 
 from dataclasses import replace
+import json
 import os
 import signal
 import threading
@@ -17,9 +19,9 @@ import uuid
 from typing import Any, Mapping
 
 from .history import HistoryStore
-from .mlx_backend import InferenceTimeout, LayaUnavailable, MLXBackend
+from .mlx_backend import ContextOverflow, InferenceTimeout, LayaUnavailable, MLXBackend
 from .policy import PolicyDraft, evaluate, irreversible, option_descriptions, verification_sufficient
-from .questions import questions_for, state_for_laya
+from .questions import MAX_STATE_CHARS, questions_for, state_for_laya
 from .schema import (
     ACTIONS_BY_TYPE,
     Decision,
@@ -32,10 +34,17 @@ from .schema import (
 )
 
 
-BACKENDS = ("auto", "deterministic", "mlx", "kev", "jev", "host-llm")
+BACKENDS = ("auto", "deterministic", "mlx", "kev", "jev", "ollama", "host-llm")
 FALLBACKS = ("none", "kev", "jev", "host-llm")
 CONSULT_MODES = ("split", "always")
 TRUE_VALUES = {"1", "true", "on", "yes", "enabled"}
+# nimble answers three questions at a 6k-character state in about 4 s; the 2000 ms engine
+# default timed it out 11 times on the intake and grooming schemas.
+OLLAMA_MIN_TIMEOUT_MS = 8000
+# After a context overflow the state is shrunk to the reported window with this headroom,
+# since the questions share the window and do not shrink with the state.
+OVERFLOW_HEADROOM = 0.85
+MIN_STATE_CHARS = 800
 
 
 def _answer(result: Mapping[str, Any], name: str) -> Mapping[str, Any] | None:
@@ -92,6 +101,30 @@ def _flag(value: str | None) -> bool:
     return (value or "").strip().lower() in TRUE_VALUES
 
 
+def _positive_int(value: Any) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else None
+
+
+def _model_setting(explicit: str | None, variable: str) -> str | None:
+    """An explicit ``none`` or empty value turns the tier off even when the environment names a
+    model, so a project's switch file can opt out of a machine-wide setting."""
+
+    value = (os.environ.get(variable) if explicit is None else explicit) or ""
+    return None if value.strip().lower() in {"", "none"} else value.strip()
+
+
+def _ollama_timeout(explicit: int | None) -> int | None:
+    if explicit is None:
+        raw = os.environ.get("VISTACK_LAYA_OLLAMA_TIMEOUT_MS", "").strip()
+        try:
+            explicit = int(raw) if raw else None
+        except ValueError:
+            raise ValueError("VISTACK_LAYA_OLLAMA_TIMEOUT_MS must be a whole number of milliseconds") from None
+    if explicit is not None and explicit <= 0:
+        raise ValueError("ollama_timeout_ms must be positive")
+    return explicit
+
+
 class _Unavailable:
     """A configured backend that cannot run; every call falls through to the next tier."""
 
@@ -119,6 +152,12 @@ def _jev_backend(*, model: str | None, timeout_ms: int) -> Any:
     return JevBackend(api_key=key, model=model, timeout_ms=timeout_ms)
 
 
+def _ollama_backend(model: str, *, url: str | None, keep_alive: str | None, timeout_ms: int) -> Any:
+    from .system_one import OllamaBackend
+
+    return OllamaBackend(model, url=url, keep_alive=keep_alive, timeout_ms=timeout_ms)
+
+
 def _host_backend(host: str, *, model: str | None, effort: str, timeout_ms: int, workdir: str | None) -> Any:
     from .host_llm import HostLLMBackend
 
@@ -128,10 +167,10 @@ def _host_backend(host: str, *, model: str | None, effort: str, timeout_ms: int,
 class DecisionEngine:
     """A safe advisory decision engine.
 
-    ``backend='auto'`` uses deterministic policy unless a local model, a local Kev server, an
-    opted-in Jev key, or an explicit host fallback is configured. A single instance keeps the
-    optional MLX Agent resident, which avoids model reloads for the JSONL server and library
-    callers that make repeated decisions.
+    ``backend='auto'`` uses deterministic policy unless a local model, a local Kev or Ollama
+    server, an opted-in Jev key, or an explicit host fallback is configured. A single instance
+    keeps the optional MLX Agent resident, which avoids model reloads for the JSONL server and
+    library callers that make repeated decisions.
     """
 
     def __init__(
@@ -147,6 +186,10 @@ class DecisionEngine:
         kev_model: str = "kev-latest",
         jev: bool | None = None,
         jev_model: str | None = None,
+        ollama_model: str | None = None,
+        ollama_url: str | None = None,
+        ollama_keep_alive: str | None = None,
+        ollama_timeout_ms: int | None = None,
         consult: str | None = None,
         dtype: str = "float16",
         device: str | None = None,
@@ -187,6 +230,10 @@ class DecisionEngine:
         # asked for: the setting, VISTACK_LAYA_JEV, or --fallback jev. A key alone is not intent.
         self.jev = (_flag(os.environ.get("VISTACK_LAYA_JEV")) if jev is None else jev) or self.fallback_mode == "jev" or backend == "jev"
         self.jev_model = jev_model or os.environ.get("VISTACK_LAYA_JEV_MODEL")
+        self.ollama_model = _model_setting(ollama_model, "VISTACK_LAYA_OLLAMA_MODEL")
+        self.ollama_url = ollama_url or os.environ.get("VISTACK_LAYA_OLLAMA_URL")
+        self.ollama_keep_alive = ollama_keep_alive or os.environ.get("VISTACK_LAYA_OLLAMA_KEEP_ALIVE")
+        self.ollama_timeout_ms = _ollama_timeout(ollama_timeout_ms) or max(timeout_ms, OLLAMA_MIN_TIMEOUT_MS)
         self.consult = consult
         self.min_confidence = min_confidence
         self.timeout_ms = timeout_ms
@@ -220,8 +267,12 @@ class DecisionEngine:
             # Opted-in Jev goes first: it settled 7 of 10 labelled split forks, all correctly, at
             # about 340 ms, while the local checkpoint settled none and a cold load alone costs
             # about 600 ms per CLI call. Laya-MLX then answers when Jev is refused or unreachable.
+            # Ollama comes next: after Jev it settled one more labelled split fork, correctly, and
+            # none wrongly.
             if self.jev:
                 mode = "jev"
+            elif self.ollama_model:
+                mode = "ollama"
             elif self.model:
                 mode = "mlx"
             elif self.kev_url:
@@ -236,6 +287,10 @@ class DecisionEngine:
             return "kev", _kev_backend(self.kev_url or "http://127.0.0.1:8009", model=self.kev_model, timeout_ms=self.timeout_ms)
         if mode == "jev":
             return "jev", _jev_backend(model=self.jev_model, timeout_ms=self.timeout_ms)
+        if mode == "ollama":
+            if not self.ollama_model:
+                raise ValueError("ollama backend requires --ollama-model or VISTACK_LAYA_OLLAMA_MODEL")
+            return self._ollama()
         if not self.host:
             raise ValueError("host-llm backend requires --host or VISTACK_LAYA_HOST")
         return "host-llm", self._host(workdir)
@@ -249,14 +304,25 @@ class DecisionEngine:
             workdir=workdir,
         )
 
+    def _ollama(self) -> tuple[str, Any]:
+        """The tier is named for its model, so history and the ladder show ``ollama:nimble``."""
+
+        backend = _ollama_backend(
+            self.ollama_model or "", url=self.ollama_url, keep_alive=self.ollama_keep_alive, timeout_ms=self.ollama_timeout_ms
+        )
+        return f"ollama:{self.ollama_model}", backend
+
     def _make_fallbacks(self, primary_name: str | None, *, workdir: str | None) -> list[tuple[str, Any]]:
-        """Every configured tier after the primary, in ladder order: Jev, Laya-MLX, Kev, host CLI."""
+        """Every configured tier after the primary, in ladder order: Jev, Ollama, Laya-MLX, Kev,
+        host CLI."""
 
         if self.fallback_mode == "none":
             return []
         fallbacks: list[tuple[str, Any]] = []
         if primary_name != "jev" and self.jev:
             fallbacks.append(("jev", _jev_backend(model=self.jev_model, timeout_ms=self.timeout_ms)))
+        if self.ollama_model and primary_name != f"ollama:{self.ollama_model}":
+            fallbacks.append(self._ollama())
         if primary_name != "laya-mlx" and self.model:
             fallbacks.append(("laya-mlx", MLXBackend(self.model, dtype=self._dtype, device=self._device)))
         if primary_name != "kev" and self.kev_url:
@@ -563,14 +629,17 @@ class DecisionEngine:
             or threading.current_thread() is not threading.main_thread()
         ):
             return backend.predict(state, questions)
+        # A backend that declares its own budget (Ollama, the host CLI) is timed by it, so the
+        # engine default cannot kill a call the backend was built to wait for.
+        budget_ms = _positive_int(getattr(backend, "timeout_ms", None)) or self.timeout_ms
 
         def alarm_handler(_signum: int, _frame: Any) -> None:
-            raise InferenceTimeout(f"inference exceeded {self.timeout_ms} ms")
+            raise InferenceTimeout(f"inference exceeded {budget_ms} ms")
 
         previous_handler = signal.getsignal(signal.SIGALRM)
         previous_timer = signal.setitimer(signal.ITIMER_REAL, 0)
         signal.signal(signal.SIGALRM, alarm_handler)
-        signal.setitimer(signal.ITIMER_REAL, self.timeout_ms / 1000.0)
+        signal.setitimer(signal.ITIMER_REAL, budget_ms / 1000.0)
         try:
             return backend.predict(state, questions)
         finally:
@@ -579,20 +648,47 @@ class DecisionEngine:
             if previous_timer[0] > 0:
                 signal.setitimer(signal.ITIMER_REAL, previous_timer[0], previous_timer[1])
 
+    def _ask(
+        self,
+        context: DecisionContext,
+        backend: Any,
+        questions: Mapping[str, Mapping[str, Any]],
+        states: dict[int, dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Predict on a state sized to the backend's budget, built once per budget per decision.
+
+        A context overflow is retried once on a state shrunk to the reported window; only a
+        failed retry reaches the caller, so an overflow alone never trips the breaker.
+        """
+
+        budget = _positive_int(getattr(backend, "max_state_chars", None)) or MAX_STATE_CHARS
+        if budget not in states:
+            states[budget] = state_for_laya(context, max_chars=budget)
+        state = states[budget]
+        try:
+            return self._predict_with_timeout(backend, state, questions)
+        except ContextOverflow as exc:
+            size = len(json.dumps(state, sort_keys=True, ensure_ascii=False))
+            ratio = exc.limit_tokens / max(exc.prompt_tokens, 1)
+            smaller = state_for_laya(context, max_chars=max(MIN_STATE_CHARS, int(size * ratio * OVERFLOW_HEADROOM)))
+            if smaller == state:
+                raise
+            return self._predict_with_timeout(backend, smaller, questions)
+
     def _try_backend(
         self,
         context: DecisionContext,
         baseline: PolicyDraft,
         backend_name: str,
         backend: Any,
-        state: Mapping[str, Any],
         questions: Mapping[str, Mapping[str, Any]],
+        states: dict[int, dict[str, Any]],
     ) -> tuple[PolicyDraft | None, str | None]:
         open_until = self._open_until.get(backend_name, 0.0)
         if open_until > time.monotonic():
             return None, f"skipped for {open_until - time.monotonic():.0f}s after repeated failures"
         try:
-            raw = self._predict_with_timeout(backend, state, questions)
+            raw = self._ask(context, backend, questions, states)
         except Exception as exc:  # An advisory engine must not break orchestration.
             failures = self._failures.get(backend_name, 0) + 1
             self._failures[backend_name] = failures
@@ -620,11 +716,11 @@ class DecisionEngine:
     ) -> tuple[PolicyDraft | None, str | None, list[str]]:
         """Ask each tier in order; return the first answer that clears every gate."""
 
-        state = state_for_laya(context)
         questions = questions_for(context)
+        states: dict[int, dict[str, Any]] = {}
         errors: list[str] = []
         for name, backend in ladder:
-            draft, error = self._try_backend(context, baseline, name, backend, state, questions)
+            draft, error = self._try_backend(context, baseline, name, backend, questions, states)
             if draft is not None:
                 if draft.action == baseline.action:
                     # Two independent reads of the same fork; keep the policy's explanation.
@@ -640,12 +736,12 @@ class DecisionEngine:
     def _opinion(self, context: DecisionContext, baseline: PolicyDraft, ladder: list[tuple[str, Any]]) -> dict[str, Any]:
         """A model's answer on a sharp fork, recorded for evaluation and never applied."""
 
-        state = state_for_laya(context)
         questions = questions_for(context)
+        states: dict[int, dict[str, Any]] = {}
         errors = []
         for name, backend in ladder:
             try:
-                raw = self._predict_with_timeout(backend, state, questions)
+                raw = self._ask(context, backend, questions, states)
                 draft, error = self._model_draft(context, raw, baseline, name)
             except Exception as exc:
                 draft, error = None, str(exc) or type(exc).__name__

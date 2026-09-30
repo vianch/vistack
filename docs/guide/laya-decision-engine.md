@@ -14,7 +14,7 @@ DecisionContext -> deterministic policy --sharp--> typed Decision (fork: sharp) 
                          |
                        split
                          v
-                  refinement ladder: Jev (opt-in) -> Laya-MLX -> Kev -> host CLI (opt-in)
+                  refinement ladder: Jev (opt-in) -> Ollama (local) -> Laya-MLX -> Kev -> host CLI (opt-in)
                          |
                   safety gates --pass--> typed Decision (fork: sharp) -> runs in code
                          |
@@ -36,7 +36,8 @@ only when all of these checks pass:
 4. The result does not violate deterministic readiness, dependency, evidence, size,
    irreversibility, or shared-file gates.
 
-Otherwise the next tier is asked, and after the last one the deterministic result is
+Otherwise the next tier is asked, so Ollama answers any fork the tier before it left
+unsettled, whether that tier was unavailable, unsure, or rejected by a gate. After the last one the deterministic result is
 returned with `fallback_used: true`, a reason, and `fork: split`. When a tier agrees with the
 policy's own lean, the decision keeps the policy's rationale and the higher confidence.
 
@@ -58,8 +59,12 @@ MLX implementations are interchangeable.
 | [original Laya README](https://github.com/NandhaKishorM/laya#readme) | The original SDK exposes the same typed question primitives and a router, but its checkpoint loading and runtime are separate from MLX. |
 | [Laya model card](https://huggingface.co/convaiinnovations/laya) | The model is a bidirectional decision model, not a text generator. Choice options share a context budget and confidence is not a guarantee of correctness. |
 | [MLX checkpoint card](https://huggingface.co/aac6fef/laya-mlx) | The published MLX weights preserve the upstream checkpoint format but are an independent port. |
-
 | [TypeSafe API](https://docs.typesafe.ai/api) | Jev serves the same System One protocol at `POST https://api.typesafe.ai/v1/systemone` with a bearer key. Jev 1.13 costs $0.042 per million input tokens; output tokens are free. |
+| [Ollama System One API](https://docs.ollama.com/api/systemone) | Ollama serves the same System One protocol at `POST /v1/systemone`, with no key. |
+| [Ollama decision capability](https://docs.ollama.com/capabilities/decision) | Decision models answer typed questions instead of generating text; choice questions take 2 to 26 options. |
+| [Ollama decision models announcement](https://ollama.com/blog/ollama-now-supports-jev-style-decision-models) | Ollama loads a decision model like any other and keeps it resident for the `keep_alive` window. |
+| [`nimble` on Ollama](https://ollama.com/library/nimble) | A 9B decision model from Bespoke Labs, fine-tuned from Qwen3.5-9B, Apache 2.0, 9.5 GB at q8_0, 8,192-token loaded window, text only. |
+| [`tev1` on Ollama](https://ollama.com/library/tev1) | `tev1:0.8b` is an experimental decision model from Together AI, fine-tuned from Qwen3.5: 752M parameters, 812 MB, about 2,048-token window, trained on 2 to 24 options. Plain `tev1` is the 4B model. |
 | [TypeSafe patterns](https://docs.typesafe.ai/patterns) | Keep deterministic work in code, ask narrow independent questions, and gate actions on confidence per consequence. |
 
 The model is not trained on viStack-specific outcomes, so historical overrides and final
@@ -103,8 +108,8 @@ For local MLX inference on Apple Silicon, let viStack build a dedicated runtime.
 Python is often externally managed (PEP 668) and refuses `pip install`:
 
 ```bash
-python3 scripts/vistack-decision.py laya setup --dry-run   # show the plan
-python3 scripts/vistack-decision.py laya setup             # venv + laya-mlx + checkpoint
+python3 scripts/vistack-decision.py decisions setup --dry-run   # show the plan
+python3 scripts/vistack-decision.py decisions setup             # venv + laya-mlx + checkpoint
 export VISTACK_LAYA_MODEL=convaiinnovations/laya
 export VISTACK_LAYA_PYTHON="$HOME/.cache/vistack/laya-venv/bin/python"
 ```
@@ -117,7 +122,7 @@ venv when the current interpreter cannot import `laya_mlx`, so hosts keep callin
 local; use a local checkpoint directory instead of a Hub id when network access is not wanted.
 
 The model is not downloaded implicitly by `--backend auto`; auto mode stays deterministic
-unless `VISTACK_LAYA_MODEL`, `--model`, a Kev URL, or Jev is configured.
+unless `VISTACK_LAYA_MODEL`, `--model`, an Ollama model, a Kev URL, or Jev is configured.
 
 ## Local model fallback: Kev
 
@@ -143,7 +148,8 @@ python3 scripts/vistack-decision.py decision grooming \
   --kev-model kev-latest
 ```
 
-With a configured Laya-MLX model, the order is Laya-MLX, Kev, then deterministic policy.
+With a configured Laya-MLX model, the order is Laya-MLX, Kev, then deterministic policy,
+after Jev and Ollama when they are opted in.
 Without Laya-MLX, `--backend auto --kev-url ...` uses Kev directly. If Kev is not running,
 the deterministic policy still returns a decision. No local server is contacted unless its
 URL is configured, and `--fallback none` keeps the primary tier only.
@@ -156,22 +162,107 @@ forks, all correctly, and left the other 3 split for the main session. It is opt
 it sends the bounded, redacted decision state to TypeSafe:
 
 ```bash
-python3 scripts/vistack-decision.py laya on --jev        # this project
-export VISTACK_LAYA_JEV=1                                # every project in this shell
+python3 scripts/vistack-decision.py decisions on --jev   # this project
+export VISTACK_LAYA_JEV=1                               # every project in this shell
 ```
 
 The key is read from `TYPESAFE_API_KEY`, then `TYPESAFE_KEY`, and never written to a file. An
 opted-in Jev leads the ladder: it answers a split fork in about 350 ms warm and about 0.5 s
 from a cold CLI call, and the local checkpoint then loads only when Jev cannot answer.
-Without Jev, the local tiers lead. TypeSafe publishes no balance endpoint, so a 401, 402, or
+Without Jev, the local tiers lead, Ollama first when it is configured. TypeSafe publishes no balance endpoint, so a 401, 402, or
 403 is taken to mean the key or credits are gone: Jev is skipped for an hour, recorded in
 `~/.cache/vistack/jev-status.json`, and the local tiers answer instead. A 429 or 529 is a
-normal transient failure. `laya status --probe` makes one single-question call to prove the
-key and remaining credits.
+normal transient failure. `decisions status --probe` makes one single-question call to
+prove the key and remaining credits. That call is billed.
 
 The TypeSafe agent skill is not installed: both of its install paths clone from a GitHub
 organisation outside the allowed origin realm. This adapter follows the published API
 documentation instead.
+
+## Local fork tier: Ollama
+
+[Ollama](https://ollama.com) serves decision models through `POST /v1/systemone`, the same
+System One protocol Jev speaks. It needs no key, and the decision state never leaves the
+machine. Install Ollama, pull a decision model, and opt in:
+
+```bash
+ollama pull nimble
+python3 scripts/vistack-decision.py decisions on --ollama-model nimble
+```
+
+`--ollama-model none` turns the tier off. `decisions on` writes the model to the switch file,
+then preloads it and reports `ollama.preloaded`. `/vistack:decisions-on` lists the installed
+decision models and asks which one to use.
+
+### Place in the ladder
+
+Ollama sits after Jev and before Laya-MLX. It answers any fork the tier before it left
+unsettled: Jev unavailable, unsure, or rejected by a gate. Without Jev, Ollama leads. Sharp
+forks never reach it.
+
+### Measurements
+
+Measured on 2026-09-30 on an Apple Silicon Mac with 36 GB, Ollama 0.35.0, warm, on the 80
+labelled scenarios in `examples/laya/scenarios.jsonl`. Ten are split forks. Threshold 0.65.
+
+| Ladder | Split forks settled | Wrong sharp forks | Sharp precision | Sharp coverage | Latency per split fork |
+|---|---|---|---|---|---|
+| deterministic only | 0 of 10 | 0 | 70 of 70 | 87.5% | under 1 ms |
+| `tev1:0.8b` alone | 0 of 10 | 0 | 70 of 70 | 87.5% | about 0.2 s |
+| `nimble` alone | 8 of 10 | 1 | 77 of 78 | 97.5% | 1.0-1.7 s, median 1.3 s |
+| Jev, then `nimble` | 8 of 10 (Jev 7, `nimble` 1) | 0 | 78 of 78 | 97.5% | Jev 0.27-0.56 s; `nimble` only on forks Jev left unsettled |
+
+Raw accuracy before gates was 63.6% for `tev1:0.8b` (77 answered) and 69.2% for `nimble` (78
+answered). With the 8000 ms Ollama budget neither model timed out; under the engine's 2000 ms
+default `nimble` had timed out 11 times on the three-question intake and grooming schemas. The one wrong `nimble` fork is `file-user-docs`
+("Document the new switch for users"). It went to `laya/config.py` at confidence 0.906,
+because both local models keyed on "switch" in that file's description. Jev picked the guide
+at 0.91. A higher threshold would not have caught it. `tev1:0.8b` never reached 0.65 on any
+split fork (highest 0.646), so on these scenarios it adds latency and settles nothing.
+
+### What it costs
+
+- As Jev's fallback, `nimble` adds 1 to 4 s only on the forks Jev did not settle.
+- As the lead tier, every split fork pays 1 to 4 s.
+- `nimble` holds about 9.5 GB of memory while loaded.
+
+### Load and keep-alive
+
+Every request carries `keep_alive`, default `30m`. Ollama 0.35.0 cancels a model load when
+the client disconnects, so a load cannot run in the background and be collected later. The
+first decision after the keep-alive window pays the load: about 1.3 s when the weights are in
+the OS file cache and about 20 s from disk. `decisions on` preloads the model so the first
+real decision is warm. The load runs before the per-call timer starts, so it
+is never charged to the Ollama timeout: 8000 ms by default (`--ollama-timeout-ms`). A call
+that exceeds the timeout falls to the next tier.
+
+### State cap and overflow retry
+
+The state sent to Ollama is capped at 6000 characters. A loaded model has its own token
+window (8,192 for `nimble`, about 2,048 for `tev1:0.8b`). When a prompt exceeds it, Ollama
+returns HTTP 400 with `prompt 0 has N tokens; expected 1-M`, and the adapter retries once
+with a smaller state. A choice question with fewer than 2 options is dropped, because the API
+requires 2 to 26.
+
+### Confidence scale
+
+Ollama returns `confidence = 1 - H(p) / ln N`, the entropy concentration of the answer
+distribution. It is not calibrated correctness. For a two-option choice, `nimble` needs
+p of about 0.94 to reach 0.65. The scales differ across tiers, so do not retune
+`--min-confidence` globally from one tier's numbers.
+
+### Configuration
+
+| Setting | Flag | Environment |
+|---|---|---|
+| Model tag | `--ollama-model` | `VISTACK_LAYA_OLLAMA_MODEL` |
+| Server URL | `--ollama-url` | `VISTACK_LAYA_OLLAMA_URL` |
+| Keep-alive | `--ollama-keep-alive` | `VISTACK_LAYA_OLLAMA_KEEP_ALIVE` |
+| Timeout (ms) | `--ollama-timeout-ms` | `VISTACK_LAYA_OLLAMA_TIMEOUT_MS` |
+
+`OLLAMA_HOST` is honored when no URL is set, with the scheme optional. `decision`, `serve`,
+and `evaluate-laya.py` accept the four flags. `--backend ollama` runs Ollama alone, for
+evaluation.
 
 ## Cost-aware host fallback
 
@@ -218,19 +309,21 @@ policy, so enabling the integration does not add a cloud dependency or block a r
 Turn refinement off for the consuming project:
 
 ```bash
-python3 scripts/vistack-decision.py laya off
+python3 scripts/vistack-decision.py decisions off
 ```
 
 Turn it back on or inspect the effective setting:
 
 ```bash
-python3 scripts/vistack-decision.py laya on
-python3 scripts/vistack-decision.py laya status
+python3 scripts/vistack-decision.py decisions on
+python3 scripts/vistack-decision.py decisions status
 ```
+
+The old `laya on|off|status|setup` spelling still works as an alias.
 
 The switch lives in the host's state root: `.claude/vistack/laya.json` under Claude Code
 (detected from `CLAUDECODE`) and `.codex/vistack/laya.json` elsewhere. Under Claude Code a
-switch written earlier to the Codex root is still read until `laya on` or `laya off` writes
+switch written earlier to the Codex root is still read until `decisions on` or `decisions off` writes
 the Claude one. `decision`, `serve`, and the history commands use the same root, so a toggle
 and the decisions it governs never disagree. A one-request emergency
 override is `--disable-laya`. The environment variable `VISTACK_LAYA_ENABLED=0` disables
@@ -239,8 +332,8 @@ These switches select deterministic policy; they do not disable viStack routing,
 evidence, or safety rules.
 
 The same choices can be committed to a machine-local, ignored config file. The file is
-created by `laya on`/`laya off`; `laya on --model <id> --jev` records those two fields, and
-the other backend fields can be added by the project owner:
+created by `decisions on`/`decisions off`; `decisions on --model <id> --jev --ollama-model <tag>`
+records those fields, and the other backend fields can be added by the project owner:
 
 ```json
 {
@@ -248,6 +341,9 @@ the other backend fields can be added by the project owner:
   "enabled": true,
   "model": "convaiinnovations/laya",
   "jev": true,
+  "ollama_model": "nimble",
+  "ollama_url": "http://127.0.0.1:11434",
+  "ollama_keep_alive": "30m",
   "fallback": "kev",
   "kev_url": "http://127.0.0.1:8009",
   "kev_model": "kev-latest",
@@ -256,9 +352,13 @@ the other backend fields can be added by the project owner:
 }
 ```
 
-`laya status` reports what will actually run: the ladder, the interpreter, whether
-`laya_mlx` imports, whether the checkpoint is cached, whether a Jev key is present or was
-refused, and the fork tally from the decision history.
+`"ollama_model": "none"` turns the Ollama tier off and keeps the other fields. `decisions
+status` reports what will actually run: the ladder, the interpreter, whether `laya_mlx`
+imports, whether the checkpoint is cached, whether a Jev key is present or was refused, the
+`ollama` block (`model`, `url`, `reachable`, `version`, `installed`, `decision_models`,
+`loaded`, `missing`) with a `hint`, and the fork tally from the decision history. `--probe`
+also sends one question to the Ollama model. That call is local and free, unlike the billed
+Jev probe.
 
 Keep this file and `.codex/vistack/decision-history.jsonl` out of version control. An ignored
 file is also the safest place for a developer-specific host model choice.
@@ -297,7 +397,8 @@ not charged to the per-call timeout, and a failed load is remembered instead of 
 every request. A backend that fails twice in a row is skipped for 30 seconds, so an outage
 costs one connect or inference timeout per window rather than one per decision.
 
-Use `--timeout-ms` to bound an MLX call. The default is 2000 ms; a timeout returns the
+Use `--timeout-ms` to bound an MLX call; the default is 2000 ms. A backend with its own
+budget keeps it: Ollama uses `--ollama-timeout-ms` and the host CLI at least 5000 ms. A timeout returns the
 deterministic fallback. Set it to `0` only when the caller supplies its own process-level
 timeout.
 
@@ -427,8 +528,8 @@ reviewable workflow change.
 
 The engine returns the deterministic policy result when the configured refinement backends
 are missing, cannot load, time out, return malformed output, fall below the confidence
-threshold, or fail a safety gate. If configured, the order is opted-in Jev, local Laya-MLX,
-local Kev, explicit host CLI, then deterministic policy. The sidecar also converts malformed
+threshold, or fail a safety gate. If configured, the order is opted-in Jev, local Ollama,
+Laya-MLX, local Kev, explicit host CLI, then deterministic policy. The sidecar also converts malformed
 JSONL requests into an error response and keeps serving subsequent requests.
 
 viStack must continue when the sidecar is unavailable. A coordinator can omit the hook and
@@ -454,6 +555,7 @@ show that a decision is accurate for viStack. The labelled scenarios in
 ```bash
 python3 scripts/evaluate-laya.py --check
 python3 scripts/evaluate-laya.py --backend mlx --model "$VISTACK_LAYA_MODEL"
+python3 scripts/evaluate-laya.py --backend ollama --ollama-model nimble --fallback none --raw
 ```
 
 The report includes sharp precision, sharp coverage, per-type counts, and every sharp
@@ -464,7 +566,9 @@ On 2026-09-29 the 80 labelled scenarios gave: deterministic policy alone, 70 sha
 right (87.5% coverage); with `convaiinnovations/laya`, unchanged, because it cleared the
 threshold on none of the ten split forks; with Jev, 77 sharp, all right (96.25% coverage),
 the remaining three split. Before two tool labels were made unambiguous, Jev picked `grep`
-for both at 0.99 confidence — the confidence gave no warning. Add a
+for both at 0.99 confidence — the confidence gave no warning. On 2026-09-30, with Ollama 0.35.0, `nimble` alone settled 8 of the 10 split forks with one
+wrong sharp fork (`file-user-docs`, confidence 0.906), and Jev then `nimble` settled 8 with none
+wrong; the table is in the Ollama section. Add a
 scenario for every corrected decision, and compare deterministic policy, model
 recommendation, human choice, and final outcome before raising the confidence threshold or
 enabling more automatic refinement.
@@ -522,12 +626,24 @@ fallback and evidence predicate are independently testable.
 - The MLX runtime is optional and currently targets Apple Silicon/macOS. A cold CLI call
   that has to load the local checkpoint takes about 0.7 s; keep `serve` running for repeated
   local decisions.
+- `nimble` holds about 9.5 GB of memory while loaded, and the first decision after the
+  keep-alive window pays a model load of about 1.3 s to 20 s.
+- `tev1:0.8b` settled none of the measured split forks at the default threshold, so on these
+  scenarios it adds latency and no answers.
+- When `nimble` answers alone, a wrong sharp fork is possible: it sent `file-user-docs` to the
+  wrong file at confidence 0.906, and a higher threshold would not have caught it. Jev ahead of
+  it removed that error on the measured scenarios.
+- The 6000-character state cap is sized for prose. Token-dense evidence such as hashes or hex
+  dumps reached about 4,400 tokens at 5,300 characters, and `nimble` then took 14.6 s
+  uncached, past the 8000 ms budget. That fork falls to the next tier; two in a row pause the
+  Ollama tier for 30 seconds in a long-lived server. Summarize such evidence before it
+  reaches a decision context.
 - Jev is hosted and opt-in; it can incur a small cost and it receives the redacted decision
   state.
 - Kev is a separate local service; it is not installed by this plugin and its current Qwen3.5
   server path is slower on Apple Silicon than the older Qwen3 checkpoints.
 - Host-LLM fallback is opt-in and can incur cost or transmit redacted decision context to the
-  configured provider. It is never selected implicitly by `laya on`.
+  configured provider. It is never selected implicitly by `decisions on`.
 - The default English checkpoint is not a viStack-fine-tuned model, and on these scenarios
   it answered no split fork confidently.
 - Laya choice quality can degrade with large option sets, so question schemas keep choices

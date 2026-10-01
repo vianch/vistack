@@ -1,0 +1,537 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Report Component Sheet</title>
+<style>
+/* Layout: one column, a sticky aside from 60rem; boxes only around things that move or get compared. */
+:root{
+--bg:#f5f7f6;--surface:#fff;--surface-2:#e9eeeb;--fg:#17201d;--fg-muted:#55615c;--line:#d2dad6;--accent:#2747c7;--accent-fg:#fff;
+--ok:#176a3c;--warn:#874e00;--bad:#a8231c;--info:#0a6379;--neutral:#545e5a;
+--font-sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+--font-mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+--font-display:var(--font-sans);
+--fs-1:.75rem;--fs-2:.8125rem;--fs-3:.9375rem;--fs-4:1.0625rem;--fs-5:1.3125rem;--fs-6:1.75rem;--fs-7:2.25rem;
+--sp-1:.25rem;--sp-2:.5rem;--sp-3:.75rem;--sp-4:1rem;--sp-5:1.5rem;--sp-6:2rem;--sp-7:3rem;--sp-8:4rem;
+--r-1:4px;--r-2:8px;--r-3:12px;--r-pill:999px;
+--shadow:0 1px 2px color-mix(in srgb,var(--fg) 12%,transparent),0 6px 16px color-mix(in srgb,var(--fg) 8%,transparent);
+--dur-1:120ms;--dur-2:220ms;--ease:cubic-bezier(.2,.7,.2,1);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+--bg:#111614;--surface:#18201d;--surface-2:#222b28;--fg:#e3eae6;--fg-muted:#9ba9a2;--line:#303b37;--accent:#93a9ff;--accent-fg:#0d1430;
+--ok:#5cc68a;--warn:#e3a646;--bad:#f2817a;--info:#5cc3da;--neutral:#a5afaa;color-scheme:dark}}
+:root[data-theme="dark"]{
+--bg:#111614;--surface:#18201d;--surface-2:#222b28;--fg:#e3eae6;--fg-muted:#9ba9a2;--line:#303b37;--accent:#93a9ff;--accent-fg:#0d1430;
+--ok:#5cc68a;--warn:#e3a646;--bad:#f2817a;--info:#5cc3da;--neutral:#a5afaa;color-scheme:dark}
+@media (prefers-reduced-motion:reduce){:root{--dur-1:0ms;--dur-2:0ms}}
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--fg);font:var(--fs-3)/1.55 var(--font-sans)}
+img,svg{max-width:100%}
+h1,h2,h3{margin:0;font-family:var(--font-display);line-height:1.2;text-wrap:balance}
+h1{font-size:var(--fs-6);font-weight:680;letter-spacing:-.015em}
+h2{font-size:var(--fs-5);font-weight:650}
+h3{font-size:var(--fs-3);font-weight:650}
+p,ul,ol,dl,figure{margin:0}
+a{color:var(--accent);text-underline-offset:2px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+code,kbd,pre{font-family:var(--font-mono);font-size:.875em}
+code{background:var(--surface-2);border-radius:var(--r-1);padding:.05em .3em;overflow-wrap:anywhere}
+pre{overflow-x:auto;background:var(--surface-2);border-radius:var(--r-2);padding:var(--sp-3)}
+pre code{background:none;padding:0;overflow-wrap:normal}
+table,.tiles,.num,time{font-variant-numeric:tabular-nums}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+
+.panel,.tile,.ticket,.task,.rows>li,.file,.flag,.diff,.table,.nav,.shapes>div,details,input[type="text"],.copy-fallback{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-2);min-width:0}
+.panel,.tile,.file,.nav{border-radius:var(--r-3)}
+.page{max-width:72rem;margin-inline:auto;padding-inline:max(var(--sp-4),env(safe-area-inset-left,0px)) max(var(--sp-4),env(safe-area-inset-right,0px));padding-block:var(--sp-6) var(--sp-8);display:grid;gap:var(--sp-6)}
+.layout{display:grid;gap:var(--sp-6);grid-template-columns:minmax(0,1fr)}
+.stack{display:grid;gap:var(--sp-7);min-width:0}
+.block{display:grid;gap:var(--sp-3);min-width:0;scroll-margin-top:var(--sp-6)}
+.head,.aside{display:grid;gap:var(--sp-3);align-content:start;min-width:0}
+.lede{color:var(--fg-muted);font-size:var(--fs-4);max-width:65ch}
+.prose{max-width:65ch;display:grid;gap:var(--sp-2)}
+.hint,.muted{color:var(--fg-muted);font-size:var(--fs-2)}
+.missing{color:var(--fg-muted);font-style:italic}
+.label{font:600 var(--fs-1)/1.3 var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--fg-muted)}
+.meta,.chips,.actions{display:flex;flex-wrap:wrap;gap:var(--sp-2);align-items:center}
+.panel{padding:var(--sp-4);display:grid;gap:var(--sp-2)}
+@media (min-width:60rem){.layout.has-aside{grid-template-columns:minmax(0,1fr) 16rem}.aside{position:sticky;top:calc(env(safe-area-inset-top,0px) + var(--sp-4));align-self:start}}
+
+[data-tone="ok"]{--tone:var(--ok)}[data-tone="warn"]{--tone:var(--warn)}[data-tone="bad"]{--tone:var(--bad)}[data-tone="info"]{--tone:var(--info)}[data-tone="neutral"]{--tone:var(--neutral)}
+.pill{display:inline-flex;align-items:center;gap:.4em;padding:.1em .6em;border-radius:var(--r-pill);font-size:var(--fs-1);font-weight:600;line-height:1.6;color:var(--tone,var(--fg-muted));background:color-mix(in srgb,var(--tone,var(--neutral)) 14%,transparent);overflow-wrap:anywhere}
+.pill[data-tone]::before{content:"";width:.6em;height:.6em;flex:none;background:currentColor}
+.pill[data-tone="ok"]::before{border-radius:50%}
+.pill[data-tone="warn"]::before{clip-path:polygon(50% 0,100% 100%,0 100%)}
+.pill[data-tone="bad"]::before{border-radius:1px}
+.pill[data-tone="info"]::before{clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%)}
+.pill[data-tone="neutral"]::before{border-radius:50%;background:none;box-shadow:inset 0 0 0 1.5px currentColor}
+
+.btn,.chip{font:inherit;font-size:var(--fs-2);font-weight:600;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:var(--r-2);padding:.35rem .75rem;cursor:pointer;display:inline-flex;align-items:center;gap:var(--sp-1)}
+.btn:hover,.chip:hover{border-color:var(--fg-muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.icon{padding:.15rem .45rem}
+.chip{border-radius:var(--r-pill);padding:.2rem .7rem}
+.chip[aria-pressed="true"]{background:color-mix(in srgb,var(--accent) 14%,var(--surface));border-color:var(--accent)}
+.chip .n{color:var(--fg-muted);font-weight:500}
+.copy-fallback{width:100%;min-height:8rem;font:var(--fs-2)/1.5 var(--font-mono);color:var(--fg);padding:var(--sp-2)}
+input[type="text"]{font:inherit;color:var(--fg);padding:.4rem .6rem;max-width:100%}
+.toolbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:2;display:flex;flex-wrap:wrap;gap:var(--sp-2) var(--sp-3);align-items:center;padding-block:var(--sp-2);background:var(--bg);border-bottom:1px solid var(--line)}
+.toolbar .grow{flex:1 1 12rem;min-width:0}
+
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,7rem),1fr));gap:var(--sp-3)}
+.tile{padding:var(--sp-4);display:grid;gap:var(--sp-1);align-content:start;justify-items:start}
+.tile .value{font:650 var(--fs-7)/1.05 var(--font-display);letter-spacing:-.02em}
+.board{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr));gap:var(--sp-3);align-items:start}
+.col{background:var(--surface-2);border-radius:var(--r-3);padding:var(--sp-3);display:grid;gap:var(--sp-2);min-width:0}
+.col>header{display:flex;justify-content:space-between;align-items:baseline;gap:var(--sp-2)}
+.items,.rows,.checklist,.timeline,.steps,.track,.toc ol{list-style:none;padding:0}
+.items,.rows{display:grid;gap:var(--sp-2);align-content:start}
+.items{min-height:3rem}
+.ticket{padding:var(--sp-3);display:grid;gap:var(--sp-1)}
+.ticket[draggable="true"]{cursor:grab}
+.is-dragging{opacity:.45}
+.ticket .title{font-weight:600;overflow-wrap:anywhere}
+.ticket .meta{font-size:var(--fs-2);color:var(--fg-muted)}
+.rows>li{display:grid;gap:var(--sp-1);padding:var(--sp-3);overflow-wrap:anywhere}
+
+.track{display:flex;flex-wrap:wrap;gap:var(--sp-1);align-items:center}
+.track li{display:flex;align-items:center;gap:var(--sp-1)}
+.track li+li::before{content:"";width:.75rem;height:1px;background:var(--fg-muted)}
+.track [aria-current] .pill{outline:1.5px solid currentColor}
+.task{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4)}
+.task .title{flex:1 1 12rem;min-width:0}
+.task input{width:1.15rem;height:1.15rem;margin:0;accent-color:var(--ok)}
+.task:has(input:checked) .title,.checklist li:has(input:checked) label{text-decoration:line-through;color:var(--fg-muted)}
+
+.timeline{display:grid}
+.timeline>li{display:grid;grid-template-columns:6.5rem minmax(0,1fr);column-gap:var(--sp-3)}
+.timeline time{font:var(--fs-2)/1.7 var(--font-mono);color:var(--fg-muted);text-align:right}
+.timeline .body{position:relative;border-left:2px solid var(--line);padding:0 0 var(--sp-4) var(--sp-4);display:grid;gap:var(--sp-1);min-width:0}
+.timeline .body::before{content:"";position:absolute;left:-7px;top:.3em;width:12px;height:12px;border-radius:50%;background:var(--surface);border:2px solid var(--tone,var(--fg-muted))}
+.what,.path{font:600 var(--fs-2) var(--font-mono);overflow-wrap:anywhere}
+.ev{color:var(--fg-muted);font-size:var(--fs-2);overflow-wrap:anywhere}
+@media (max-width:30rem){.timeline>li{grid-template-columns:minmax(0,1fr)}.timeline time{text-align:left;padding-left:var(--sp-4);border-left:2px solid var(--line)}}
+.callout{border:1px solid color-mix(in srgb,var(--tone,var(--info)) 40%,transparent);background:color-mix(in srgb,var(--tone,var(--info)) 9%,var(--surface));border-radius:var(--r-2);padding:var(--sp-3) var(--sp-4);display:grid;gap:var(--sp-1);min-width:0}
+.callout>strong:first-child{color:var(--tone,var(--info))}
+.tldr{background:var(--surface-2);border-radius:var(--r-3);padding:var(--sp-4) var(--sp-5);font-size:var(--fs-4);display:grid;gap:var(--sp-2)}
+
+.scroll{overflow-x:auto;max-width:100%}
+.figure{display:grid;gap:var(--sp-2)}
+figcaption{color:var(--fg-muted);font-size:var(--fs-2);max-width:65ch}
+.chart,.diagram{display:block;max-width:100%;height:auto}
+.chart{color:var(--fg-muted);font:11px var(--font-sans)}
+.chart text,.diagram text{text-anchor:middle}
+.chart text{fill:currentColor}
+.chart .axis{text-anchor:end}
+.chart .grid{stroke:var(--line)}
+.chart .bar{fill:color-mix(in srgb,var(--accent) 35%,var(--surface))}
+.chart .peak{fill:var(--accent)}
+.chart .value{fill:var(--fg);font-weight:600}
+.diagram{color:var(--fg)}
+.diagram rect{fill:var(--surface);stroke:var(--line);stroke-width:1.5}
+.diagram .hot rect{fill:color-mix(in srgb,var(--accent) 10%,var(--surface));stroke:var(--accent)}
+.diagram text{fill:currentColor;font:600 13px var(--font-sans)}
+.diagram .sub{fill:var(--fg-muted);font:11px var(--font-mono)}
+.diagram .edge{stroke:var(--fg-muted);stroke-width:1.5;fill:none}
+.diagram .edge.hot{stroke:var(--accent);stroke-width:2.5}
+.diagram marker path{fill:var(--fg-muted)}
+.diagram marker.hot path{fill:var(--accent)}
+
+.steps{counter-reset:step;display:grid;gap:var(--sp-5)}
+.steps>li{counter-increment:step;position:relative;padding-left:2.75rem;display:grid;gap:var(--sp-2);min-width:0}
+.steps>li::before{content:counter(step);position:absolute;left:0;top:0;width:2rem;height:2rem;border-radius:50%;display:grid;place-items:center;background:var(--surface-2);font:600 var(--fs-2) var(--font-mono)}
+summary{cursor:pointer;padding:var(--sp-2) var(--sp-3);font-weight:600}
+details>:not(summary){margin:0 var(--sp-3) var(--sp-3)}
+.diff{overflow-x:auto;font:var(--fs-2)/1.65 var(--font-mono)}
+.diff>div{display:inline-block;min-width:100%;padding-block:var(--sp-1)}
+.ln{display:grid;grid-template-columns:4ch 2ch max-content;white-space:pre;padding-inline:var(--sp-2)}
+.ln i{font-style:normal;color:var(--fg-muted);text-align:right;padding-right:1ch;user-select:none}
+.ln b{font-weight:400;color:var(--fg-muted);user-select:none}
+.ln.add{background:color-mix(in srgb,var(--ok) 13%,transparent)}
+.ln.del{background:color-mix(in srgb,var(--bad) 13%,transparent)}
+.ln.add b{color:var(--ok)}.ln.del b{color:var(--bad)}
+.note{position:sticky;left:var(--sp-2);margin:var(--sp-1) var(--sp-2);max-width:min(60ch,calc(100vw - 5rem));white-space:normal;font:var(--fs-2)/1.5 var(--font-sans)}
+.pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,18rem),1fr));gap:var(--sp-3)}
+.pair>*{min-width:0}
+.file{padding:var(--sp-4);display:grid;gap:var(--sp-3);scroll-margin-top:var(--sp-6)}
+details.file{padding:0;gap:0}
+.file:target,.panel:target{outline:2px solid var(--accent);outline-offset:3px}
+.file>header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:var(--sp-2)}
+
+.checklist{display:grid;gap:var(--sp-2)}
+.checklist li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:var(--sp-1) var(--sp-3);align-items:start}
+.flag input,.checklist input{width:1rem;height:1rem;margin:.2em 0 0;accent-color:var(--accent)}
+.who{color:var(--fg-muted);font-size:var(--fs-2);white-space:nowrap}
+.table{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:var(--fs-2)}
+th,td{padding:var(--sp-2) var(--sp-3);text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+th{font:600 var(--fs-1) var(--font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--fg-muted);background:var(--surface-2)}
+tr:last-child td{border-bottom:0}
+.num{text-align:right}
+.kv{display:grid;grid-template-columns:minmax(7rem,max-content) minmax(0,1fr);gap:var(--sp-2) var(--sp-4)}
+.kv dt{color:var(--fg-muted);font-size:var(--fs-2)}
+.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
+@media (max-width:30rem){.kv{grid-template-columns:minmax(0,1fr);row-gap:0}.kv dd{margin-bottom:var(--sp-3)}}
+[role="tablist"]{display:flex;gap:var(--sp-1);border-bottom:1px solid var(--line);overflow-x:auto}
+[role="tab"]{font:inherit;font-weight:600;color:var(--fg-muted);background:none;border:0;border-bottom:2px solid transparent;padding:var(--sp-2) var(--sp-3);cursor:pointer;white-space:nowrap}
+[role="tab"][aria-selected="true"]{color:var(--fg);border-bottom-color:var(--accent)}
+
+.nav{list-style:none;padding:var(--sp-2);display:grid;gap:2px;max-width:24rem}
+.nav li{display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-1) var(--sp-2);border-radius:var(--r-2)}
+.nav .n{margin-left:auto;color:var(--fg-muted);font-size:var(--fs-2)}
+.grip{flex:none;width:10px;height:16px;color:var(--fg-muted);background:radial-gradient(currentColor 1.2px,transparent 1.7px) 0 0/5px 5px;cursor:grab}
+.editor{display:grid;gap:var(--sp-4);grid-template-columns:minmax(0,1fr)}
+@media (min-width:48rem){.editor{grid-template-columns:minmax(0,1fr) 16rem}}
+fieldset{border:0;margin:0;padding:0;display:grid;gap:var(--sp-2);min-width:0}
+legend{padding:0;margin-bottom:var(--sp-2)}
+.flag{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:var(--sp-1) var(--sp-3);align-items:start;padding:var(--sp-3)}
+.flag .key{font:600 var(--fs-2) var(--font-mono);overflow-wrap:anywhere}
+.flag .desc{grid-column:2/-1;color:var(--fg-muted);font-size:var(--fs-2)}
+.flag.is-changed{border-color:var(--accent)}
+.flag.is-changed .key::after{content:" (changed)";font-weight:500;color:var(--accent)}
+.flag.has-conflict{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 7%,var(--surface))}
+.pending{font:var(--fs-2)/1.6 var(--font-mono);padding-left:1.2em}
+
+.swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,8.5rem),1fr));gap:var(--sp-3)}
+.swatch{display:grid;gap:2px;font-size:var(--fs-2);min-width:0}
+.swatch::before{content:"";height:2.75rem;border-radius:var(--r-2);background:var(--sw);border:1px solid var(--line);margin-bottom:var(--sp-1)}
+.ruler{display:grid;gap:var(--sp-1);font-size:var(--fs-2)}
+.ruler div{display:grid;grid-template-columns:4.5rem auto;gap:var(--sp-2);align-items:center}
+.ruler div::after{content:"";width:var(--w);height:.75rem;border-radius:2px;background:color-mix(in srgb,var(--accent) 45%,transparent)}
+.shapes{display:flex;flex-wrap:wrap;gap:var(--sp-3)}
+.shapes>div{width:6.5rem;height:4rem;display:grid;place-items:center;font-size:var(--fs-1)}
+.toc{display:grid;gap:var(--sp-2);font-size:var(--fs-2)}
+.toc ol{display:grid;gap:2px}
+.toc a{display:block;padding:.2rem .5rem;border-radius:var(--r-1);color:var(--fg-muted);text-decoration:none}
+.sources{border-top:1px solid var(--line);padding-top:var(--sp-4);color:var(--fg-muted);font-size:var(--fs-2);display:grid;gap:var(--sp-1);overflow-wrap:anywhere}
+</style>
+
+<div class="page">
+<header class="head">
+<p class="label">Component sheet</p>
+<h1>Report components</h1>
+<p class="lede">One block per component the page types use, with example data from a made-up checkout service. Replace every value with one traced to a source.</p>
+</header>
+<div class="layout has-aside">
+<main class="stack">
+
+<section class="block" id="tiles"><h2>Stat tiles</h2>
+<div class="tiles">
+<div class="tile"><span class="label">Slices</span><span class="value">3</span><span class="hint">2 merge-ready, 1 in QA</span></div>
+<div class="tile"><span class="label">Skipped steps</span><span class="value">2</span><span class="pill" data-tone="warn">check reasons</span></div>
+<div class="tile"><span class="label">Failed or blocked</span><span class="value">0</span><span class="pill" data-tone="ok">none</span></div>
+</div>
+<div class="meta"><span class="pill" data-tone="ok">merge-ready</span><span class="pill" data-tone="warn">needs review</span><span class="pill" data-tone="bad">blocked</span><span class="pill" data-tone="info">in QA</span><span class="pill" data-tone="neutral">planned</span><span class="pill">tag</span></div>
+</section>
+
+<section class="block" id="board" data-filter-scope><h2>Board</h2>
+<div class="toolbar">
+<div class="chips grow" role="group" aria-label="Filter by area" data-filter-group="area"><button class="chip" aria-pressed="false" data-filter-value="api">api</button><button class="chip" aria-pressed="false" data-filter-value="ui">ui</button><button class="chip" data-filter-reset>All</button></div>
+<button class="btn" data-export="markdown" data-target="#triage">Copy as Markdown</button><button class="btn primary" data-export="prompt" data-target="#triage">Copy as prompt</button>
+</div>
+<p class="hint">Drag a card, or focus it and press Alt with an arrow key.</p>
+<div class="board" id="triage" data-reorder data-export-label="triage board">
+<section class="col"><header><h3>Now</h3><span class="pill" data-count>2</span></header><ol class="items" data-list="Now">
+<li class="ticket" draggable="true" tabindex="0" data-item data-filter-item data-area="api"><span class="title">Tax rounds twice on split carts</span><span class="meta"><code>CHK-112</code> api, M</span></li>
+<li class="ticket" draggable="true" tabindex="0" data-item data-filter-item data-area="ui"><span class="title">Promo field loses focus</span><span class="meta"><code>CHK-118</code> ui, S</span></li>
+</ol></section>
+<section class="col"><header><h3>Next</h3><span class="pill" data-count>1</span></header><ol class="items" data-list="Next">
+<li class="ticket" draggable="true" tabindex="0" data-item data-filter-item data-area="api"><span class="title">Retry declined cards once</span><span class="meta"><code>CHK-97</code> api, L</span></li>
+</ol></section>
+<section class="col"><header><h3>Cut</h3><span class="pill" data-count>0</span></header><ol class="items" data-list="Cut"></ol></section>
+</div>
+</section>
+
+<section class="block"><h2>Task state</h2>
+<form id="tasks" data-flags data-export-label="receipt tasks"><div class="task"><input type="checkbox" id="task-1" name="Wire the receipt email"><label class="title" for="task-1">Wire the receipt email</label><span class="pill" data-tone="warn">due Fri</span></div></form>
+<ol class="track" aria-label="Phase of slice totals"><li><span class="pill" data-tone="ok">planned</span></li><li><span class="pill" data-tone="ok">implementing</span></li><li aria-current="step"><span class="pill" data-tone="info">qa</span></li><li><span class="pill">merge-ready</span></li></ol>
+<div class="actions"><button class="btn" data-export="markdown" data-target="#tasks">Copy as Markdown</button></div>
+</section>
+
+<section class="block" id="timeline"><h2>Timeline</h2>
+<ol class="timeline">
+<li data-tone="bad"><time datetime="2026-09-02T15:03:44Z">15:03:44</time><div class="body"><div class="meta"><span class="what">attempt</span><span class="pill">totals</span><span class="pill" data-tone="bad">failed</span></div><p>Rounding runs before the discount.</p><p class="ev"><code>src/checkout/total.ts:42</code></p></div></li>
+<li data-tone="ok"><time datetime="2026-09-02T15:07:12Z">15:07:12</time><div class="body"><div class="meta"><span class="what">root-cause-fixed</span><span class="pill">totals</span><span class="pill" data-tone="ok">ok</span></div><p>Round once, after discounts.</p><p class="ev"><code>3f9c2ab</code>, 48 tests passed</p></div></li>
+</ol>
+</section>
+
+<section class="block"><h2>TL;DR and callouts</h2>
+<div class="tldr"><span class="label">TL;DR</span><p>Split carts were charged tax twice for 41 minutes. Rounding now runs once, after discounts.</p></div>
+<div class="callout" data-tone="warn"><strong>Needs a decision</strong><p>Refund the 212 affected orders automatically, or on request?</p></div>
+<ul class="rows"><li><div class="meta"><span class="pill" data-tone="bad">blocked</span><code>refunds</code></div><p>Waiting on a payments API key.</p></li></ul>
+</section>
+
+<section class="block"><h2>Bar chart</h2>
+<figure class="figure"><div class="scroll"><svg class="chart" width="400" height="170" viewBox="0 0 400 170" role="img" aria-label="Pull requests merged per week: 4, 6, 9, 7">
+<line class="grid" x1="40" x2="392" y1="140" y2="140"/><line class="grid" x1="40" x2="392" y1="90" y2="90"/><line class="grid" x1="40" x2="392" y1="40" y2="40"/>
+<text class="axis" x="34" y="144">0</text><text class="axis" x="34" y="94">5</text><text class="axis" x="34" y="44">10</text>
+<rect class="bar" x="56" y="100" width="56" height="40"/><rect class="bar" x="144" y="80" width="56" height="60"/><rect class="bar peak" x="232" y="50" width="56" height="90"/><rect class="bar" x="320" y="70" width="56" height="70"/>
+<text class="value" x="260" y="44">9</text>
+<text x="84" y="158">W32</text><text x="172" y="158">W33</text><text x="260" y="158">W34</text><text x="348" y="158">W35</text>
+</svg></div>
+<figcaption>Pull requests merged per week. Scale: baseline y=140, 10 px per PR, bars 56 px wide, 32 px apart. Source: merged-PR list, weeks 32 to 35.</figcaption></figure>
+</section>
+
+<section class="block"><h2>Flow diagram</h2>
+<div class="scroll"><svg class="diagram" width="480" height="120" viewBox="0 0 480 120" role="img" aria-label="Checkout path: API route, totals (highlighted), price store">
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z"/></marker><marker id="arrow-hot" class="hot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z"/></marker></defs>
+<g class="node"><rect x="8" y="30" width="128" height="60" rx="8"/><text x="72" y="57">API route</text><text class="sub" x="72" y="75">route.ts:18</text></g>
+<g class="node hot"><rect x="176" y="30" width="128" height="60" rx="8"/><text x="240" y="57">Totals</text><text class="sub" x="240" y="75">total.ts:42</text></g>
+<g class="node"><rect x="344" y="30" width="128" height="60" rx="8"/><text x="408" y="57">Price store</text><text class="sub" x="408" y="75">prices.sql</text></g>
+<path class="edge hot" d="M136 60H172" marker-end="url(#arrow-hot)"/><path class="edge" d="M304 60H340" marker-end="url(#arrow)"/>
+</svg></div>
+</section>
+
+<section class="block"><h2>Walkthrough</h2>
+<ol class="steps">
+<li><h3>The route reads the cart</h3><p><code>app/api/checkout/route.ts:18</code> parses the body.</p><details name="walk"><summary>Snippet</summary><pre><code>const cart = parseCart(await request.json());</code></pre></details></li>
+<li><h3>Totals round once</h3><p><code>src/checkout/total.ts:42</code> is the only rounding site.</p><details name="walk"><summary>Snippet</summary><pre><code>return roundCents(subtotal - discount + tax);</code></pre></details></li>
+</ol>
+</section>
+
+<section class="block" id="review"><h2>Code review</h2>
+<nav class="meta" aria-label="Risk map"><a class="pill" data-tone="bad" href="#file-total">total.ts: high</a><a class="pill" data-tone="ok" href="#file-copy">copy.ts: low</a></nav>
+<article class="file" id="file-total"><header><span class="path">src/checkout/total.ts</span><span class="pill" data-tone="bad">high risk</span></header>
+<div class="diff"><div>
+<div class="ln del"><i>42</i><b>-</b><span>return roundCents(subtotal) - discount + roundCents(tax);</span></div>
+<div class="ln add"><i>42</i><b>+</b><span>return roundCents(subtotal - discount + tax);</span></div>
+<div class="callout note" data-tone="bad"><strong>Blocking</strong><p>Refunds in <code>refund.ts:30</code> still round twice.</p></div>
+</div></div></article>
+<details class="file" id="file-copy"><summary><span class="path">src/checkout/copy.ts</span><span class="pill" data-tone="ok">low risk</span></summary><p class="muted">One string changed.</p></details>
+</section>
+
+<section class="block"><h2>Comparison</h2>
+<div role="tablist" aria-label="Comparison view"><button role="tab" id="tab-split" aria-controls="panel-split" aria-selected="true">Side by side</button><button role="tab" id="tab-ba" aria-controls="panel-ba" aria-selected="false" tabindex="-1">Before and after</button></div>
+<div role="tabpanel" id="panel-split" aria-labelledby="tab-split" class="pair">
+<div class="diff"><div><div class="ln del"><i>12</i><b>-</b><span>timeout: 3000,</span></div><div class="ln"><i>13</i><b> </b><span>retries: 1,</span></div></div></div>
+<div class="diff"><div><div class="ln add"><i>12</i><b>+</b><span>timeout: 8000,</span></div><div class="ln"><i>13</i><b> </b><span>retries: 1,</span></div></div></div>
+</div>
+<div role="tabpanel" id="panel-ba" aria-labelledby="tab-ba" class="pair" hidden>
+<div class="panel"><span class="label">Before</span><p>$10.00 cart, 15% off, 8% tax: charged <span class="num">$9.19</span>.</p></div>
+<div class="panel"><span class="label">After</span><p>Same cart: charged <span class="num">$9.18</span>, matching the receipt.</p></div>
+</div>
+</section>
+
+<section class="block"><h2>Checklist and tables</h2>
+<ul class="checklist"><li><input type="checkbox" id="c1" checked><label for="c1">Totals unit suite passes</label><span class="who">CI</span></li><li><input type="checkbox" id="c2"><label for="c2">Refund path rounds once</label><span class="who">payments, Oct 4</span></li></ul>
+<div class="table"><table><thead><tr><th>PR</th><th>Title</th><th>State</th><th class="num">Lines</th></tr></thead><tbody>
+<tr><td><code>#456</code></td><td>Round totals once</td><td><span class="pill" data-tone="ok">approved</span></td><td class="num">118</td></tr>
+</tbody></table></div>
+<dl class="kv"><dt>Orders affected</dt><dd>212</dd><dt>Window</dt><dd>14:02 to 14:43 UTC</dd></dl>
+</section>
+
+<section class="block"><h2>Ordered menu</h2>
+<div id="menu-order" data-reorder data-export-label="settings menu order"><ul class="nav" data-list="Menu">
+<li draggable="true" tabindex="0" data-item><span class="grip" aria-hidden="true"></span><span class="title">Orders</span><button class="btn icon" data-move="up" aria-label="Move up">&uarr;</button><button class="btn icon" data-move="down" aria-label="Move down">&darr;</button></li>
+<li draggable="true" tabindex="0" data-item><span class="grip" aria-hidden="true"></span><span class="title">Refunds</span><button class="btn icon" data-move="up" aria-label="Move up">&uarr;</button><button class="btn icon" data-move="down" aria-label="Move down">&darr;</button></li>
+</ul></div>
+<div class="actions"><button class="btn" data-export="json" data-target="#menu-order">Copy as JSON</button></div>
+</section>
+
+<section class="block" id="flags"><h2>Flag editor</h2>
+<div class="editor">
+<form id="flag-form" data-flags data-pending="#pending" data-export-label="checkout flags"><fieldset><legend class="label">Pricing</legend>
+<label class="flag" data-flag><input type="checkbox" name="round-once" checked><span class="key">round-once</span><span class="pill" data-tone="ok">100%</span><span class="desc">Round the total once, after discounts.</span></label>
+<label class="flag" data-flag><input type="checkbox" name="refund-round-once" data-requires="round-once"><span class="key">refund-round-once</span><span class="pill">needs round-once</span><span class="desc">Use the same rounding for refunds.</span></label>
+</fieldset><div role="status"><p class="callout" data-tone="bad" data-flags-warning hidden></p></div></form>
+<div class="panel"><span class="label">Pending changes</span><ul class="pending" id="pending"></ul><div class="actions"><button class="btn" data-export="diff" data-target="#flag-form">Copy diff</button><button class="btn" data-export="json" data-target="#flag-form">Copy JSON</button></div></div>
+</div>
+</section>
+
+<section class="block"><h2>Design tokens</h2>
+<div class="swatches"><div class="swatch" style="--sw:var(--bg)"><code>--bg</code>page</div><div class="swatch" style="--sw:var(--accent)"><code>--accent</code>links, focus</div><div class="swatch" style="--sw:var(--ok)"><code>--ok</code>passed</div></div>
+<dl class="kv"><dt><code>--fs-6</code></dt><dd style="font-size:var(--fs-6)">Order total</dd><dt><code>--fs-3</code></dt><dd>Body text, near 65 characters a line.</dd></dl>
+<div class="ruler"><div style="--w:var(--sp-2)"><code>--sp-2</code></div><div style="--w:var(--sp-8)"><code>--sp-8</code></div></div>
+<div class="shapes"><div style="border-radius:var(--r-1)">--r-1</div><div style="border-radius:var(--r-3);box-shadow:var(--shadow)">--r-3, --shadow</div></div>
+<div class="actions"><button class="btn primary">Primary</button><button class="btn" disabled>Disabled</button><input type="text" id="sample-input" value="Input" aria-label="Sample input"></div>
+</section>
+
+<section class="block"><h2>Quiz</h2>
+<ol class="steps"><li><p>Where does rounding happen after this change?</p><details><summary>Answer</summary><p>Only in <code>src/checkout/total.ts:42</code>.</p></details></li></ol>
+</section>
+</main>
+
+<aside class="aside">
+<nav class="toc" aria-label="Contents"><span class="label">Contents</span><ol><li><a href="#tiles">Stat tiles</a></li><li><a href="#board">Board</a></li><li><a href="#timeline">Timeline</a></li><li><a href="#review">Code review</a></li><li><a href="#flags">Flag editor</a></li></ol></nav>
+</aside>
+</div>
+<footer class="sources"><span>Sources: example data only.</span><span>Structure adapted from the Apache-2.0 example pages accompanying "Using Claude Code: The unreasonable effectiveness of HTML".</span></footer>
+</div>
+
+<script>
+(() => {
+const all = (selector, root = document) => [...root.querySelectorAll(selector)];
+const live = document.getElementById("live") || document.body.appendChild(Object.assign(document.createElement("p"), { id: "live", className: "sr-only" }));
+live.setAttribute("aria-live", "polite");
+const announce = (message) => { live.textContent = message; };
+const labelOf = (item) => item.dataset.label || (item.querySelector(".title") || item).textContent.trim();
+
+const copy = (button, text, source) => {
+  const fallback = () => {
+    let box = source instanceof HTMLTextAreaElement ? source : button.nextElementSibling;
+    if (!box || !box.matches("textarea")) {
+      box = Object.assign(document.createElement("textarea"), { className: "copy-fallback", readOnly: true, ariaLabel: "Text to copy" });
+      button.after(box);
+    }
+    Object.assign(box, { value: text, hidden: false });
+    box.select();
+    announce("Copying is blocked here. The text is selected; press Ctrl+C or Cmd+C.");
+  };
+  const done = () => {
+    button.dataset.idle ??= button.textContent;
+    button.textContent = "Copied";
+    clearTimeout(button.copyTimer);
+    button.copyTimer = setTimeout(() => { button.textContent = button.dataset.idle; }, 1600);
+    announce("Copied to the clipboard.");
+  };
+  try { navigator.clipboard.writeText(text).then(done, fallback); } catch { fallback(); }
+};
+
+const isFlags = (target) => target.matches("[data-flags]");
+const readState = (target, initial) => Object.fromEntries(isFlags(target)
+  ? all("input[type=checkbox][name]", target).map((box) => [box.name, initial ? box.defaultChecked : box.checked])
+  : all("[data-list]", target).map((list) => [list.dataset.list, all("[data-item]", list).map(labelOf)]));
+const freeze = (value) => {
+  Object.values(value).forEach((child) => { if (child && typeof child === "object") freeze(child); });
+  return Object.freeze(value);
+};
+const initialState = new Map(all("[data-flags],[data-reorder]").map((target) => [target, freeze(readState(target, true))]));
+const changes = (target) => {
+  const before = initialState.get(target);
+  const after = readState(target);
+  if (isFlags(target)) return Object.keys(after).filter((key) => before[key] !== after[key]).map((key) => `${key}: ${before[key] ? "on" : "off"} -> ${after[key] ? "on" : "off"}`);
+  const home = (label) => Object.keys(before).find((list) => before[list].includes(label));
+  return Object.keys(after).flatMap((list) => {
+    const moved = after[list].filter((label) => home(label) !== list).map((label) => `moved "${label}" from ${home(label)} to ${list}`);
+    const kept = after[list].filter((label) => home(label) === list).join("\n");
+    const was = before[list].filter((label) => after[list].includes(label)).join("\n");
+    return kept === was ? moved : [...moved, `reordered ${list}: ${after[list].join(", ")}`];
+  });
+};
+const bullets = (lines) => (lines.length ? lines : ["none"]).map((line) => `- ${line}`).join("\n");
+const exporters = {
+  markdown: (target) => {
+    const body = Object.entries(readState(target)).map(([key, value]) => (isFlags(target) ? `- [${value ? "x" : " "}] ${key}` : `## ${key} (${value.length})\n${bullets(value)}`));
+    return `# ${target.dataset.exportLabel}\n\n${body.join(isFlags(target) ? "\n" : "\n\n")}\n\n## Changes since the page loaded\n${bullets(changes(target))}`;
+  },
+  json: (target) => JSON.stringify(readState(target), null, 2),
+  diff: (target) => changes(target).join("\n") || "No changes since the page loaded.",
+  prompt: (target) => `Apply these changes to the ${target.dataset.exportLabel}:\n${bullets(changes(target))}\n\nResulting state:\n${JSON.stringify(readState(target), null, 2)}`,
+};
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-copy-from],[data-export]");
+  const source = button && document.querySelector(button.dataset.copyFrom || button.dataset.target);
+  if (!source) return;
+  if (button.dataset.copyFrom) copy(button, source.value ?? source.textContent, source);
+  else if (exporters[button.dataset.export]) copy(button, exporters[button.dataset.export](source));
+});
+
+all("[data-filter-scope]").forEach((scope) => {
+  const items = all("[data-filter-item]", scope);
+  scope.addEventListener("click", (event) => {
+    const chip = event.target.closest("[data-filter-value],[data-filter-reset]");
+    if (!chip) return;
+    if (chip.hasAttribute("data-filter-reset")) all("[data-filter-value]", scope).forEach((one) => one.setAttribute("aria-pressed", "false"));
+    else chip.setAttribute("aria-pressed", String(chip.getAttribute("aria-pressed") !== "true"));
+    const active = all("[data-filter-group]", scope)
+      .map((group) => [group.dataset.filterGroup, all("[aria-pressed=true]", group).map((on) => on.dataset.filterValue)])
+      .filter(([, values]) => values.length);
+    items.forEach((item) => { item.hidden = !active.every(([key, values]) => values.includes(item.dataset[key])); });
+    announce(`Showing ${items.filter((item) => !item.hidden).length} of ${items.length}`);
+  });
+});
+
+all("[data-reorder]").forEach((root) => {
+  const lists = all("[data-list]", root);
+  const settle = (item) => {
+    lists.forEach((list) => { const count = list.parentElement.querySelector("[data-count]"); if (count) count.textContent = list.children.length; });
+    const list = item.parentElement;
+    announce(`${labelOf(item)}: ${list.dataset.list}, position ${[...list.children].indexOf(item) + 1} of ${list.children.length}`);
+  };
+  const move = (item, direction, focusTarget = item) => {
+    const list = item.parentElement;
+    const neighbour = lists[lists.indexOf(list) + (direction === "next" ? 1 : -1)];
+    if (direction === "up" && item.previousElementSibling) item.previousElementSibling.before(item);
+    else if (direction === "down" && item.nextElementSibling) item.nextElementSibling.after(item);
+    else if (/prev|next/.test(direction) && neighbour) neighbour.append(item);
+    else return;
+    focusTarget.focus();
+    settle(item);
+  };
+  let dragged = null;
+  root.addEventListener("dragstart", (event) => {
+    dragged = event.target.closest("[data-item]");
+    if (!dragged) return;
+    dragged.classList.add("is-dragging");
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", labelOf(dragged));
+  });
+  root.addEventListener("dragover", (event) => {
+    const list = dragged && event.target.closest("[data-list]");
+    if (!lists.includes(list)) return;
+    event.preventDefault();
+    const next = all("[data-item]:not(.is-dragging)", list).find((item) => event.clientY < item.getBoundingClientRect().top + item.offsetHeight / 2) || null;
+    list.insertBefore(dragged, next);
+  });
+  root.addEventListener("drop", (event) => event.preventDefault());
+  root.addEventListener("dragend", () => {
+    if (!dragged) return;
+    dragged.classList.remove("is-dragging");
+    settle(dragged);
+    dragged = null;
+  });
+  const keys = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "prev", ArrowRight: "next" };
+  root.addEventListener("keydown", (event) => {
+    if (!event.altKey || !keys[event.key] || !event.target.matches("[data-item]")) return;
+    event.preventDefault();
+    move(event.target, keys[event.key]);
+  });
+  root.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-move]");
+    if (button) move(button.closest("[data-item]"), button.dataset.move, button);
+  });
+});
+
+all("[role=tablist]").forEach((tablist) => {
+  const tabs = all("[role=tab]", tablist);
+  const select = (tab) => tabs.forEach((other) => {
+    other.setAttribute("aria-selected", String(other === tab));
+    other.tabIndex = other === tab ? 0 : -1;
+    document.getElementById(other.getAttribute("aria-controls")).hidden = other !== tab;
+  });
+  tablist.addEventListener("click", (event) => { const tab = event.target.closest("[role=tab]"); if (tab) select(tab); });
+  tablist.addEventListener("keydown", (event) => {
+    const index = tabs.indexOf(document.activeElement);
+    const step = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: tabs.length - 1 }[event.key];
+    if (index < 0 || step === undefined) return;
+    event.preventDefault();
+    const tab = tabs[(step + tabs.length) % tabs.length];
+    select(tab);
+    tab.focus();
+  });
+});
+
+all("[data-flags]").forEach((form) => {
+  const boxes = all("input[type=checkbox][name]", form);
+  const warning = form.querySelector("[data-flags-warning]");
+  const pending = document.querySelector(form.dataset.pending || "#none");
+  const update = () => {
+    const on = Object.fromEntries(boxes.map((box) => [box.name, box.checked]));
+    const conflicts = boxes.filter((box) => {
+      const row = box.closest("[data-flag]") || box.parentElement;
+      const broken = Boolean(box.checked && box.dataset.requires && on[box.dataset.requires] === false);
+      row.classList.toggle("is-changed", box.checked !== box.defaultChecked);
+      row.classList.toggle("has-conflict", broken);
+      return broken;
+    }).map((box) => `${box.name} needs ${box.dataset.requires}`);
+    if (warning) Object.assign(warning, { hidden: !conflicts.length, textContent: conflicts.length ? `Turn on the required flag first: ${conflicts.join("; ")}.` : "" });
+    const lines = changes(form);
+    pending?.replaceChildren(...(lines.length ? lines : ["No pending changes"]).map((line) => Object.assign(document.createElement("li"), { textContent: line })));
+  };
+  form.addEventListener("change", update);
+  form.addEventListener("submit", (event) => event.preventDefault());
+  update();
+});
+})();
+</script>

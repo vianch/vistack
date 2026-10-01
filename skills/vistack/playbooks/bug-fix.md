@@ -22,14 +22,17 @@ runtime or test evidence is not complete.
 9. Dispatch the slice owner at its tier in its own worktree: `implementer`, or
    `senior-implementer` when the fix crosses a boundary or changes a contract. The scope
    names the cause, files, test, and unchanged behavior. No bundled cleanup.
-10. Run the original reproduction, the regression test, the suite, and lint. Pass the diff
-    through comment cleanup.
+10. Run the original reproduction, the regression test, the suite in the run order of
+    `skills/prove-it-works/SKILL.md`, and lint. Pass the diff through comment cleanup.
 11. Open the draft PR with failing-then-passing evidence, root cause, fix, and regression
     test. Assign the configured reviewers.
 12. Run QA on the PR preview and capture the original behavior at the assertion point.
 13. Run `health-check` to confirm the test fails when the fix is absent. Route defects back
     to the owning slice.
-14. Run the advisor `done` checkpoint on the fix, regression test, and QA evidence before
-    calling the run merge-ready (`skills/advisor/SKILL.md`). Resolve each gap it names or
-    record why it does not apply.
-15. Update state, ledger, and session record. Stop at merge-ready.
+14. When the router's Final report rule applies, render the run report with
+    `skills/html-report/SKILL.md` first so the checkpoint reviews it. Run the advisor `done`
+    checkpoint on the fix, regression test, and QA evidence before calling the run
+    merge-ready (`skills/advisor/SKILL.md`). Resolve each gap it names or record why it does
+    not apply.
+15. Update state, ledger, and session record. Stop at merge-ready. Refresh the run report if
+    one was rendered, and give its path or link.

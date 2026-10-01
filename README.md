@@ -21,9 +21,9 @@ the same playbooks, principles, and skill names across the two hosts.
 
 | Host | Version | Manifest |
 |---|---:|---|
-| Claude Code | `0.13.0` | `.claude-plugin/plugin.json` |
-| Codex | `0.13.0` | `.codex-plugin/plugin.json` |
-| Grok | `0.13.0` | `.grok-plugin/plugin.json` |
+| Claude Code | `0.14.0` | `.claude-plugin/plugin.json` |
+| Codex | `0.14.0` | `.codex-plugin/plugin.json` |
+| Grok | `0.14.0` | `.grok-plugin/plugin.json` |
 
 ### Claude Code
 
@@ -259,6 +259,18 @@ Matches `investigation`, which is read-only by contract: no edits, no branches, 
 worktrees, no PRs. If the answer turns out to need a change, the run says so and ends —
 `new task` starts the right playbook.
 
+### A report or diagram
+
+```
+/vistack Make an HTML timeline of the login incident from the ledger and the linked PRs.
+Done means one page with every state change in order and a source link on each entry.
+```
+
+Matches `html-report`: the deliverable is a page, so no worktree and no PR. The page lands at
+`<state-root>/reports/` as one self-contained file, with a private artifact link on Claude
+Code. A run with more than one slice, or any unattended run, ends with a run report the same
+way.
+
 ### Sticky mode
 
 - **Follow-up turns stay in the mode.** Answering a question, adding a constraint, or asking
@@ -476,6 +488,7 @@ files are the source of truth, so they are not restated here.
 | [`automate-me`](skills/vistack/playbooks/automate-me.md) | capturing working preferences in a reusable mode skill |
 | [`agent-design`](skills/vistack/playbooks/agent-design.md) | a new agent, bot, or subagent for Claude Code, Codex, or OpenCode |
 | [`worktree-cleanup`](skills/vistack/playbooks/worktree-cleanup.md) | an evidence-based audit of stale worktrees |
+| [`html-report`](skills/vistack/playbooks/html-report.md) | the deliverable is a page: report, chart, diagram, timeline, board, toggle editor, design tokens |
 
 Specialist skills include [`visualizer`](skills/visualizer/SKILL.md) for starting, stopping,
 and inspecting the local workflow observer.
@@ -502,6 +515,7 @@ and inspecting the local workflow observer.
 | [`advisor`](agents/advisor.md) | fallback reviewer when the advisor tool is off: plan, repeat, done | `fable` | `xhigh` |
 | [`design-runner`](agents/design-runner.md) | one independent `architect` candidate: usage first, then types and a rationale | `opus` | session |
 | [`reviewer`](agents/reviewer.md) | one independent `interrogate` reviewer, or the `architect` judge. Read-only | `opus` | session |
+| [`report-writer`](agents/report-writer.md) | renders one self-contained HTML page from state, ledger, diff, or code map; never publishes | `sonnet` | session |
 | [`agent-designer`](agents/agent-designer.md) | designs one new Claude Code, Codex, or OpenCode agent and verifies it loads | `opus` | session |
 
 Models and effort sit in agent frontmatter, not in a run. The rule behind the split: put the
@@ -556,13 +570,15 @@ invokes a principle must name the decision the principle changed.
 [`swarm`](skills/swarm/SKILL.md) (parallel verification) ·
 [`show-me-your-work`](skills/show-me-your-work/SKILL.md) (overnight ledger audit) ·
 [`build-the-lever`](skills/build-the-lever/SKILL.md) (rerunnable checks) ·
-[`unslop`](skills/unslop/SKILL.md) (concrete prose).
+[`unslop`](skills/unslop/SKILL.md) (concrete prose) ·
+[`html-report`](skills/html-report/SKILL.md) (pages and the run report).
 
 Direct entries include [`overnight`](skills/overnight/SKILL.md),
 [`automate-me`](skills/automate-me/SKILL.md), [`design-agent`](skills/design-agent/SKILL.md),
 [`transcript-healthcheck`](skills/transcript-healthcheck/SKILL.md), and
 [`routine-healthcheck`](skills/routine-healthcheck/SKILL.md). How much design a change deserves:
-[`docs/guide/design.md`](docs/guide/design.md).
+[`docs/guide/design.md`](docs/guide/design.md). Editing a contract:
+[`docs/guide/writing-contracts.md`](docs/guide/writing-contracts.md).
 
 ---
 
@@ -698,7 +714,7 @@ codex plugin marketplace upgrade vistack
 codex plugin add vistack@vistack
 ```
 
-3. Confirm `vistack` reports version `0.13.0` and is enabled:
+3. Confirm `vistack` reports version `0.14.0` and is enabled:
 
 ```bash
 codex plugin list

@@ -14,6 +14,9 @@ Nontrivial work should leave behind a tool a reviewer can rerun.
 - Prefer a validator for structural contracts, a script for repeated edits, and a
   captured artifact for behavioral proof.
 - Keep the lever outside the worker's write scope when workers use it as their contract.
+- A metric a run improved gets a check that fails when the metric regresses past the new
+  value, with the baseline checked in beside it. The bound only tightens. Without it the gain
+  erodes one unnoticed regression at a time.
 - Skip a lever only for a few obvious edits that do not need a repeatable check.
 
 ## Test

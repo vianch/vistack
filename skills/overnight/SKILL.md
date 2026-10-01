@@ -16,8 +16,12 @@ Run one task or a clearly bounded queue in isolated worktrees. Make one evidence
 change, verify it against the real artifact, commit only when the predicate moves, and
 append the decision to the run ledger. Discard changes that did not help.
 
-Keep one monitor. Reconcile its owner and the run state after restarts. A stale active flag
-does not keep work alive. Stop on the predicate, a real fence, or the explicit user stop.
+Keep one monitor, woken as the Monitor section of `skills/coordinate/SKILL.md` describes.
+Reconcile its owner and the run state after restarts. A stale active flag does not keep work
+alive. Stop on the predicate, a real fence, or the explicit user stop.
+
+The morning report is the run report at `<state-root>/reports/<slug>.html`, rendered
+through `skills/html-report/SKILL.md`.
 
 viStack leaves PRs as drafts and never merges. Merge, production deployment, data deletion,
 secret changes, and other irreversible actions remain human-owned fences.

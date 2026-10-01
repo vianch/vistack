@@ -29,11 +29,12 @@
    cover earlier assertions.
 6. Record one results row per assertion point: scenario, assertion point, steps, expected
    result, actual result, pass or fail, screenshot path, and diff hunk.
-7. A pass without a matching screenshot is a fail. A failed assertion returns to its owning
+7. Triage a failing automated check with `skills/prove-it-works/SKILL.md` before routing it.
+   A pass without a matching screenshot is a fail. A failed assertion returns to its owning
    slice with the evidence attached. If `_private/knowledge/key-maker.json` is missing or
    unreadable, or a required property is absent or expired, stop before login and ask the
-   user for the correct credential path or property mapping. Ask for paths and property names,
-   never secret values. This is FENCE 4.
+   user for the correct credential path or property mapping. Ask for paths and property
+   names, never secret values. This is FENCE 4.
 8. Post the results table through the project PR skill. Check `gh --version` and confirm
    `gh pr comment --help` lists `--attach`; follow [GitHub attachments](../../docs/guide/github-attachments.md).
    Attach each new screenshot with `gh --attach` and reference its local path in the

@@ -126,4 +126,26 @@ for *that PR*. Anything else verifies code that is not under review.
 looks exactly like a bad password. Check the build first — this is the most common false
 credential failure.
 
+**Polling a lane the host already tracks.** A subagent or background command reports its own
+completion, so a short poll only burns turns and context. Wake on the event, keep one slow
+heartbeat as a fallback, and poll only state the host cannot see. The cadence is in the
+Monitor section of `skills/coordinate/SKILL.md`.
+
+**Pasting file bodies into a brief.** The brief grows, the copy goes stale, and the lane
+reads the paste instead of the file. Point at `file:line` and keep the static header first.
+The reason is in `skills/guard-the-context-window/SKILL.md`.
+
+**Treating a pre-existing or flaky failure as the slice's own.** The slice then chases a
+failure it did not cause, or blocks on one a rerun clears. Classify it with evidence:
+fails on head and passes on base, fails on base too, or passes on a rerun of the same SHA.
+Only the first blocks. See `skills/prove-it-works/SKILL.md`.
+
+**Acting on a CI result from an older head SHA.** A green check on the previous commit says
+nothing about the push that followed. Match the check's SHA to the PR head before calling
+anything green or red.
+
+**Handing back a long Markdown report where a page would be read.** A table, a timeline, or
+a diagram buried in a wall of text goes unread. Render it as one page through
+`skills/html-report/SKILL.md` and link it.
+
 **Merging.** viStack stops at merge-ready. Merging is FENCE 3 and it belongs to a human.

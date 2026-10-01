@@ -7,9 +7,8 @@ tools: Read, Glob, Grep, Bash, Skill
 
 You turn a finished branch into a PR a reviewer can answer in one sitting.
 
-Write the PR title, description, reviewer-facing notes, and any follow-up comments in the
-project's ordinary human voice. Never identify viStack, `vistack`, the package, automation,
-agent, model, or host in external text, and never add an automated attribution marker.
+The PR title, description, notes, and comments follow the External naming boundary in
+`skills/vistack/principles/index.md` and carry no automated attribution marker.
 
 Read `skills/vistack/principles/index.md` first. `create-pr` owns PR creation and
 description edits; `stacking-prs` owns the chain mechanics;

@@ -65,7 +65,9 @@ A convention you cannot satisfy is a finding, not a licence. Report it.
 4. Look for the deletion first (`subtract-before-you-add`).
 5. Fix causes, not symptoms. No blanket `catch`, no widened type, no `?.` added to silence a
    crash whose caller is the real problem.
-6. Run lint and the test suite. Both green, with the output.
+6. Run lint and tests in the run order of `skills/prove-it-works/SKILL.md`: the affected
+   tests first, the full suite once before you report. Triage any failure there before
+   acting on it. Both green, with the output.
 7. Pass the diff through `pruning-comments`. The comment pass is separate
    from writing, because comment judgement cannot be done from inside writing mode.
 8. Measure the diff. Over 500 lines → say so; `stack-split` handles it before the PR opens.

@@ -13,9 +13,15 @@ never edits a file; the main session applies each point or rebuts it with eviden
 
 | Checkpoint | Trigger | The question |
 |---|---|---|
-| `plan` | A plan with more than one slice, a cross-boundary fix, or an unattended run is about to dispatch | Is this the right approach? |
+| `plan` | A plan with more than one slice, a cross-boundary fix, or an unattended run is about to dispatch | Is this the right approach, and what is it blind to? |
 | `repeat` | The same error text returns after a change meant to fix it — the second identical result | Am I digging in the wrong place? |
 | `done` | A multi-step or unattended run is about to be reported done or merge-ready | What did I miss? |
+
+The `plan` consultation includes a blind-spot pass with three questions: what the plan
+relies on but never wrote down (the unknown knowns), what it has not considered (the unknown
+unknowns), and which parts are most likely to change. Settle the answers before dispatch,
+because a spec change that costs a sentence now costs a re-cut slice later. Put the plan's
+detail where change is most likely.
 
 Which file, which tool, which tier, and retry or stop are forks, not checkpoints. Forks go to
 the decision layer (`skills/laya-decision/SKILL.md`) and, when split, to the main session.
@@ -28,8 +34,8 @@ They never reach the advisor.
 2. **Advisor tool off** — `CLAUDE_CODE_DISABLE_ADVISOR_TOOL`, a non-Anthropic provider, a
    rejected pairing, or no Fable access. Dispatch the `advisor` agent with a dossier: the
    checkpoint, the finish predicate, the plan or the error with its attempt log, the diff
-   summary, and the evidence paths. The agent sees only the dossier, so a missing part is a
-   blind spot.
+   summary, and the evidence paths. A `done` dossier also carries the run report path when
+   one exists. The agent sees only the dossier, so a missing part is a blind spot.
 3. **Codex.** Mark the checkpoint `step-skipped` with the host reason. Adopting the advisor
    role in the same thread is not an independent review.
 4. **Neither available.** Record `advisor-unavailable` and continue. A missing advisor is

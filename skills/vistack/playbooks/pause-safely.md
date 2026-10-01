@@ -20,4 +20,5 @@ claims, and leaves no half-written checkpoint.
 9. Update the session record or host-local equivalent with the resume command
    `/vistack session-pickup <slug>`.
 10. Report done work, paused work, blockers, the state path, the ledger path, and the first
-    action on resume. Leave no credential or scratch artifact in a tracked path.
+    action on resume. Leave no credential or scratch artifact in a tracked path. Render the
+    run report with `skills/html-report/SKILL.md` so the resume point is readable.

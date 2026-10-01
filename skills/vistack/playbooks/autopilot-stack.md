@@ -23,9 +23,11 @@ The terminal state is merge-ready draft PRs. It never merges.
    count before each wave.
 10. Dispatch parallel slices at their planned tier and serialize shared files. Each
     completion is drained as a queue event, verified, and followed by the next eligible
-    dispatch.
-11. Each slice runs its check, implementation, lint, tests, and comment cleanup. A stalled
-    slice enters `blocker` without stopping independent slices.
+    dispatch. Start with one pilot when the pilot rule in `skills/coordinate/SKILL.md`
+    applies.
+11. Each slice runs its check, implementation, lint, tests in the run order of
+    `skills/prove-it-works/SKILL.md`, and comment cleanup. A stalled slice enters `blocker`
+    without stopping independent slices.
 12. Open each finished slice as a draft PR immediately. Assign reviewers. Use `stack-split`
     before opening when the diff is too large or carries multiple concerns.
 13. Run QA against each PR's own target and capture evidence at every assertion point.
@@ -36,8 +38,11 @@ The terminal state is merge-ready draft PRs. It never merges.
 17. At every monitor pass, reconcile state with branches, worktrees, PRs, and agent status.
     Count only side effects as progress. Replace a lane that exceeds its limit without a
     side effect.
-18. Run the advisor `done` checkpoint on the PR set, QA evidence, and health-check verdicts
-    before calling the run merge-ready (`skills/advisor/SKILL.md`). Resolve each gap it
-    names or record why it does not apply.
-19. Stop the monitor when every slice is merge-ready or fenced. Report PRs, evidence, ledger,
-    open fences, and next action. Never merge.
+18. When the router's Final report rule applies, render the run report with
+    `skills/html-report/SKILL.md` first so the checkpoint reviews it. Run the advisor `done`
+    checkpoint on the PR set, QA evidence, and health-check verdicts before calling the run
+    merge-ready (`skills/advisor/SKILL.md`). Resolve each gap it names or record why it does
+    not apply.
+19. Stop the monitor when every slice is merge-ready or fenced. Report PRs, evidence,
+    ledger, open fences, and next action. Never merge. Refresh the run report if one was
+    rendered, and give its path or link.

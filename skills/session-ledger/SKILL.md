@@ -31,11 +31,11 @@ Title line, exactly: `Engineering work — agent sessions`
 | implementer | primitive | sonnet | `session_011abc…` | `.claude/worktrees/21510-progressbar-primitive` | `user/issue-progressbar-primitive` | [#21611](…) | qa |
 | implementer | swap-account | sonnet | `session_011def…` | `.claude/worktrees/21510-progressbar-swap-account` | `user/issue-progressbar-swap-account` | — | implementing |
 | qa-verifier | primitive | sonnet | `session_011ghi…` | — | — | [#21611](…) | qa |
-| monitor | — | — | `loop:10m` | — | — | all agent PRs | active |
+| monitor | — | — | `loop:self-paced` | — | — | all agent PRs | active |
 
 Resume: `claude attach session_011xyz…`
 
-Ledger: `<state-root>/21510-progressbar.tsv` · State: `<state-root>/21510-progressbar.json`
+Ledger: `<state-root>/21510-progressbar.tsv` · State: `<state-root>/21510-progressbar.json` · Report: `<state-root>/reports/21510-progressbar.html`
 
 ```
 
@@ -78,3 +78,4 @@ duplicate. Do not delete a comment.
   title, PR title, description, comments, review feedback, and QA results.
 - Long runs also include the state path, ledger path, wake mechanism, last progress time, and
   the terminal or held gate. Never describe an active monitor without a live owner.
+- Link the run report path once the report exists. Leave the field out before then.

@@ -39,6 +39,8 @@ Once `/vistack` has run, the session is in viStack mode.
   change — it continues the open playbook at its next unchecked step. No re-invocation.
 - **`new task` forces a fresh playbook match.** It discards the open playbook and starts at
   the principles index again.
+- **A request for a report or chart mid-run** renders it and returns to the open
+  playbook at the step it was on. The run does not re-match.
 - **`stop` or `pause`** runs `pause-safely`: commits and pushes every worktree, releases
   shared claims, writes the final state, and hands back the resume command.
 - A completed playbook does not exit the mode. It leaves it idle, waiting for `new task`.
@@ -59,6 +61,51 @@ Once `/vistack` has run, the session is in viStack mode.
 
 Between phase boundaries it runs. No confirmations, no progress narration, no status
 questions — except at the four fences.
+
+## What happens to your prompt
+
+```mermaid
+flowchart TD
+    A[Your prompt] --> B[vistack]
+    B --> C[Read the Principles section]
+    C --> D{Match the task}
+    D -->|Read-only question| E[Investigation]
+    D -->|Defect| F[Bug fix]
+    D -->|New behavior| G[Feature]
+    D -->|Structure only| H[Refactoring]
+    D -->|Measured slowness| I[Perf issue]
+    D -->|Large work or no match| J[Multi-phase plan]
+    D -->|Going to bed or run until done| K[Overnight]
+    D -->|Independent PR queue| L[Autopilot full]
+    E --> M[Verify and report]
+    F --> M
+    G --> M
+    H --> M
+    I --> M
+    J --> M
+    K --> M
+    L --> M
+```
+
+The diagram shows the common routes. The full route set includes intake, design
+implementation, blocker recovery, PR stacks, QA verification, session pickup, safe pause,
+babysitting, worktree cleanup, skill authoring, agent design, preference capture, and
+`html-report`.
+
+## Reports and pages
+
+Ask for the page you want and viStack renders it:
+
+```text
+/vistack make an HTML timeline of the login incident
+/vistack show the auth architecture as a diagram
+```
+
+What comes back is one self-contained HTML page at `<state-root>/reports/`, plus a private
+Claude artifact link on Claude Code. A run with more than one slice, or any unattended run,
+ends with a run report the same way, so the first thing to open after an overnight run is a
+page, not the ledger. "Explain how X works" stays `investigation`; its answer may also render
+as a page. The contract is `skills/html-report/SKILL.md`.
 
 ## The four fences
 

@@ -23,7 +23,8 @@ condition, and the dossier shape.
    same idea with a different value.
 2. **Exactly one changed variable.** Two changes make the result uninterpretable and burn an
    attempt for nothing.
-3. Run it, capture the full output.
+3. Run it on current data and capture the full output. A CI or preview result from an older
+   head SHA is stale.
 4. Append a ledger row: hypothesis, command, output, verdict.
 
 **Abort early on three consecutive attempts with identical evidence.** The loop is not

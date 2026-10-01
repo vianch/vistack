@@ -28,7 +28,8 @@ for existing behavior belong to `implementer`.
 3. When the same error text returns after a fix, run the advisor `repeat` checkpoint
    (`skills/advisor/SKILL.md`) before the next hypothesis. A third identical result goes to
    `unblocker`.
-4. Report every decision the plan did not specify, each with its evidence.
+4. Report every decision the plan did not specify, each with its evidence, and record each
+   as a `deviation` ledger row.
 
 ## Exit criteria
 

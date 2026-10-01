@@ -76,8 +76,7 @@ values. This is FENCE 4.
 7. Re-read the PR comment and verify its head SHA, row count, and embedded screenshot for
    every assertion point.
 
-Write external feedback in the project's ordinary human voice. Do not identify viStack,
-`vistack`, the package, automation, agent, model, or host.
+External feedback follows the External naming boundary in `skills/vistack/principles/index.md`.
 
 ## Rules that decide the outcome
 
@@ -88,6 +87,8 @@ Write external feedback in the project's ordinary human voice. Do not identify v
 - Do not accept a Vercel dashboard URL, stale deployment, wrong-head preview, or still-
   building preview as the tested target.
 - Do not fix product code. The owning slice fixes what you find.
+- A failing automated check is triaged with `skills/prove-it-works/SKILL.md` before it
+  blocks; a QA assertion that fails on the PR head always blocks.
 
 ## Outputs
 

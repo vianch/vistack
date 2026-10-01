@@ -14,6 +14,11 @@ single guess followed by a shrug.
 - The baseline: the exact command, its full output, and the commit it ran against.
 - One blocker. Two symptoms with different causes are two loops.
 
+A failing check that the triage in `skills/prove-it-works/SKILL.md` marks pre-existing or
+flaky leaves the loop with a `failure-triaged` row instead of spending attempts, whether it
+is found at entry or mid-loop. The one rerun that shows a failure is flaky belongs to triage.
+It is not an attempt and not the identical re-run listed under Never.
+
 ## The loop
 
 **Budget: 20 attempts per blocker.**
@@ -25,7 +30,9 @@ Each attempt, without exception:
    attempt.
 2. **Change exactly one variable.** One config value, one line, one flag, one version. Two
    changes make the result uninterpretable and burn an attempt for nothing.
-3. **Run it**, and capture the full output.
+3. **Run it**, and capture the full output. When the result comes from CI or a preview,
+   first confirm it belongs to the current head SHA and, for a preview, that the build
+   finished. A result from an earlier head is not evidence about this change.
 4. **Append a ledger row**: the hypothesis, the command, the output, the verdict.
 
 ## Repeat checkpoint
@@ -77,3 +84,13 @@ Escalate as **FENCE 1** with all six parts:
 
 Then park the slice: `phase: blocked`, its `blockers[]` entry filled in, the session comment
 updated. Other slices keep running unless the conflict matrix says otherwise.
+
+## Gotchas
+
+- A request its client abandons can be cancelled on the server. A warm-up sent with
+  `curl --max-time 0.3` disconnected and Ollama dropped the model load it had started;
+  `/api/ps` ten seconds later listed nothing loaded. Before a hypothesis that counts on
+  server-side work outliving the client, read the server's state with a separate call.
+- A defect found mid-run can predate the run. A health check found that a torn last line in
+  a history file corrupted the next append, and the defect reproduced on main. Run the
+  failing case on the base before stating the first hypothesis.

@@ -25,8 +25,10 @@ safe. The terminal state is merge-ready draft PRs because viStack never merges.
    parent after the parent reaches its required state.
 7. Run the advisor `plan` checkpoint on the queue, briefs, and conflict matrix before
    dispatch (`skills/advisor/SKILL.md`). Apply or rebut each point with evidence.
-8. Dispatch one owner per item. The owner builds, tests, lints, commits, and reports the
-   branch head. The coordinator remains the only writer of queue topology and run state.
+8. Dispatch one owner per item, starting with one pilot when the pilot rule in
+   `skills/coordinate/SKILL.md` applies. The owner builds, tests, lints, commits, and
+   reports the branch head. The coordinator remains the only writer of queue topology and
+   run state.
 9. Drain completions as queue events. Verify the report against the branch and captured
    artifacts. Dispatch the next eligible item immediately. Do not wait for a human between
    reversible phases.
@@ -42,11 +44,13 @@ safe. The terminal state is merge-ready draft PRs because viStack never merges.
 14. At each monitor tick, reread this playbook and the state file, inspect every owner and
     PR, and count only side effects as progress. Replace a lane that exceeds its timebox
     without a side effect. Record the replacement and reason.
-15. Run the advisor `done` checkpoint on every merge-ready item and its evidence before
-    calling the run merge-ready (`skills/advisor/SKILL.md`). Resolve each gap it names or
-    record why it does not apply.
-16. Stop the monitor when every queue item is merge-ready or fenced. Report the queue, owner,
-    PR, head SHA, verdict, evidence, open gates, and ledger path.
+15. When the router's Final report rule applies, render the run report with
+    `skills/html-report/SKILL.md` first so the checkpoint reviews it. Run the advisor `done`
+    checkpoint on every merge-ready item and its evidence before calling the run merge-ready
+    (`skills/advisor/SKILL.md`). Resolve each gap it names or record why it does not apply.
+16. Stop the monitor when every queue item is merge-ready or fenced. Report the queue,
+    owner, PR, head SHA, verdict, evidence, open gates, and ledger path. Refresh the run
+    report if one was rendered, and give its path or link.
 
 ## Finish condition
 

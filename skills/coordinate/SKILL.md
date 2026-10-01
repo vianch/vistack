@@ -8,10 +8,8 @@ description: "Dispatch per-role agents through a playbook, maintain resumable st
 The dispatch layer moves a run between phases. It owns coordination state and evidence. It
 never edits product code.
 
-Any issue comment or other external status written by the coordinator uses the consuming
-project's ordinary voice. It must not mention `viStack`, `vistack`, `/vistack`, `$vistack`, or
-internal role, skill, model, or host names. Keep those identifiers in the state, ledger, or
-host-local records only.
+External text written by the coordinator follows the External naming boundary in
+`skills/vistack/principles/index.md`.
 
 ## Host paths
 
@@ -19,11 +17,13 @@ Resolve these once at startup.
 
 | Host | State root | Worktree root | Recurring monitor |
 |---|---|---|---|
-| Claude Code | `.claude/state/` | `.claude/worktrees/` | `/loop 10m /vistack babysit <slug>` |
+| Claude Code | `.claude/state/` | `.claude/worktrees/` | self-paced `/loop /vistack babysit <slug>` (see Monitor) |
 | Codex | `.codex/vistack/state/` | `.codex/vistack/worktrees/` | the host's recurring-task or background equivalent, or one `scripts/watch-pr.py` process |
 
 In the contracts below, `<state-root>` and `<worktree-root>` mean the resolved paths. Do not
-mix roots in one run. A run resumes only on the host that created it.
+mix roots in one run. A run resumes only on the host that created it. Script paths such as
+`scripts/watch-pr.py` resolve from the plugin root as the router's Host adapter describes,
+not from the consuming repository.
 
 ## Startup invariant
 
@@ -32,16 +32,40 @@ Establish exactly one live monitor before dispatching a slice or reviewing a PR.
 If either is missing, start one monitor and record it. If verification fails, record a
 blocker and do not dispatch.
 
-`scripts/watch-pr.py` reads PR state for every monitor pass (`--status-only`). On a host with
-no recurring monitor, one long-running `python3 scripts/watch-pr.py --pr <n,…> --timeout <s>`
-process may be the monitor: record it as `monitor.mechanism` and treat its exit as the wake.
-Its exit code names the verdict — 0 merge-ready or merged, 2 conflicts, 3 unresolved review
-threads, 4 failing checks, 5 timeout, 6 changes requested or closed, 7 query failure, 8 no
-reviewer. Claude Code, Codex, and OpenCode run the same command in their shell tool. It never
-runs beside another monitor, never writes to GitHub, and never merges.
+## Monitor
 
-On pickup, the new coordinator reclaims the monitor explicitly. On pause, a fence, or the
-last merge-ready slice, stop it. Never start a second monitor to cover a stale first one.
+What the run is waiting on decides how the coordinator wakes.
+
+| Waiting on | Wake |
+|---|---|
+| A host-tracked lane: a subagent or a background command | Its completion event, plus one fallback heartbeat 20 to 30 minutes out. Do not poll it on a short timer. |
+| External state the host cannot see: PR checks, CI, reviews, preview builds | A poll at the rate that state changes: about 5 minutes while checks run, 20 to 30 minutes while waiting on reviewers. One background `watch-pr.py` process may replace the poll; its exit is the event. |
+
+The completion event is the first wake for a host-tracked lane and the fallback heartbeat is
+the second, so a completion notification is never the only wake. A lane that hangs or dies
+without an event surfaces at the next heartbeat, where the stall rule in Dispatch rules takes
+it. A short poll on a host-tracked lane spends a model turn to learn what the event delivers
+anyway.
+
+On Claude Code the monitor is the self-paced `/loop /vistack babysit <slug>`. Each pass sets
+its next wake from the table above. `/loop 10m /vistack babysit <slug>` is the fixed-interval
+fallback when self-pacing is unavailable. On Codex, use the host's recurring-task or
+background equivalent, or the `watch-pr.py` process.
+
+`scripts/watch-pr.py` reads PR state for every monitor pass (`--status-only`). One
+long-running `python3 scripts/watch-pr.py --pr <n,…> --interval <s> --timeout <s>` process,
+with `--interval` set to the poll rate above, can be the event for external state. Inside the
+self-paced loop it is that loop's wake. On a host with no recurring monitor it is the monitor
+itself, recorded as `monitor.mechanism`. Its exit code names the verdict: 0 merge-ready or
+merged, 2 conflicts, 3 unresolved review threads, 4 failing checks, 5 timeout, 6 changes
+requested or closed, 7 query failure, 8 no reviewer. Claude Code, Codex, and OpenCode run the
+same command in their shell tool. It runs inside the one monitor, never beside a second
+`watch-pr.py` process or a second monitor, never writes to GitHub, and never merges.
+
+The pass that finds every slice merge-ready or fenced ends the loop. It stops the monitor,
+sets `monitor.status` to `stopped`, and records the terminal state. A pause stops the monitor
+the same way. On pickup, the new coordinator reclaims the monitor explicitly. Never start a
+second monitor to cover a stale first one.
 
 ## Setup, once per run
 
@@ -73,8 +97,8 @@ below are additive to the existing schema, so pickup can read older runs.
   "host": "claude-code",
   "coordinator_session_id": "session_011xyz",
   "monitor": {
-    "interval": "10m",
-    "mechanism": "/loop 10m /vistack babysit <slug>",
+    "interval": "self-paced",
+    "mechanism": "/loop /vistack babysit <slug>",
     "owner": "session_011xyz",
     "status": "active",
     "last_pass_at": null,
@@ -109,8 +133,9 @@ ts	phase	slice	decision	reason	evidence	result
 ```
 
 Log playbook matches, skipped steps, dispatches, transitions, attempts, side fixes, monitor
-restarts, reconciliations, advisor consultations, tier escalations, and verification
-results. Evidence is a path, URL, SHA, command output, or artifact. It is not a paragraph.
+restarts, reconciliations, advisor consultations, tier escalations, pilot results, failure
+triage, deviations from the plan, verification results, and run reports. Evidence is a path,
+URL, SHA, command output, or artifact. It is not a paragraph.
 
 Use `decision: step-skipped` for every retained step that does not run. A decision without
 a ledger row did not happen.
@@ -128,12 +153,28 @@ a ledger row did not happen.
   slices. A mismatch stops dispatch.
 - Read the conflict matrix before every wave. Shared files serialize. Disjoint slices may
   run in parallel.
-- Every agent brief names the goal, scope, files it may not touch, acceptance checks, exact
-  verification commands, timebox, forbidden actions, and report shape.
+- A wave or queue of five or more lanes dispatches one pilot lane first. Fan out after the
+  pilot's first side effect (a commit, captured artifact, or check delta) proves the brief,
+  and record `pilot-passed`. A pilot that fails gets its brief fixed before any other lane
+  starts, so a brief defect costs one lane instead of the wave.
+- Write every brief in two parts. The role's static header comes first and stays identical
+  across dispatches of that role: the role, the pointer to
+  `skills/vistack/principles/index.md`, forbidden actions, the stall and flattened-returns
+  stop rules below, and report shape. Slice fields come
+  last: goal, writable files, files it may not touch, context as `file:line` pointers,
+  acceptance checks with exact verification commands, and timebox. Point at `file:line`
+  instead of pasting file bodies. The reason is in `skills/guard-the-context-window/SKILL.md`.
 - A completion is a queue event. Drain it, update state, ledger, and session comment, then
   dispatch the next eligible unit without waiting for a human.
 - A lane that reaches its expected runtime without a commit, captured artifact, check delta,
   or report is stalled. Route it to `unblock` or replace it after the playbook's limit.
+- A lane whose last two iterations produced side effects but did not move the predicate
+  stops and reports instead of spending the rest of its timebox. Its returns have flattened;
+  the coordinator chooses the next approach. The stall rule above covers a lane with no side
+  effect, so the two never apply to the same lane.
+- Two lanes serialized on the same file twice in one run go back to `slice-plan` to be
+  re-cut. Repeated serialization means the slice boundary is wrong, and every later wave
+  pays for it.
 - A finished slice raises its PR immediately. Never batch.
 - Every PR is one concern, at most 500 changed lines excluding lockfiles and generated
   files, assigned to the configured reviewers, and left as a draft.
@@ -157,5 +198,10 @@ is next. Do not narrate tool calls or ask for confirmation outside the four fenc
 
 ## Exit
 
-Stop when every slice is merge-ready or a fence is reached. Report the PR set, evidence per
-PR, ledger path, monitor status, and open work. Leave every PR a draft. Never merge.
+Stop when every slice is merge-ready or a fence is reached. When the router's Final
+report rule applies, render the run report (`skills/html-report/SKILL.md`) before the advisor
+`done` checkpoint and refresh it at exit. The coordinator (main session) records
+`report-rendered` with the page path, and `report-published` with the artifact URL when the
+report is published. Report the PR set,
+evidence per PR, ledger path, run report path, monitor status, and open work. Leave every PR
+a draft. Never merge.

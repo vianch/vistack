@@ -23,12 +23,15 @@ feature becomes a separate unit.
    bundled fixes, new behavior, or compatibility shims without a recorded
    external-compatibility reason.
 10. Keep the baseline green after every slice. Run lint, tests, and an equivalence check on
-    the matching surface.
+    the matching surface. Run tests in the run order of `skills/prove-it-works/SKILL.md`.
 11. Open a draft PR per slice, one concern and at most 500 changed lines. Include the baseline
     evidence and reader-load improvement.
 12. Run QA spot checks and `health-check` for hidden behavior changes. Update state, ledger,
     and session record.
-13. Run the advisor `done` checkpoint on the PR set, pin, and equivalence evidence before
-    calling the run merge-ready (`skills/advisor/SKILL.md`). Resolve each gap it names or
-    record why it does not apply.
+13. When the router's Final report rule applies, render the run report with
+    `skills/html-report/SKILL.md` first so the checkpoint reviews it. Run the advisor `done`
+    checkpoint on the PR set, pin, and equivalence evidence before calling the run
+    merge-ready (`skills/advisor/SKILL.md`). Resolve each gap it names or record why it does
+    not apply.
 14. Stop at merge-ready. Report the structure, pin, equivalence proof, and discarded work.
+    Refresh the run report if one was rendered, and give its path or link.

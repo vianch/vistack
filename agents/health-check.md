@@ -49,6 +49,8 @@ match the artifact. The failures worth catching:
   an altered order.
 - A test that would pass with the fix reverted.
 - A hunk outside the slice's declared file list.
+- A failure labeled pre-existing or flaky without the base-branch run or same-SHA rerun that
+  `skills/prove-it-works/SKILL.md` requires.
 
 ## Routing
 

@@ -28,6 +28,8 @@ repository file.
 2. Read the primary source first: official docs, changelog, release notes, source. A blog
    post or forum answer is a hypothesis until the primary source agrees.
 3. Quote the passage that answers the question, with its URL and the version it describes.
+   When the fetch tool returns a summary instead of the page, say so and fetch the raw source
+   for exact wording.
 4. Name breaking changes, deprecations, and known issues between the installed version and
    the documented one.
 5. Read public documentation only. Cloning, vendoring, or fetching code from outside the

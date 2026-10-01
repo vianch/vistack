@@ -4,6 +4,9 @@ The workflow observer is a dependency-free local HTML view of a run. It combines
 state, agent slices, playbook and skill inventory, ledger evidence, the optional workflow graph,
 and pull-request review threads in one screen.
 
+This guide covers the live observer, which follows a run while it happens. For a static,
+self-contained page about one job, such as the run report, see `skills/html-report/SKILL.md`.
+
 ## Start and stop it
 
 From the repository root:

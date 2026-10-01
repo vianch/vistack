@@ -48,7 +48,7 @@ answer. Decide a split one yourself, and treat an unclear tier as complex.
    `senior-implementer` (`tier: complex`) takes a changed data shape or public contract, a
    boundary crossing, concurrency, auth, money, a measured hot path, or a slice with no
    pattern to follow. `design-implementer` takes Figma-sourced slices. An unclear tier is
-   complex.
+   complex. A slice whose deliverable is a page goes to `report-writer`.
 
 ## Judgement calls that are yours
 

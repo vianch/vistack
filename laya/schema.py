@@ -53,6 +53,7 @@ PLAYBOOKS = (
     "authoring-skill",
     "automate-me",
     "agent-design",
+    "html-report",
 )
 
 ROLES = (
@@ -72,6 +73,7 @@ ROLES = (
     "reviewer",
     "agent-designer",
     "advisor",
+    "report-writer",
 )
 
 ACTIONS_BY_TYPE = {

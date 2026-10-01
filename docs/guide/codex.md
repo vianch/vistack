@@ -65,6 +65,11 @@ Use `$overnight` for a direct overnight entry point, or include "going to bed" a
 permission boundary in a `$vistack` request. Use `$automate-me` to capture personal working
 preferences. Project invariants stay in viStack principles and playbooks.
 
+## Reports
+
+On Codex, `html-report` writes a local file only, and `report-writer` is adopted in the thread
+rather than dispatched. There is no artifact publishing.
+
 ## Update
 
 After changing a local checkout, update the Codex cachebuster and reinstall:

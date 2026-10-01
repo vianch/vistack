@@ -38,7 +38,9 @@ reconciled and routed to `blocker`, not left waiting for a completion notificati
 ## State and wake mechanisms
 
 The run writes state and its ledger before dispatch. Claude Code uses `.claude/state/` and
-`/loop 10m /vistack babysit <slug>`. Codex uses `.codex/vistack/state/` and the host's
+the self-paced `/loop /vistack babysit <slug>`. Completion events wake agent lanes, and
+external state such as PR checks is polled at its own change rate; the Monitor section of
+`skills/coordinate/SKILL.md` has the rules. Codex uses `.codex/vistack/state/` and the host's
 recurring-task or background equivalent when available. A persisted `active` monitor flag is
 not proof of a live process. The coordinator records its owner and verifies the wake
 mechanism after every pickup.
@@ -51,7 +53,9 @@ branches, worktrees, PRs, and agent status first.
 Run `show-me-your-work` or read the state and ledger directly. Check every row against a real
 action, every evidence pointer against a file, URL, SHA, command output, or artifact, and
 every important pivot or discarded attempt against the trail. Read the Attention section
-first, then inspect the rows it names.
+first, then inspect the rows it names. Open the run report at
+`<state-root>/reports/<slug>.html` before anything else; it is the fast read, and the ledger
+stays the source of truth.
 
 The result is merge-ready draft PRs, not merged code. Merging, deployment, data deletion,
 secret changes, and other irreversible actions remain human-owned fences.

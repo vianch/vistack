@@ -458,6 +458,12 @@ may not change a `state` or `handoff` route or invent an unattended one.
 Rationales name the matched terms or the missing fields, and `alternatives` names the
 runner-up route when one matched.
 
+Version 0.14.0 added the `html-report` route and 28 playbook-selection scenarios (8 page
+requests, 20 guards), 108 in total. Deterministic sharp precision stayed 1.0 and sharp
+coverage moved from 0.875 to 0.907. Only a request for a page routes there: building a chart
+or board inside the product stays on its own route. "The overnight run" after of, about, or
+from is a reference to a run, not an overnight handoff.
+
 ## Integration points
 
 Use the hook only when a choice affects the workflow path.

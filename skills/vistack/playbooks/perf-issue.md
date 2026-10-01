@@ -8,7 +8,9 @@ sustained search against a target uses `overnight` or a separately scoped queue.
 1. State the slow behavior, the matching surface, the metric, the direction that is better,
    and the finish threshold.
 2. Capture a baseline with the repository's performance or control procedure. Record the
-   command, workload, commit, repetitions, and artifact path.
+   command, workload, commit, repetitions, and artifact path. When timing is noisy, prefer a
+   deterministic proxy such as an instruction, operation, query, or allocation count, and
+   check the baseline in.
 3. Run `how` or the repository's equivalent read-only architecture pass. Use the trace to
    form hypotheses. Do not claim a bottleneck from source inspection alone.
 4. Choose one hypothesis and one variable to change. Prefer deletion before caching,
@@ -21,6 +23,8 @@ sustained search against a target uses `overnight` or a separately scoped queue.
 7. Compare baseline and post-fix artifacts. An inconclusive or wrong-surface result is not a
    pass. Revert a change that does not beat noise or breaks the regression gate.
 8. Record the baseline, post-fix value, delta, and artifact paths in the ledger and PR.
+   Leave a guardrail check that fails when the metric regresses past the new value
+   (`skills/build-the-lever/SKILL.md`).
 9. Run `pr-stack` or the PR creation procedure. Keep the PR draft, scoped, and below 500
    changed lines.
 10. Run the advisor `done` checkpoint on the baseline, post-fix artifact, and delta before

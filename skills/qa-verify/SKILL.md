@@ -73,7 +73,8 @@ values. This is FENCE 4.
 8. Re-read the posted PR comment and verify that it contains one row per assertion point,
    every row has an embedded screenshot, and the reported PR head matches the tested head.
 9. A failed assertion returns to its owning slice with the evidence attached. Do not fix
-   product code from the verifier role.
+   product code from the verifier role. Triage a failing automated check through
+   `skills/prove-it-works/SKILL.md` before routing it.
 
 ## Results table
 
@@ -87,3 +88,10 @@ Every required assertion point has a screenshot captured on the tested PR head, 
 maps to a diff hunk, every screenshot is embedded in the posted PR results table, and the
 comment has been verified after posting. Any failure remains open and blocks merge-ready
 status.
+
+## Gotchas
+
+- A preview that is still building serves the deployment-protection wall, which looks
+  exactly like a rejected password. Read the build state before suspecting the credential.
+  Misread, it opens FENCE 4 for a credential that works, and an unattended run stops for
+  nothing.

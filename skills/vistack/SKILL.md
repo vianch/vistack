@@ -11,35 +11,6 @@ dispatch, and evidence. The owning role does the work.
 `vistack` is the identifier. `viStack` is the name used in prose. Every path in this plugin
 is relative to its root.
 
-## What happens to your prompt
-
-```mermaid
-flowchart TD
-    A[Your prompt] --> B[vistack]
-    B --> C[Read the Principles section]
-    C --> D{Match the task}
-    D -->|Read-only question| E[Investigation]
-    D -->|Defect| F[Bug fix]
-    D -->|New behavior| G[Feature]
-    D -->|Structure only| H[Refactoring]
-    D -->|Measured slowness| I[Perf issue]
-    D -->|Large work or no match| J[Multi-phase plan]
-    D -->|Going to bed or run until done| K[Overnight]
-    D -->|Independent PR queue| L[Autopilot full]
-    E --> M[Verify and report]
-    F --> M
-    G --> M
-    H --> M
-    I --> M
-    J --> M
-    K --> M
-    L --> M
-```
-
-The diagram shows the common routes. The full route set includes intake, design
-implementation, blocker recovery, PR stacks, QA verification, session pickup, safe pause,
-babysitting, worktree cleanup, skill authoring, agent design, and preference capture.
-
 ## Human-facing communication
 
 Write external text as the responsible project participant. Do not mention viStack, a
@@ -56,7 +27,8 @@ Internal state may retain role and execution metadata.
 Detect the host from the available plugin surface before running a playbook.
 
 Claude Code uses `commands/vistack.md`, Claude agents, `.claude/state/`, and
-`.claude/worktrees/`. Its default monitor is `/loop 10m /vistack babysit <slug>`.
+`.claude/worktrees/`. Its monitor is the self-paced `/loop /vistack babysit <slug>`, under the
+wake rules in `skills/coordinate/SKILL.md`.
 
 Codex uses this skill in the current thread, adopts the named roles sequentially, and uses
 `.codex/vistack/state/` and `.codex/vistack/worktrees/`. Use the host's recurring-task or
@@ -77,6 +49,12 @@ equivalent phase in the current thread unless a real fence is reached.
 The state root and worktree root are selected once per run. Never mix Claude and Codex roots.
 A run resumes on the host that created it.
 
+Plugin scripts resolve from the plugin root, not the consuming repository. On Claude Code
+write `scripts/...` as `${CLAUDE_PLUGIN_ROOT}/scripts/...`, and prefix
+`skills/<name>/scripts/...` the same way; on Codex use the installed plugin path. Keep the
+working directory in the consuming repository, because switch files, decision history, and
+run state resolve against it.
+
 ## Agent tree
 
 The main session plans and decides. Laya takes the forks that need no thinker. Subagents
@@ -93,54 +71,19 @@ sequentially in the thread and the model column does not apply.
 | Worker, complex | `senior-implementer` | opus · xhigh | data shapes, contracts, boundaries, hot paths |
 | Judgment roles | `groomer`, `planner`, `pr-author`, `unblocker` | opus · session effort | tickets, slices, PRs, blockers |
 | Verification | `qa-verifier`, `health-check` | sonnet, haiku | QA evidence, adversarial audit |
+| Reporting | `report-writer` | sonnet | renders one HTML page from state, ledger, diff, or a code map; never publishes |
 | Design and review | `design-runner`, `reviewer` | the host model: opus, or Luna on Codex | `architect` candidates, `interrogate` findings |
 | Advisor | advisor tool, else `advisor` | Fable 5.1 | before a plan, when an error repeats, before done |
 
-## Optional local decision engine
+## Fork layer
 
-The repository includes an advisory local decision engine at `laya/` and
-`scripts/vistack-decision.py`. It is enabled by default. When no model, Ollama model, Kev
-server, or opted-in Jev is configured, `auto` still returns the deterministic policy. Use it only when a choice changes routing, readiness,
-decomposition, dispatch, runtime recovery, verification, or future rule review. It is not a
-coding agent and it never replaces the router, coordinator, state, ledger, worktrees,
-evidence gates, or merge boundary.
-
-Laya is the fork layer. Which playbook, which file goes to which slice, which file or tool
-the next step uses, which tier, dispatch or hold, and retry or stop are forks that need no
-thinker. A sharp fork — a valid action at
-or above the confidence threshold that every safety gate accepts — is applied in code
-without a model turn. A split fork returns to the main session, which decides and records
-why. Forks never reach the advisor.
-
-The engine receives a bounded `DecisionContext` and returns a typed `Decision`. The
-deterministic viStack policy runs first; a confident answer is sharp and no model is asked.
-A split answer climbs the ladder — opted-in Jev, then local Ollama (`nimble` or `tev1:0.8b`),
-Laya-MLX, Kev, and an opted-in host CLI — and a tier settles it only when the action is valid, confidence meets the
-configured threshold, and the existing deterministic safety gates accept it. A missing
-model, refused key, timeout, malformed answer, low confidence, or rejected gate leaves the
-fork split, and the `Decision` says so in `fork`.
-
-Call the hook at these boundaries:
-
-| Boundary | Decision type | Existing authority |
-|---|---|---|
-| intake and grooming | `intake-analysis`, `grooming` | readiness fields and FENCE 2 |
-| route match | `playbook-selection` | this route table and the matched playbook |
-| slice planning | `decomposition`, `tier-selection` | file ownership, conflict matrix, the 500-line limit, and the planner's tier rule |
-| pre-dispatch and monitoring | `dispatch-readiness`, `runtime-progress` | coordinator state, dependencies, monitor, and ledger |
-| QA | `verification` | captured artifacts tied to each acceptance criterion |
-| a step inside a slice | `tool-selection`, `file-selection` | the slice's writable files and the fences |
-| retrospective review | `skill-improvement` | explicit human review; no automatic skill edits |
-
-Record the returned decision id, backend, confidence, fallback status, and evidence pointer
-in the local decision history or run ledger when the consuming project has enabled it. Treat
-the recommendation as input to the existing rule, not as permission to act. In particular,
-Laya cannot merge, force-push, deploy, delete data, modify secrets, bypass a fence, or invent
-evidence. See `docs/guide/laya-decision-engine.md` for installation, the JSONL server, and
-the schema. Disable refinement for a consuming project with `python3
-scripts/vistack-decision.py decisions off`, restore it with `decisions on`, or bypass it for one request
-with `--disable-laya`. `VISTACK_LAYA_ENABLED=0` is the environment-wide emergency switch. `/vistack:decisions-on`
-asks which local Ollama model backs Jev.
+Laya is the fork layer. It takes the choices that need no thinker, such as which playbook,
+file, tool, or tier, and whether to dispatch or retry. Sharp forks are applied in code; split
+forks return to the main session, which decides and records why. Forks never reach the
+advisor. A recommendation is input to the existing rule, never permission to act. Refinement
+turns off with `decisions off` for a project, `--disable-laya` for one request, or
+`VISTACK_LAYA_ENABLED=0` for the environment; the deterministic policy still runs. When to
+call it, the boundaries table, and the commands are in `skills/laya-decision/SKILL.md`.
 
 ## Step 0. Sticky mode
 
@@ -149,6 +92,7 @@ Once this skill starts, every later turn stays inside the open playbook.
 | User input | Action |
 |---|---|
 | `babysit <slug>` or a monitor wake | Run one babysit pass, then return to the open playbook. Do not re-match. |
+| A request for a report, chart, diagram, flow, architecture view, or other page about the open run | Run `skills/html-report/SKILL.md` against the run's state and ledger, then return to the open playbook. Do not re-match. |
 | Any other mid-run input | Continue the next unchecked playbook step. |
 | `new task` | Close the current run if safe, then return to the principles index and match again. |
 | A second unrelated request | Finish or run `pause-safely`, then wait for `new task`. |
@@ -187,6 +131,7 @@ the task list with `skip: <reason>`, and the reason gets a `step-skipped` ledger
 |---|---|
 | `intake` | The request is raw or its ticket has not passed readiness. |
 | `investigation` | The user wants understanding or a recommendation and no code change. |
+| `html-report` | The deliverable is a page: an HTML report, chart, graph, diagram, timeline, board, toggle editor, design-token sheet, or Claude artifact. |
 | `feature` | New behavior has specified acceptance criteria. |
 | `bug-fix` | Wrong behavior is reported and needs reproduction and correction. |
 | `refactor` | Structure must change while observable behavior stays the same. |
@@ -211,7 +156,10 @@ the task list with `skip: <reason>`, and the reason gets a `step-skipped` ledger
 Ties break toward the most specific route. A groomed ticket with no other signal is
 `autopilot-stack`. A large run the user will review later is `overnight` when the request
 includes a sleep or step-away handoff. A program that needs a standing coordinator across
-many days is `multi-phase-plan`; it must still state its size and finish predicate.
+many days is `multi-phase-plan`; it must still state its size and finish predicate. An
+explicit request for an HTML page, chart, diagram, or artifact matches `html-report`; a
+request to understand or explain how something works matches `investigation`, whose report
+step renders through `html-report`.
 
 ## Step 3. State the finish condition
 
@@ -247,7 +195,8 @@ the ladder.
 
 Every brief is standalone. It names the goal, writable files, forbidden files, context
 references, acceptance checks, verification commands, timebox, and report shape. A missing
-field is a scoping defect. Complete the brief before dispatching.
+field is a scoping defect. Complete the brief before dispatching. Order its fields by the
+brief order rule in `skills/coordinate/SKILL.md`.
 
 ## Step 5. Dispatch and drain
 
@@ -272,11 +221,12 @@ The advisor reads the whole session and speaks three times. Follow `skills/advis
 
 | Moment | Question |
 |---|---|
-| Before a plan with more than one slice, a cross-boundary fix, or an unattended run dispatches | Is this the right approach? |
+| Before a plan with more than one slice, a cross-boundary fix, or an unattended run dispatches | Is this the right approach, and what are we not seeing? |
 | When the same error text comes back after a change meant to fix it | Am I digging in the wrong place? |
 | Before a multi-step or unattended run is reported done or merge-ready | What did I miss? |
 
-The matched playbook names the step where each checkpoint runs. The advisor never edits,
+The matched playbook names the step where each checkpoint runs, and `skills/advisor/SKILL.md`
+defines the blind-spot pass the plan checkpoint adds. The advisor never edits,
 merges, or opens a fence. The main session applies each point or rebuts it with evidence. An
 unavailable advisor is recorded and never blocks the run.
 
@@ -317,3 +267,8 @@ Report at phase boundaries only. State what changed, the evidence, what is next,
 open fence. For overnight or other long runs, include the decision-trail path, iterations,
 progress side effects, discarded attempts, final predicate state, and a short Attention
 section for anything the human should inspect first.
+
+A run with more than one slice, and every unattended run, ends with a run report rendered by
+`skills/html-report/SKILL.md` at `<state-root>/reports/<slug>.html`. On Claude Code, publish
+it as a private Claude artifact when the Artifact tool exists. The final message gives the
+path or link with the short text summary.

@@ -7,9 +7,7 @@ model: sonnet
 You build what the design says. Where the design does not say, you ask or you report — you
 do not decide.
 
-The PR body, review notes, evidence comments, and user-facing answers use the consuming
-project's ordinary voice. Do not identify viStack, `vistack`, invocation handles, or internal
-role, skill, model, or host names in that external text.
+External text follows the External naming boundary in `skills/vistack/principles/index.md`.
 
 Read `skills/vistack/principles/index.md`, then `skills/figma-sync/SKILL.md` — it owns the
 Figma contract. Everything in `agents/implementer.md` about scope, repo conventions, and never
@@ -55,6 +53,7 @@ design is a deviation. For each one:
 1. Name it, with the frame and node it came from.
 2. Use the nearest existing token in the interim.
 3. List it in the PR body under deviations, with the token used and the value expected.
+   Record it as a `deviation` ledger row too.
 
 The same goes for a state the design does not show — hover, focus, active, disabled, loading,
 error, empty. Build what is specified; report what is not. Deviations are a question for the

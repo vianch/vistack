@@ -38,6 +38,7 @@ CLASS_SIGNALS: tuple[tuple[str, tuple[tuple[str, float], ...]], ...] = (
     ("babysit", ((r"babysit", 2.0), (r"status of (?:the |my )?(?:\w+ )?(?:run|lanes?|prs?|pull requests?)", 2.0), (r"check on (?:the )?(?:run|lanes?|prs?)", 1.5), (r"monitor (?:the )?(?:run|lanes?|prs?)", 1.5))),
     ("session-pickup", ((r"session pickup", 2.0), (r"resume", 1.5), (r"pick (?:it |this |the run )?(?:back )?up", 1.5), (r"where (?:did )?we (?:leave|left) off", 1.5))),
     ("pause-safely", ((r"pause", 1.5), (r"stop safely", 2.0), (r"park (?:the |this )?(?:run|work|slice)", 1.5))),
+    ("html-report", ((r"html (?:report|page|file|artifact|timeline|diagram|chart|dashboard|view|document)s?", 2.0), (r"as (?:an? )?(?:html|artifact|page|diagram|chart|graph|board)", 2.0), (r"claude artifact", 2.0), (r"timeline (?:page|view)", 2.0), (r"design (?:system|tokens?) (?:page|view|sheet)", 2.0), (r"toggle editor", 2.0), (r"(?:make|give|show|generate|plot) me (?:an? |the )?(?:\w+ ){0,3}(?:charts?|graphs?|diagrams?|dashboards?|boards?|timelines?|reports?)", 1.5), (r"(?:make|generate|build) (?:me )?an? (?:\w+ ){0,2}reports? page", 1.5), (r"board of (?:the )?(?:\w+ )?(?:slices|lanes|prs|pull requests|tasks|tickets|agents)", 1.5), (r"visuali[sz]e .{0,60}?\b(?:as|in) (?:an? )?(?:html|page|artifact|diagram|chart|graph)", 1.2), (r"(?:architecture|flow) (?:diagram|map)", 0.6))),
     ("agent-design", ((r"design (?:an? |the |my )?(?:new )?(?:agent|bot|subagent)s?", 2.0), (r"(?:create|make|build) (?:an? |the |my )?(?:new )?(?:agent|bot|subagent)s?", 2.0))),
     ("authoring-skill", ((r"skill\.md", 2.0), (r"skills?", 1.2), (r"playbooks?", 1.2), (r"workflow contract", 2.0), (r"agent (?:file|definition)", 1.2))),
     ("automate-me", ((r"preferences?", 1.2), (r"working style", 2.0), (r"mode skill", 2.0))),
@@ -57,6 +58,7 @@ _COMPILED = tuple(
 _PRIORITY = {name: index for index, (name, _) in enumerate(CLASS_SIGNALS)}
 
 _OVERNIGHT = re.compile(r"\b(?:going to bed|step(?:ping)? away|overnight|run until done|don'?t stop)\b")
+_OVERNIGHT_RUN_NOUN = re.compile(r"\b(?:of|about|from) (?:the|last|this|that|tonight'?s|last night'?s) overnight (?:runs?|work|jobs?|queue)\b")
 _AUTOPILOT_FULL = re.compile(r"\b(?:autopilot full|independent (?:prs?|pull requests|queue|tickets))\b")
 _AUTOPILOT = re.compile(r"\b(?:autopilot|unattended)\b")
 _CROSS_CUTTING = re.compile(r"\b(?:large|cross-cutting|many services|program|multi-phase|multiple repos(?:itories)?)\b")
@@ -225,7 +227,7 @@ def _route(context: DecisionContext) -> tuple[str, float, str, Classification, s
         return "qa-verification", 0.92, "The current state is at behavioral verification.", classification, "state"
     if classification.label == "babysit":
         return "babysit", 0.9, _signal_phrase(classification), classification, "signals"
-    if _OVERNIGHT.search(request):
+    if _OVERNIGHT.search(_OVERNIGHT_RUN_NOUN.sub(" ", request)):
         return "overnight", 0.96, "The request explicitly names an unattended handoff.", classification, "handoff"
     if _AUTOPILOT_FULL.search(request):
         return "autopilot-full", 0.93, "The request names independent work items for parallel execution.", classification, "handoff"

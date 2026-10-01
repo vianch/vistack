@@ -6,8 +6,11 @@ attempts and aborts early when evidence stops changing.
 ## Steps
 
 1. State the expected result, actual result, and exact error text.
-2. Confirm this is one blocker. Separate symptoms use separate runs.
-3. Record the baseline command, full output, commit, worktree, and branch.
+2. Confirm this is one blocker. Separate symptoms use separate runs. Triage the failure
+   first (`skills/prove-it-works/SKILL.md`): a pre-existing or flaky failure gets a
+   `failure-triaged` row and leaves this loop.
+3. Record the baseline command, full output, commit, worktree, and branch. A CI or preview
+   result from an older head SHA is stale and cannot be the baseline.
 4. For each attempt, state a distinct hypothesis, change exactly one variable, run the
    command, capture full output, and append one ledger row.
 5. On the second consecutive attempt with identical evidence, run the advisor `repeat`

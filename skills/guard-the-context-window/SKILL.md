@@ -18,6 +18,28 @@ Context is the budget. Everything else is cheap by comparison.
 - A run that needs the whole repo in context is mis-sliced. Go back to `slice-plan` and split
   the read into evidence-bearing units.
 
+## Keep the prefix stable
+
+The host reuses a cached prompt prefix up to the first byte that differs, and cached input
+costs about a tenth of fresh input. Anything that changes near the top re-bills everything
+after it.
+
+- Static content first, volatile content last.
+- No per-run text (dates, slugs, counts) in a skill or agent body. Run state arrives as tool
+  results and messages; it is never edited into a skill body.
+- No tool, MCP server, plugin, or advisor toggle inside a run. Each one changes the tool list
+  or system prompt at the head of the prompt.
+- A model change is a subagent handoff with a standalone brief, not a mid-session switch.
+  The cache belongs to one model, so a switch rebuilds the whole prefix.
+- Append; do not rewrite history. Editing an earlier message invalidates the cache from that
+  message on.
+
+This is why a brief puts the role's static header before the slice fields
+(`skills/coordinate/SKILL.md`): every dispatch of that role shares the cached header and pays
+full price only for the slice. A brief points at `file:line` rather than pasting the file,
+because a pasted body is a stale copy the agent pays for on every dispatch, and the agent
+reads the current lines it needs.
+
 ## What it changes
 
 It changes who reads. `analyst` reads the call sites and returns an impact map of

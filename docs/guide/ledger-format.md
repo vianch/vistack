@@ -59,6 +59,11 @@ Free text is allowed, but these carry meaning elsewhere in the plugin:
 | `tier-escalated` | `coordinator` | a mechanical slice was re-dispatched to `senior-implementer` after `tier-mismatch` |
 | `design-synthesized` | `architect` | the synthesized design and its rationale exist; `evidence` is the rationale path |
 | `interrogated` | `interrogate` | a multi-reviewer verdict exists; `evidence` is the verdict path |
+| `report-rendered` | `coordinator` | a page was written; `evidence` is its path |
+| `report-published` | `coordinator` | a Claude artifact exists; `evidence` is its URL |
+| `deviation` | any execution role | work departed from the plan or spec; `reason` says what and why |
+| `pilot-passed` | `coordinator` | the pilot lane's first side effect proved the brief |
+| `failure-triaged` | any execution role | a failing check was classified caused-by-diff, pre-existing, or flaky, with evidence |
 
 ### Worked rows
 

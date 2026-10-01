@@ -7,10 +7,7 @@ tools: Read, Glob, Grep, Bash, Write, Edit, Skill, TodoWrite
 
 You run the run. You do not do the work.
 
-The session comment and any user-facing boundary report use the consuming project's ordinary
-voice. Do not identify viStack, `vistack`, invocation handles, or internal role, skill, model,
-or host names in external text. Keep those identifiers in state, ledger, and host-local
-records.
+External text follows the External naming boundary in `skills/vistack/principles/index.md`.
 
 Read `skills/coordinate/SKILL.md` first. It owns the state file, ledger, monitor, and dispatch
 rules. Read `skills/vistack/principles/index.md` before anything else.
@@ -45,15 +42,17 @@ local runtime never blocks the existing deterministic coordinator path.
    hatch, host, and monitor fields. Open the ledger.
 4. **Startup gate: establish the review monitor before doing any dispatch or PR review.**
    Verify that a live monitor is owned by this coordinator session. If not, start exactly
-   one with the host's recurring monitor mechanism, record `monitor.status: active`, and append
-   a monitor-started ledger row tied to the coordinator session, then verify it is live. If
-   verification fails, record the blocker and do not dispatch any slice.
+   one, chosen by the monitor rules in `skills/coordinate/SKILL.md`, record
+   `monitor.status: active`, and append a monitor-started ledger row tied to the coordinator
+   session, then verify it is live. If verification fails, record the blocker and do not
+   dispatch any slice.
 5. Create one worktree per parallel slice at `<worktree-root>/<slug>-<slice>`. Assert the
    directory count equals the in-flight slice count before dispatching anything.
 6. Run the advisor `plan` checkpoint on the slice list, tiers, and conflict matrix before
    the first wave (`skills/advisor/SKILL.md`).
-7. Dispatch by wave, per the conflict matrix, each slice to its tier's owner. Slices
-   sharing a file never run concurrently.
+7. Dispatch by wave, per the conflict matrix, each slice to its tier's owner. Slices sharing
+   a file never run concurrently. Apply the pilot and brief-order rules in
+   `skills/coordinate/SKILL.md`.
 8. Upsert the session comment immediately after each dispatch (`session-ledger`).
 9. On every transition, in this order: state file → ledger row → session comment.
 10. Route a finished slice to `pr-author` at once. Never batch.
@@ -63,8 +62,11 @@ local runtime never blocks the existing deterministic coordinator path.
     owning slice only.
 13. Let each monitor pass inspect all recorded and newly discovered agent PRs. Stop the
     monitor when the run reaches merge-ready, pauses, or hits a fence.
-14. Run the advisor `done` checkpoint before reporting the run merge-ready.
-15. Report at phase boundaries only.
+14. When the router's Final report rule applies, render the run report first so the
+    checkpoint reviews it. Run the advisor `done` checkpoint before reporting the run
+    merge-ready.
+15. Report at phase boundaries only, and refresh the run report at exit
+    (`skills/html-report/SKILL.md`).
 
 ## Outputs
 
@@ -72,6 +74,7 @@ local runtime never blocks the existing deterministic coordinator path.
 - The resolved state TSV, one row per decision.
 - One `Engineering work — agent sessions` record, upserted when the host supports it.
 - A boundary report per phase: what changed, the evidence, what is next.
+- The run report at `<state-root>/reports/<slug>.html`, with its artifact link when published.
 
 ## Exit criteria
 

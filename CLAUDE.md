@@ -27,8 +27,9 @@ $vistack:run|orchestrator|coordinator <request> # equivalent aliases
 
 Verification after any edit is the inventory and the structural checker:
 `node scripts/check-playbooks.mjs`, plus `python3 -m unittest discover -t .` when Python
-changed. A skill or agent that fails frontmatter or path rules loads as *nothing*, silently,
-with no error.
+changed and `node --test skills/html-report/scripts/run-report.test.mjs` when the report
+script changed. A skill or agent that fails frontmatter or path rules loads as *nothing*,
+silently, with no error.
 
 ## Layout and load rules
 
@@ -48,6 +49,8 @@ with no error.
 | `agents/<name>.md` | a subagent |
 | `docs/guide/*.md` | reference prose linked from skills |
 | `skills/<name>/references/*.md` | data read by that skill, **not** skills |
+| `skills/<name>/assets/*` | templates a skill copies; data, **not** skills |
+| `skills/<name>/scripts/*` | scripts bundled with a skill, run from the plugin root |
 | `laya/`, `prwatch/` | Python packages behind `scripts/vistack-decision.py` and `scripts/watch-pr.py` |
 
 Codex discovers the same top-level `skills/<name>/SKILL.md` files. It does not execute the
@@ -80,7 +83,7 @@ The design is a **router → playbook → agent** chain, with all coordination s
    frontmatter. The main session runs Opus 5.5 at xhigh and plans, decides, and verifies.
    `analyst` (explorer) and `researcher` run on opus at medium. Code goes by tier: sonnet
    `implementer` for mechanical work — repetitive edits, basic utils, unit tests — and opus
-   `senior-implementer` at xhigh for complex work. Haiku runs the adversarial health check.
+   `senior-implementer` at xhigh for complex work. Haiku runs the adversarial health check. Sonnet `report-writer` renders pages.
    Models and effort are never overridden per-run — change the agent file instead.
 5. **Advisor on call.** Fable 5.1 reads the whole session and speaks at three checkpoints
    (`skills/advisor/SKILL.md`). It reviews; the main session ships. When the advisor tool is
@@ -125,6 +128,9 @@ everywhere it appears:
   `.codex/vistack/worktrees/`. A run does not switch state roots when it changes hosts.
 - **Codex lanes.** Codex roles run in the thread; only a read-only or scratch-directory lane
   fans out as its own `codex exec --ephemeral` process.
+- **A long or unattended run ends with a run report.** A run with more than one slice, or any
+  unattended run, renders one through `skills/html-report/SKILL.md`, published as a private
+  artifact on Claude Code.
 - **Repo-agnostic.** Nothing hardcodes a repository, branch, reviewer team, or service. The
   three per-repo inputs are base branch, reviewer team, and verification target.
 - **Reuse, do not reimplement.** viStack supplies only the coordinator layer, state file,
@@ -155,3 +161,8 @@ Semver lives in `.claude-plugin/plugin.json`:
 Every path written inside skills, agents and docs is relative to the plugin root
 (`skills/…`, `agents/…`, `docs/…`). Keep it that way — the plugin is installed at a
 different absolute path on every machine.
+
+Runtime commands resolve from the plugin root (`${CLAUDE_PLUGIN_ROOT}` on Claude Code) while the
+working directory stays in the consuming repository.
+
+Editing a contract: read `docs/guide/writing-contracts.md` first.

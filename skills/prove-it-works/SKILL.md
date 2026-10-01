@@ -17,6 +17,26 @@ A claim about behaviour is backed by an artifact or it is not made.
 - If the artifact cannot be captured, the step is not complete — say that instead of
   softening the claim.
 
+## Run order and failure triage
+
+Run the tests that cover the changed files first, through the repository's own test selector
+when it has one. They are the fastest signal on the diff. Run the full suite once before
+merge-ready, or let CI run it.
+
+Classify each failure before acting on it. An agent that cannot tell which failures belong
+to its diff either rewrites code it does not own or stalls on a red it did not cause.
+
+| Class | Evidence |
+|---|---|
+| caused-by-diff | Fails on the head, passes on the base. |
+| pre-existing | Fails on the base too. |
+| flaky | Passes on a rerun of the same SHA. |
+
+Only a caused-by-diff failure blocks the slice. A pre-existing or flaky failure gets a
+`failure-triaged` row, with the class as the reason and the base run or rerun as the
+evidence, and is routed outside the slice. A failure with no classifying evidence counts as
+caused-by-diff.
+
 ## What it changes
 
 It changes what closes a QA scenario. The `qa-verify` contract requires a screenshot named

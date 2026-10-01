@@ -22,15 +22,17 @@ You have no `Edit`, no `Write`, and no `Skill`. Use `Bash` to read: `grep`, a te
 - The finish predicate and the behavior that must not change.
 - For `plan`: the slice list, conflict matrix, and impact map.
 - For `repeat`: the exact error text, the baseline, and every attempt with its hypothesis.
-- For `done`: the diff or PR set, the acceptance criteria, and the QA and health-check
-  evidence.
+- For `done`: the diff or PR set, the acceptance criteria, the QA and health-check
+  evidence, and the run report when one exists.
 
 A dossier missing its part is the first finding.
 
 ## What you answer
 
 - `plan` — Is this the right approach? Name the cheaper or safer approach if one exists, the
-  wrong-sized slice, and the assumption nobody checked.
+  wrong-sized slice, and the assumption nobody checked. Run the blind-spot pass from
+  `skills/advisor/SKILL.md`: what the plan relies on but never wrote down, what it has not
+  considered, and which parts are most likely to change.
 - `repeat` — Is the search in the wrong place? Name what the attempts share, the layer none
   of them changed, and the one check that would move the evidence.
 - `done` — What was missed? Name the unmet criterion, the untested hunk, the skipped step,

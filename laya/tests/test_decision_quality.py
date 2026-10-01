@@ -46,6 +46,18 @@ class LabelledScenarioTests(unittest.TestCase):
                 misses.append(f"{scenario['id']}: {result.action} != {scenario['human_action']}")
         self.assertEqual(misses, [])
 
+    def test_page_requests_route_to_html_report_with_a_sharp_fork(self):
+        engine = DecisionEngine(backend="deterministic")
+        checked = 0
+        for line in SCENARIOS.read_text(encoding="utf-8").splitlines():
+            scenario = json.loads(line)
+            if not scenario["id"].startswith("route-html-"):
+                continue
+            result = engine.decide(scenario["context"], decision_type=scenario["decision_type"])
+            self.assertEqual((result.action, result.fork), ("html-report", "sharp"), scenario["id"])
+            checked += 1
+        self.assertGreaterEqual(checked, 8)
+
 
 class ResponseQualityTests(unittest.TestCase):
     def test_route_rationale_names_the_matched_signals_and_runner_up(self):

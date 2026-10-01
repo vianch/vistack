@@ -20,7 +20,9 @@ log with a competing schema. The state file records intent. The ledger records w
 5. Check that the final predicate was not relaxed and that no irreversible action was taken
    without a fence.
 6. Return the run as a short review report with the current state, decisions that mattered,
-   evidence, discarded work, open gaps, and an Attention section.
+   evidence, discarded work, open gaps, and an Attention section. After adding the missing
+   rows, render the run report with `skills/html-report/SKILL.md` and link it from the
+   audit. Keep the short text report in the chat.
 
 Keep ledger cells single-line and append-only. Use `docs/guide/ledger-format.md` for the
 seven-column format and the allowed decision vocabulary.

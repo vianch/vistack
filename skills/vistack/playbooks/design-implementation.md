@@ -20,7 +20,8 @@
 8. Serialize shared style files. Dispatch one `design-implementer` per isolated worktree.
 9. Before each frame, re-query its node in Figma and build from the live design. Build only
    specified states. For an absent state or token, use the nearest existing token only as an
-   explicitly named interim deviation.
+   explicitly named interim deviation. Record each interim deviation as a `deviation` ledger
+   row.
 10. Verify each frame at each breakpoint with a screenshot beside a fresh Figma screenshot of
     the same node. A nonzero parity diff is a failure until explained.
 11. Run lint and tests. Pass the diff through comment cleanup.
@@ -29,7 +30,10 @@
     then assign reviewers.
 13. Re-check the Figma nodes for changes since implementation, then run interactive QA on
     the preview and `health-check` against the references.
-14. Run the advisor `done` checkpoint on every frame's parity evidence and the deviation
-    list before calling the run merge-ready (`skills/advisor/SKILL.md`). Resolve each gap it
-    names or record why it does not apply.
-15. Update state, ledger, and session record. Stop at merge-ready and report every deviation.
+14. When the router's Final report rule applies, render the run report with
+    `skills/html-report/SKILL.md` first so the checkpoint reviews it. Run the advisor `done`
+    checkpoint on every frame's parity evidence and the deviation list before calling the
+    run merge-ready (`skills/advisor/SKILL.md`). Resolve each gap it names or record why it
+    does not apply.
+15. Update state, ledger, and session record. Stop at merge-ready and report every
+    deviation. Refresh the run report if one was rendered, and give its path or link.

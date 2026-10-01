@@ -12,9 +12,10 @@ predicate. It never merges.
 2. State the escape hatch. A genuine blocker goes through `unblock`; an unresolved blocker,
    acceptance ambiguity, irreversible action, or credential problem returns control to the
    user with its dossier.
-3. Resolve the host, `<state-root>`, `<worktree-root>`, and one wake mechanism. Claude Code
-   uses `/loop 10m /vistack babysit <slug>`. Codex uses its recurring-task or background
-   equivalent when available. If no wake mechanism can survive the session, record that
+3. Resolve the host, `<state-root>`, `<worktree-root>`, and one wake mechanism. Choose it by
+   the monitor rules in `skills/coordinate/SKILL.md`: the self-paced
+   `/loop /vistack babysit <slug>` on Claude Code, the recurring-task or background
+   equivalent on Codex. If no wake mechanism can survive the session, record that
    limitation before starting.
 4. Read `skills/vistack/principles/index.md` and the matched execution contract. Record the
    playbook match and the overnight permissions in the ledger.
@@ -26,8 +27,9 @@ predicate. It never merges.
 7. Run the advisor `plan` checkpoint on the slices, tiers, and conflict matrix before
    dispatch (`skills/advisor/SKILL.md`). Apply or rebut each point with evidence.
 8. Create one worktree per slice and dispatch only slices allowed by the conflict matrix.
-   Every owner receives a complete brief with scope, checks, timebox, forbidden actions,
-   and report shape.
+   Every owner receives a complete brief with scope, checks, timebox, forbidden actions, and
+   report shape. Start with one pilot when the pilot rule in `skills/coordinate/SKILL.md`
+   applies.
 9. At every iteration, check the finish predicate, make the smallest evidence-backed
    change, verify against the real artifact, and record one ledger row. Commit only when
    the predicate moved. Discard a change that did not help.
@@ -45,12 +47,14 @@ predicate. It never merges.
     adversarial health check before calling it merge-ready.
 14. Keep the finish predicate fixed. A plateau changes the approach, not the target. Stop
     only when the predicate is met or a fence is reached.
-15. Run the advisor `done` checkpoint on the PR set, evidence, and final predicate result
-    before calling the run merge-ready (`skills/advisor/SKILL.md`). Resolve each gap it
-    names or record why it does not apply.
+15. When the router's Final report rule applies, render the run report with
+    `skills/html-report/SKILL.md` first so the checkpoint reviews it. Run the advisor `done`
+    checkpoint on the PR set, evidence, and final predicate result before calling the run
+    merge-ready (`skills/advisor/SKILL.md`). Resolve each gap it names or record why it does
+    not apply.
 16. Stop the monitor and record the terminal state. For a fence, include the full dossier.
     For success, include the PRs, evidence, discarded attempts, and the final predicate
-    result.
+    result. Refresh the run report if one was rendered, and give its path or link.
 17. Run the morning audit from the ledger. Check that every row maps to a real action, every
     evidence pointer resolves, and every important pivot or abandoned approach is recorded.
 

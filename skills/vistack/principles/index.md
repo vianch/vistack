@@ -7,10 +7,10 @@ The linked skill carries the rule and the failure it prevents.
 |---|---|
 | `separate-before-serializing-shared-state` | Give every parallel writer its own directory. Where they must share a file, run them in sequence — never lock, never merge-by-hope. |
 | `sequence-work-into-verifiable-units` | Order work so each step ends in something you can check. A step you cannot check is a step you cannot land. |
-| `prove-it-works` | Behaviour is proved by running it, against a captured artifact. Nothing else counts. |
+| `prove-it-works` | Behaviour is proved by running it, against a captured artifact. Nothing else counts. Run the affected tests first and triage every failure. |
 | `fix-root-causes` | Treat the cause, not the symptom. A workaround is a decision, and it gets recorded as one. |
 | `one-concern-per-pr` | One PR answers one question a reviewer can hold in their head. ≤500 changed lines. |
-| `guard-the-context-window` | Context is the scarce resource. Delegate reading, keep conclusions. |
+| `guard-the-context-window` | Context is the scarce resource. Delegate reading, keep conclusions, and keep the cached prefix stable. |
 | `evidence-over-inference` | Cite `file:line`, a command's output, a screenshot. "Should" and "presumably" are not findings. |
 | `subtract-before-you-add` | Look for the delete first. Less code beats more code that is well written. |
 | `keep-origins-in-realm` | Every remote is `the project organization and its approved repositories`. Nothing is cloned, vendored, or fetched from outside it. |

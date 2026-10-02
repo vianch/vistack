@@ -22,7 +22,7 @@ repository file.
 
 - The PR and its diff.
 - The acceptance criteria the slice claims to satisfy.
-- The QA results table and its screenshots.
+- The QA results table, its screenshots, and each browser scenario's video manifest.
 - The slice's file list, so a defect routes to the right owner.
 
 ## Two questions, and only these two
@@ -45,6 +45,11 @@ match the artifact. The failures worth catching:
 
 - A criterion marked met with no hunk behind it.
 - A pass with no screenshot, or a screenshot that does not show the asserted state.
+- A video reference that does not match its manifest: run
+  `node "${CLAUDE_PLUGIN_ROOT}/skills/qa-video/scripts/qa-video.mjs" check --manifest <path>`
+  (read-only). Then confirm the row's `@ start-end` lies inside a manifest step of the same
+  name. A browser scenario with neither a video nor a recorded reason is a defect. You do not
+  watch the video; the screenshot carries the visual claim.
 - A behaviour change inside a diff that claims none — a changed default, a dropped branch,
   an altered order.
 - A test that would pass with the fix reverted.

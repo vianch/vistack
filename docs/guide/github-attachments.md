@@ -40,9 +40,10 @@ gh pr comment 123 --repo OWNER/REPO --body-file /tmp/qa-report.md \
 ```
 
 The same flag works with `gh pr create`, `gh pr edit`, `gh issue create`, `gh issue edit`,
-and `gh issue comment`. Unreferenced attachments are appended to the body. An upload can
-partially succeed and still publish the body before returning nonzero; inspect the result
-before retrying to avoid duplicate posts. Ask the user for images only when the running
+and `gh issue comment`. QA videos follow the size budget in `skills/qa-video/SKILL.md`.
+Unreferenced attachments are appended to the body. An upload can partially succeed and still
+publish the body before returning nonzero; inspect the result before retrying to avoid
+duplicate posts. Ask the user for images only when the running
 interface cannot be reached.
 
 See [GitHub's attachment documentation](https://docs.github.com/en/github-cli/github-cli/attaching-files-with-github-cli)

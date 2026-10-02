@@ -34,6 +34,7 @@ home and check that the pointers still describe it.
 | Advisor checkpoints and what each asks | `skills/advisor/SKILL.md` |
 | Ledger columns and decision vocabulary | `docs/guide/ledger-format.md` |
 | Rendering a report page | `skills/html-report/SKILL.md` |
+| Recording QA video, its evidence files, and media edits | `skills/qa-video/SKILL.md` |
 
 ## Enumerate closed sets
 

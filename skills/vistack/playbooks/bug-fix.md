@@ -7,7 +7,9 @@ runtime or test evidence is not complete.
 
 1. State the wrong behavior and the correct behavior in separate sentences.
 2. Reproduce it on the matching surface. Record the exact steps, environment, observed
-   result, and artifact. Do not hand the reproduction to the user.
+   result, and artifact. On a browser surface, record the reproduction as a scenario with
+   `skills/qa-video/SKILL.md` so the same module replays on the PR head. Do not hand the
+   reproduction to the user.
 3. If it does not reproduce, tighten the trigger or instrument the surface. If it still does
    not reproduce, report what was tried and stop this playbook without changing code.
 4. Write the failing test or capture the failing runtime artifact. Watch it fail for the
@@ -27,6 +29,7 @@ runtime or test evidence is not complete.
 11. Open the draft PR with failing-then-passing evidence, root cause, fix, and regression
     test. Assign the configured reviewers.
 12. Run QA on the PR preview and capture the original behavior at the assertion point.
+    Replay the reproduction scenario on the PR head and cite both videos.
 13. Run `health-check` to confirm the test fails when the fix is absent. Route defects back
     to the owning slice.
 14. When the router's Final report rule applies, render the run report with

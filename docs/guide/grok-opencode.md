@@ -21,6 +21,9 @@ Submit that JSON object to `.grok-plugin/marketplace.json` in
 `xai-org/plugin-marketplace`, then regenerate its component index with the marketplace's
 `scripts/generate-plugin-index.py`. Do not use a moving branch or a placeholder SHA.
 
+Grok Build loads `skills/qa-video/` with the other skills. Its script runs from the
+installed plugin path, the same way as on Codex (`docs/guide/codex.md`).
+
 Install from the Grok Build terminal after the marketplace change is accepted:
 
 ```bash
@@ -38,16 +41,21 @@ loads an npm package named in `opencode.json`. The native bridge is at
 `integrations/opencode/vistack.js`; installation instructions are in
 `integrations/opencode/README.md`.
 
-It exposes `vistack_decision` and `vistack_decisions_toggle`. The first calls the typed decision
-API. The second runs the same `decisions on`, `decisions off`, and `decisions status` commands
+It exposes `vistack_decision`, `vistack_decisions_toggle`, and `vistack_qa_video`. The first
+calls the typed decision API. The second runs the same `decisions on`, `decisions off`, and `decisions status` commands
 used by the other hosts, and passes `ollama_model` to `decisions on` as `--ollama-model`. The default is on, but the bridge still falls back to deterministic policy when
 the model or MLX runtime is unavailable.
+
+`vistack_qa_video` runs `skills/qa-video/scripts/qa-video.mjs` with `command` set to `doctor`,
+`record`, `finish`, or `check`, and `args_json` holding the CLI arguments as a JSON array.
+Credentials stay in the environment, never in `args_json`. The contract is
+`skills/qa-video/SKILL.md`.
 
 The bridge starts the Python helper per request. For high-frequency orchestration, run
 `python3 scripts/vistack-decision.py serve` and adapt the bridge to a supervised JSONL process
 owned by the consuming project. Do not hide a long-lived process behind an OpenCode hook
 without recording its owner and stop condition.
 
-The bridge needs the helper and `laya/` package. When the bridge is copied into a different
-project, set `VISTACK_ROOT=/path/to/vistack` or copy those two paths into the consuming
-project. Its toggle file remains project-local at `.codex/vistack/laya.json`.
+The bridge needs the helper, the `laya/` package, and `skills/qa-video/`. When the bridge is
+copied into a different project, set `VISTACK_ROOT=/path/to/vistack` or copy those three paths
+into the consuming project. Its toggle file remains project-local at `.codex/vistack/laya.json`.

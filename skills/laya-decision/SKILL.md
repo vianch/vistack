@@ -56,21 +56,28 @@ and `feedback` commands to record human corrections and reviewable improvement p
 ## The ladder
 
 The deterministic policy runs first, and a confident answer is sharp without a model turn.
-Only a split answer climbs the ladder: hosted Jev when opted in (`decisions on --jev` or
-`VISTACK_LAYA_JEV=1`), local Ollama when opted in (`decisions on --ollama-model <tag>` or
-`VISTACK_LAYA_OLLAMA_MODEL`), local Laya-MLX, local Kev, and then an explicitly opted-in
-read-only host CLI (Claude Haiku or a low-effort Codex model). If a tier is unavailable,
+Only a split answer climbs the ladder:
+
+1. hosted Jev when opted in (`decisions on --jev` or `VISTACK_LAYA_JEV=1`);
+2. local Clef-flash when opted in (`decisions on --clef-model Cloudflare/clef-flash` or
+   `VISTACK_LAYA_CLEF_MODEL`), served by `decisions clef-start` and held to its own 0.85
+   threshold;
+3. local Ollama when opted in (`decisions on --ollama-model <tag>` or
+   `VISTACK_LAYA_OLLAMA_MODEL`);
+4. local Laya-MLX;
+5. local Kev;
+6. an explicitly opted-in read-only host CLI (Claude Haiku or a low-effort Codex model). If a tier is unavailable,
 refused, timed out, malformed, low-confidence, or rejected by a safety gate or fence, continue
 to the next one and finally the deterministic result with `fork: split`. `decisions on` alone
-does not opt into cloud usage. Ollama runs on the machine and
-sends nothing off it; Jev sends the redacted state to TypeSafe.
+does not opt into cloud usage. Clef and Ollama run on the machine and send nothing off it;
+Jev sends the redacted state to TypeSafe.
 
 ## Switches
 
 `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/vistack-decision.py" decisions off` disables
 refinement for the consuming project, `decisions on` restores it, and `decisions status`
-inspects it. `/vistack:decisions-on` asks which installed Ollama decision model runs behind
-Jev. Use `--disable-laya` for a single request or `VISTACK_LAYA_ENABLED=0` for the current
+inspects it. `/vistack:decisions-on` asks whether the local Clef-flash model runs behind Jev and
+which installed Ollama decision model runs after it. Use `--disable-laya` for a single request or `VISTACK_LAYA_ENABLED=0` for the current
 environment. These controls leave the deterministic viStack policy active.
 
 ## Authority

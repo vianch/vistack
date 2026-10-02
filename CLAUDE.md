@@ -27,8 +27,10 @@ $vistack:run|orchestrator|coordinator <request> # equivalent aliases
 
 Verification after any edit is the inventory and the structural checker:
 `node scripts/check-playbooks.mjs`, plus `python3 -m unittest discover -t .` when Python
-changed and `node --test skills/html-report/scripts/run-report.test.mjs` when the report
-script changed. A skill or agent that fails frontmatter or path rules loads as *nothing*,
+changed, `node --test skills/html-report/scripts/run-report.test.mjs` when the report
+script changed, and `node --test skills/qa-video/scripts/*.test.mjs` when the QA video script changed
+(set `QA_VIDEO_PLAYWRIGHT` to a Playwright package path to run the recording tests instead
+of skipping them). A skill or agent that fails frontmatter or path rules loads as *nothing*,
 silently, with no error.
 
 ## Layout and load rules
@@ -90,9 +92,9 @@ The design is a **router → playbook → agent** chain, with all coordination s
    off, the `advisor` agent reviews a dossier instead.
 6. **Laya is the fork layer.** Forks that need no thinker — which playbook, which file,
    which tool, which tier, retry or stop — go to `laya-decision`: deterministic policy
-   first, then, for split forks only, opted-in Jev, local Ollama (nimble or tev1), and local
-   Laya. Sharp forks run in code; split forks go to the main session. Forks never reach the
-   advisor.
+   first, then, for split forks only, opted-in Jev, local Clef-flash, local Ollama (nimble
+   or tev1), and local Laya. Sharp forks run in code; split forks go to the main session.
+   Forks never reach the advisor.
 
 ### Run state (schema-bearing — see "Versioning")
 

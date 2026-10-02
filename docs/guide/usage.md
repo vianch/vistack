@@ -55,7 +55,8 @@ Once `/vistack` has run, the session is in viStack mode.
 4. Work is sliced, a conflict matrix decides what runs in parallel, and one agent per slice
    runs in its own worktree.
 5. Each finished slice raises its draft PR immediately.
-6. QA runs against each PR's own preview. A pass needs a screenshot.
+6. QA runs against each PR's own preview. A pass needs a screenshot, and every browser
+   scenario is also recorded as a video tied to its assertion points.
 7. A Haiku health check audits each diff against the acceptance criteria.
 8. It stops at merge-ready. **It never merges.**
 

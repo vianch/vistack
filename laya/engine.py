@@ -1,9 +1,9 @@
 """Decision engine: deterministic policy, a refinement ladder, and safety gates.
 
 The deterministic policy answers every fork first. A sharp answer runs in code without a
-model turn. Only a split answer climbs the ladder — Jev when opted in, then Ollama, Laya-MLX,
-Kev, and the host CLI — and the first typed answer that clears the confidence threshold and
-every safety gate makes the fork sharp. Anything else stays split and goes back to the main
+model turn. Only a split answer climbs the ladder — Jev when opted in, then Clef, Ollama,
+Laya-MLX, Kev, and the host CLI — and the first typed answer that clears the confidence
+threshold and every safety gate makes the fork sharp. Anything else stays split and goes back to the main
 session.
 """
 
@@ -34,13 +34,23 @@ from .schema import (
 )
 
 
-BACKENDS = ("auto", "deterministic", "mlx", "kev", "jev", "ollama", "host-llm")
-FALLBACKS = ("none", "kev", "jev", "host-llm")
+BACKENDS = ("auto", "deterministic", "mlx", "kev", "jev", "ollama", "clef", "host-llm")
+FALLBACKS = ("none", "kev", "jev", "clef", "host-llm")
+# Every refinement tier, best first: ``auto`` makes the first configured one the primary and the
+# rest follow in this order. Opted-in Jev leads: it settled 7
+# of 10 labelled split forks, all correctly, at about 340 ms. Clef follows, measured on the same
+# scenarios; its answers clear a stricter floor of their own (``CLEF_MIN_CONFIDENCE``). Ollama
+# settled one more labelled split fork after Jev, correctly, and none wrongly; the local
+# Laya-MLX checkpoint settled none.
+LADDER = ("jev", "clef", "ollama", "mlx", "kev", "host-llm")
 CONSULT_MODES = ("split", "always")
 TRUE_VALUES = {"1", "true", "on", "yes", "enabled"}
 # nimble answers three questions at a 6k-character state in about 4 s; the 2000 ms engine
 # default timed it out 11 times on the intake and grooming schemas.
 OLLAMA_MIN_TIMEOUT_MS = 8000
+# Warm Clef answers a split fork in 1.1-1.8 s on an M3 Pro; the server's warm-up call absorbs
+# the 16-26 s first call before it reports ready.
+CLEF_MIN_TIMEOUT_MS = 8000
 # After a context overflow the state is shrunk to the reported window with this headroom,
 # since the questions share the window and do not shrink with the state.
 OVERFLOW_HEADROOM = 0.85
@@ -113,16 +123,33 @@ def _model_setting(explicit: str | None, variable: str) -> str | None:
     return None if value.strip().lower() in {"", "none"} else value.strip()
 
 
-def _ollama_timeout(explicit: int | None) -> int | None:
+def _budget_setting(explicit: int | None, variable: str, name: str) -> int | None:
     if explicit is None:
-        raw = os.environ.get("VISTACK_LAYA_OLLAMA_TIMEOUT_MS", "").strip()
+        raw = os.environ.get(variable, "").strip()
         try:
             explicit = int(raw) if raw else None
         except ValueError:
-            raise ValueError("VISTACK_LAYA_OLLAMA_TIMEOUT_MS must be a whole number of milliseconds") from None
+            raise ValueError(f"{variable} must be a whole number of milliseconds") from None
     if explicit is not None and explicit <= 0:
-        raise ValueError("ollama_timeout_ms must be positive")
+        raise ValueError(f"{name} must be positive")
     return explicit
+
+
+def _unit_setting(explicit: float | None, variable: str, name: str) -> float | None:
+    if explicit is None:
+        raw = os.environ.get(variable, "").strip()
+        try:
+            explicit = float(raw) if raw else None
+        except ValueError:
+            raise ValueError(f"{variable} must be a number between 0 and 1") from None
+    if explicit is not None and not 0.0 <= explicit <= 1.0:
+        raise ValueError(f"{name} must be between 0 and 1")
+    return explicit
+
+
+def _tier_floor(backend: Any) -> float | None:
+    value = getattr(backend, "min_confidence", None)
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
 
 class _Unavailable:
@@ -158,6 +185,12 @@ def _ollama_backend(model: str, *, url: str | None, keep_alive: str | None, time
     return OllamaBackend(model, url=url, keep_alive=keep_alive, timeout_ms=timeout_ms)
 
 
+def _clef_backend(*, url: str | None, model: str, timeout_ms: int, min_confidence: float | None) -> Any:
+    from .system_one import ClefBackend
+
+    return ClefBackend(url, model=model, timeout_ms=timeout_ms, min_confidence=min_confidence)
+
+
 def _host_backend(host: str, *, model: str | None, effort: str, timeout_ms: int, workdir: str | None) -> Any:
     from .host_llm import HostLLMBackend
 
@@ -167,8 +200,8 @@ def _host_backend(host: str, *, model: str | None, effort: str, timeout_ms: int,
 class DecisionEngine:
     """A safe advisory decision engine.
 
-    ``backend='auto'`` uses deterministic policy unless a local model, a local Kev or Ollama
-    server, an opted-in Jev key, or an explicit host fallback is configured. A single instance
+    ``backend='auto'`` uses deterministic policy unless a local model, a local Kev, Ollama, or
+    Clef server, an opted-in Jev key, or an explicit host fallback is configured. A single instance
     keeps the optional MLX Agent resident, which avoids model reloads for the JSONL server and
     library callers that make repeated decisions.
     """
@@ -190,6 +223,10 @@ class DecisionEngine:
         ollama_url: str | None = None,
         ollama_keep_alive: str | None = None,
         ollama_timeout_ms: int | None = None,
+        clef_model: str | None = None,
+        clef_url: str | None = None,
+        clef_timeout_ms: int | None = None,
+        clef_min_confidence: float | None = None,
         consult: str | None = None,
         dtype: str = "float16",
         device: str | None = None,
@@ -233,7 +270,15 @@ class DecisionEngine:
         self.ollama_model = _model_setting(ollama_model, "VISTACK_LAYA_OLLAMA_MODEL")
         self.ollama_url = ollama_url or os.environ.get("VISTACK_LAYA_OLLAMA_URL")
         self.ollama_keep_alive = ollama_keep_alive or os.environ.get("VISTACK_LAYA_OLLAMA_KEEP_ALIVE")
-        self.ollama_timeout_ms = _ollama_timeout(ollama_timeout_ms) or max(timeout_ms, OLLAMA_MIN_TIMEOUT_MS)
+        self.ollama_timeout_ms = _budget_setting(ollama_timeout_ms, "VISTACK_LAYA_OLLAMA_TIMEOUT_MS", "ollama_timeout_ms") or max(
+            timeout_ms, OLLAMA_MIN_TIMEOUT_MS
+        )
+        self.clef_model = _model_setting(clef_model, "VISTACK_LAYA_CLEF_MODEL")
+        self.clef_url = clef_url or os.environ.get("VISTACK_LAYA_CLEF_URL")
+        self.clef_timeout_ms = _budget_setting(clef_timeout_ms, "VISTACK_LAYA_CLEF_TIMEOUT_MS", "clef_timeout_ms") or max(
+            timeout_ms, CLEF_MIN_TIMEOUT_MS
+        )
+        self.clef_min_confidence = _unit_setting(clef_min_confidence, "VISTACK_LAYA_CLEF_MIN_CONFIDENCE", "clef_min_confidence")
         self.consult = consult
         self.min_confidence = min_confidence
         self.timeout_ms = timeout_ms
@@ -253,6 +298,19 @@ class DecisionEngine:
         self._fallbacks = self._make_fallbacks(self._backend_name, workdir=workdir) if self._backend_name else []
         self._fallback_name, self._fallback_backend = self._fallbacks[0] if self._fallbacks else (None, None)
 
+    def _configured(self, mode: str) -> bool:
+        if mode == "jev":
+            return self.jev
+        if mode == "clef":
+            return bool(self.clef_model)
+        if mode == "ollama":
+            return bool(self.ollama_model)
+        if mode == "mlx":
+            return bool(self.model)
+        if mode == "kev":
+            return bool(self.kev_url)
+        return self.fallback_mode == "host-llm" and bool(self.host)
+
     def _make_backend(
         self,
         mode: str,
@@ -264,35 +322,37 @@ class DecisionEngine:
         if mode == "deterministic":
             return None, None
         if mode == "auto":
-            # Opted-in Jev goes first: it settled 7 of 10 labelled split forks, all correctly, at
-            # about 340 ms, while the local checkpoint settled none and a cold load alone costs
-            # about 600 ms per CLI call. Laya-MLX then answers when Jev is refused or unreachable.
-            # Ollama comes next: after Jev it settled one more labelled split fork, correctly, and
-            # none wrongly.
-            if self.jev:
-                mode = "jev"
-            elif self.ollama_model:
-                mode = "ollama"
-            elif self.model:
-                mode = "mlx"
-            elif self.kev_url:
-                mode = "kev"
-            elif self.fallback_mode == "host-llm" and self.host:
-                mode = "host-llm"
-            else:
+            configured = [tier for tier in LADDER if self._configured(tier)]
+            if not configured:
                 return None, None
+            mode = configured[0]
+        if mode == "ollama" and not self.ollama_model:
+            raise ValueError("ollama backend requires --ollama-model or VISTACK_LAYA_OLLAMA_MODEL")
+        if mode == "clef" and not self.clef_model:
+            raise ValueError("clef backend requires --clef-model or VISTACK_LAYA_CLEF_MODEL")
+        if mode == "host-llm" and not self.host:
+            raise ValueError("host-llm backend requires --host or VISTACK_LAYA_HOST")
+        return self._tier(mode, dtype=dtype, device=device, workdir=workdir)
+
+    def _tier(self, mode: str, *, dtype: str, device: str | None, workdir: str | None) -> tuple[str, Any]:
+        """Ollama and Clef are named for their model, so history and the ladder show
+        ``ollama:nimble`` and ``clef:clef-flash``."""
+
+        if mode == "jev":
+            return "jev", _jev_backend(model=self.jev_model, timeout_ms=self.timeout_ms)
+        if mode == "clef":
+            name = (self.clef_model or "").rstrip("/").rsplit("/", 1)[-1]
+            backend = _clef_backend(url=self.clef_url, model=name, timeout_ms=self.clef_timeout_ms, min_confidence=self.clef_min_confidence)
+            return f"clef:{name}", backend
+        if mode == "ollama":
+            backend = _ollama_backend(
+                self.ollama_model or "", url=self.ollama_url, keep_alive=self.ollama_keep_alive, timeout_ms=self.ollama_timeout_ms
+            )
+            return f"ollama:{self.ollama_model}", backend
         if mode == "mlx":
             return "laya-mlx", MLXBackend(self.model, dtype=dtype, device=device)
         if mode == "kev":
             return "kev", _kev_backend(self.kev_url or "http://127.0.0.1:8009", model=self.kev_model, timeout_ms=self.timeout_ms)
-        if mode == "jev":
-            return "jev", _jev_backend(model=self.jev_model, timeout_ms=self.timeout_ms)
-        if mode == "ollama":
-            if not self.ollama_model:
-                raise ValueError("ollama backend requires --ollama-model or VISTACK_LAYA_OLLAMA_MODEL")
-            return self._ollama()
-        if not self.host:
-            raise ValueError("host-llm backend requires --host or VISTACK_LAYA_HOST")
         return "host-llm", self._host(workdir)
 
     def _host(self, workdir: str | None) -> Any:
@@ -304,32 +364,13 @@ class DecisionEngine:
             workdir=workdir,
         )
 
-    def _ollama(self) -> tuple[str, Any]:
-        """The tier is named for its model, so history and the ladder show ``ollama:nimble``."""
-
-        backend = _ollama_backend(
-            self.ollama_model or "", url=self.ollama_url, keep_alive=self.ollama_keep_alive, timeout_ms=self.ollama_timeout_ms
-        )
-        return f"ollama:{self.ollama_model}", backend
-
     def _make_fallbacks(self, primary_name: str | None, *, workdir: str | None) -> list[tuple[str, Any]]:
-        """Every configured tier after the primary, in ladder order: Jev, Ollama, Laya-MLX, Kev,
-        host CLI."""
+        """Every configured tier after the primary, in ``LADDER`` order."""
 
         if self.fallback_mode == "none":
             return []
-        fallbacks: list[tuple[str, Any]] = []
-        if primary_name != "jev" and self.jev:
-            fallbacks.append(("jev", _jev_backend(model=self.jev_model, timeout_ms=self.timeout_ms)))
-        if self.ollama_model and primary_name != f"ollama:{self.ollama_model}":
-            fallbacks.append(self._ollama())
-        if primary_name != "laya-mlx" and self.model:
-            fallbacks.append(("laya-mlx", MLXBackend(self.model, dtype=self._dtype, device=self._device)))
-        if primary_name != "kev" and self.kev_url:
-            fallbacks.append(("kev", _kev_backend(self.kev_url, model=self.kev_model, timeout_ms=self.timeout_ms)))
-        if primary_name != "host-llm" and self.fallback_mode == "host-llm" and self.host:
-            fallbacks.append(("host-llm", self._host(workdir)))
-        return fallbacks
+        tiers = (self._tier(mode, dtype=self._dtype, device=self._device, workdir=workdir) for mode in LADDER if self._configured(mode))
+        return [tier for tier in tiers if tier[0] != primary_name]
 
     def ladder(self) -> list[tuple[str, Any]]:
         """The refinement tiers a split fork climbs, in order."""
@@ -548,12 +589,14 @@ class DecisionEngine:
         context: DecisionContext,
         baseline: PolicyDraft,
         model_draft: PolicyDraft,
+        min_confidence: float | None = None,
     ) -> tuple[bool, str | None]:
         allowed = _requested_actions(context)
+        threshold = self.min_confidence if min_confidence is None else min_confidence
         if model_draft.action not in allowed:
             return False, "model action is not available in the context"
-        if model_draft.confidence < self.min_confidence:
-            return False, f"confidence {model_draft.confidence:.3f} is below {self.min_confidence:.3f}"
+        if model_draft.confidence < threshold:
+            return False, f"confidence {model_draft.confidence:.3f} is below {threshold:.3f}"
         if context.decision_type == "verification" and model_draft.action == "accept" and not verification_sufficient(context):
             return False, "evidence gate rejected accept because criteria are not fully covered"
         if context.decision_type == "dispatch-readiness" and model_draft.action == "dispatch" and baseline.action != "dispatch":
@@ -703,7 +746,9 @@ class DecisionEngine:
             return None, f"malformed typed model output: {exc}"
         if model_draft is None:
             return None, error or "invalid typed model output"
-        safe, safety_error = self._safe_model_draft(context, baseline, model_draft)
+        floor = _tier_floor(backend)
+        threshold = self.min_confidence if floor is None else max(self.min_confidence, floor)
+        safe, safety_error = self._safe_model_draft(context, baseline, model_draft, threshold)
         if not safe:
             return None, safety_error or "safety gate rejected model output"
         return model_draft, None

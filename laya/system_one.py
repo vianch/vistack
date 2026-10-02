@@ -1,7 +1,7 @@
-"""HTTP adapters for the System One protocol: a local Kev server, a local Ollama server, and
-hosted TypeSafe Jev.
+"""HTTP adapters for the System One protocol: a local Kev server, a local Ollama server, a
+resident Clef server, and hosted TypeSafe Jev.
 
-All three speak ``POST /v1/systemone`` with ``{state, model, questions}`` and return typed
+All four speak ``POST /v1/systemone`` with ``{state, model, questions}`` and return typed
 ``answers``. Keeping the adapters HTTP-only means the viStack plugin installs neither Kev,
 Ollama, PyTorch, nor the TypeSafe SDK into a consuming repository.
 """
@@ -33,6 +33,18 @@ OLLAMA_PORT = 11434
 OLLAMA_KEEP_ALIVE = "30m"
 # /api/ps is cheap but not free; a long-lived ``serve`` re-checks residency at most this often.
 OLLAMA_LOADED_TTL_S = 60.0
+# The reviewed snapshot: the server imports code shipped in it, so the commit is pinned.
+CLEF_REPO = "Cloudflare/clef-flash"
+CLEF_REVISION = "17f0b0ad64efb65d273590632833508766b2aae6"
+CLEF_MODEL = "clef-flash"
+CLEF_PORT = 8011
+CLEF_URL = f"http://127.0.0.1:{CLEF_PORT}"
+# Measured on the 108 labelled scenarios: at 0.65 Clef settled 9 of 10 split forks with one
+# wrong at 0.79, every right split-fork answer scored 0.93 or higher, and raw wrong answers fell
+# from 13 of 68 at 0.65 to 2 of 47 at 0.85.
+CLEF_MIN_CONFIDENCE = 0.85
+CLEF_READY_TTL_S = 60.0
+CLEF_START_HINT = "start it with `vistack-decision.py decisions clef-start`"
 # Ollama never truncates input: "prompt 0 has 2510 tokens; expected 1–2050 (...)".
 OVERFLOW_PATTERN = re.compile(r"has (\d+) tokens; expected \d+\s*[–—-]\s*(\d+)")
 MAX_ERROR_CHARS = 200
@@ -267,6 +279,46 @@ class OllamaBackend(SystemOneBackend):
         self._loaded_at = time.monotonic()
 
 
+class ClefBackend(SystemOneBackend):
+    """Cloudflare clef-flash held by ``laya.clef_server`` in its own venv. The 19 GB model
+    cannot load per call, so this adapter only checks that the server is ready and never
+    starts it; no key, no cooldown file, and the state never leaves the machine. Its answers
+    must clear ``min_confidence`` as well as the engine threshold."""
+
+    name = "clef"
+    # Warm, a split fork at this cap takes 1.1-1.8 s on an M3 Pro (MPS).
+    max_state_chars = 6000
+
+    def __init__(
+        self, url: str | None = None, *, model: str = CLEF_MODEL, timeout_ms: int = 8000, min_confidence: float | None = None
+    ) -> None:
+        super().__init__(url or CLEF_URL, model=model, timeout_ms=timeout_ms)
+        self.min_confidence = CLEF_MIN_CONFIDENCE if min_confidence is None else min_confidence
+        self._ready_at: float | None = None
+
+    def _unreachable(self, exc: Exception) -> str:
+        if isinstance(exc, URLError):
+            return f"Clef is not running at {self.url}; {CLEF_START_HINT}"
+        return super()._unreachable(exc)
+
+    def warm(self) -> None:
+        """Fail fast unless the server reports ready; a load in progress is never waited on."""
+
+        if self._ready_at is not None and time.monotonic() - self._ready_at < CLEF_READY_TTL_S:
+            return
+        health = self._send("/health", None, timeout_s=1.0)
+        status = health.get("status") if isinstance(health, dict) else None
+        if status == "loading":
+            elapsed = health.get("load_seconds")
+            seconds = f"{elapsed:.0f}s" if isinstance(elapsed, (int, float)) else "an unknown time"
+            raise LayaUnavailable(f"Clef at {self.url} is still loading its model ({seconds} elapsed)")
+        if status == "failed":
+            raise LayaUnavailable(f"Clef at {self.url} failed to load: {health.get('error') or 'no error recorded'}")
+        if status != "ready":
+            raise LayaUnavailable(f"Clef at {self.url} reported an unknown status: {status!r}")
+        self._ready_at = time.monotonic()
+
+
 class JevBackend(SystemOneBackend):
     """Hosted TypeSafe Jev. Sends the bounded, redacted state off the machine; opt-in only."""
 
@@ -315,3 +367,17 @@ def ollama_inventory(url: str | None = None, *, timeout_s: float = 1.0) -> dict[
     except Exception as exc:
         report["error"] = str(getattr(exc, "reason", None) or exc) or type(exc).__name__
     return report
+
+
+def clef_health(url: str | None = None, *, timeout_s: float = 1.0) -> dict[str, Any]:
+    """The Clef server's ``/health`` with ``reachable`` and ``url`` added. Never raises: status
+    reports a server that is down rather than failing on it."""
+
+    base = (url or CLEF_URL).rstrip("/")
+    try:
+        value = _fetch_json(f"{base}/health", timeout_s=timeout_s)
+    except Exception as exc:
+        return {"url": base, "reachable": False, "status": None, "error": str(getattr(exc, "reason", None) or exc) or type(exc).__name__}
+    if not isinstance(value, dict):
+        return {"url": base, "reachable": True, "status": None, "error": "health is not a JSON object"}
+    return {**value, "url": base, "reachable": True}

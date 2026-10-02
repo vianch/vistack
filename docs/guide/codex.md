@@ -65,6 +65,15 @@ Use `$overnight` for a direct overnight entry point, or include "going to bed" a
 permission boundary in a `$vistack` request. Use `$automate-me` to capture personal working
 preferences. Project invariants stay in viStack principles and playbooks.
 
+## QA video
+
+`qa-video` runs the same on Codex. Call its script with the installed plugin path,
+`node <plugin path>/skills/qa-video/scripts/qa-video.mjs <command>`, from the consuming
+repository so Playwright resolves from that project. The recording writes to the evidence
+directory under `.codex/vistack/state/qa/<slug>/`, so it is a writing lane and stays in the
+thread. The Playwright MCP video tools named in `skills/qa-video/SKILL.md` apply only when
+the Codex session has that MCP server configured.
+
 ## Reports
 
 On Codex, `html-report` writes a local file only, and `report-writer` is adopted in the thread

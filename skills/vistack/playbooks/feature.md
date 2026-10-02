@@ -25,8 +25,9 @@ owner stays responsible for the design and reviews delegated implementation.
    and reports exact output.
 9. Drain completed slices as queue events. Open each finished slice as a draft PR immediately.
    Over 500 lines or multiple concerns goes through `stack-split` first.
-10. Run QA on each PR's own environment. Capture a screenshot at every assertion point and
-    trace every scenario to a diff hunk.
+10. Run QA on each PR's own environment. Capture a screenshot at every assertion point,
+    record each browser scenario with `skills/qa-video/SKILL.md`, and trace every scenario to
+    a diff hunk.
 11. Run `health-check` independently. A finding returns to the owning slice only.
 12. Clear review automation comments through the project skill. Update state, ledger, and the
     session record on every transition.

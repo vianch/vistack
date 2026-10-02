@@ -42,7 +42,7 @@ Free text is allowed, but these carry meaning elsewhere in the plugin:
 | `monitor-pass` | `babysit` | recurring pass inspected every agent PR and run invariant |
 | `monitor-started` | `coordinator` | exactly one review monitor was started and verified for the current coordinator session |
 | `stack-split` | `stack-split` | a diff became a chain |
-| `qa-scenario` | `qa-verifier` | one scenario ran; `result` is its pass/fail |
+| `qa-scenario` | `qa-verifier` | one scenario ran; `result` is its pass/fail; `evidence` lists its screenshots and its video, or `no video: <reason>` |
 | `attempt` | `unblocker` | one blocker attempt; `reason` is the hypothesis |
 | `root-cause-fixed` | `unblocker` | the cause was found and fixed |
 | `escalated` | any | a fence was hit; `reason` names which of the four |

@@ -41,7 +41,8 @@ caused-by-diff.
 
 It changes what closes a QA scenario. The `qa-verify` contract requires a screenshot named
 `<scenario>-<step>.png` for each assertion point, and a scenario with no screenshot stays
-open. It also changes what a report says: `qa-verifier` returns a table with a screenshot
+open. A browser scenario's video (`skills/qa-video/SKILL.md`) shows how the page reached
+that state; it supports the screenshot and never replaces it. It also changes what a report says: `qa-verifier` returns a table with a screenshot
 path per row, and a row with an empty path is a fail, not a pass with a missing file.
 
 For new PR evidence, attach local screenshots with `gh --attach` and embed the hosted

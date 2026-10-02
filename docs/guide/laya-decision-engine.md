@@ -14,7 +14,7 @@ DecisionContext -> deterministic policy --sharp--> typed Decision (fork: sharp) 
                          |
                        split
                          v
-                  refinement ladder: Jev (opt-in) -> Ollama (local) -> Laya-MLX -> Kev -> host CLI (opt-in)
+                  refinement ladder: Jev (opt-in) -> Clef (local) -> Ollama (local) -> Laya-MLX -> Kev -> host CLI (opt-in)
                          |
                   safety gates --pass--> typed Decision (fork: sharp) -> runs in code
                          |
@@ -36,8 +36,9 @@ only when all of these checks pass:
 4. The result does not violate deterministic readiness, dependency, evidence, size,
    irreversibility, or shared-file gates.
 
-Otherwise the next tier is asked, so Ollama answers any fork the tier before it left
-unsettled, whether that tier was unavailable, unsure, or rejected by a gate. After the last one the deterministic result is
+Otherwise the next tier is asked, so each tier answers only the forks the tiers before it
+left unsettled, whether those were unavailable, unsure, or rejected by a gate. A tier may
+carry its own higher threshold; Clef's is 0.85. After the last one the deterministic result is
 returned with `fallback_used: true`, a reason, and `fork: split`. When a tier agrees with the
 policy's own lean, the decision keeps the policy's rationale and the higher confidence.
 
@@ -122,7 +123,7 @@ venv when the current interpreter cannot import `laya_mlx`, so hosts keep callin
 local; use a local checkpoint directory instead of a Hub id when network access is not wanted.
 
 The model is not downloaded implicitly by `--backend auto`; auto mode stays deterministic
-unless `VISTACK_LAYA_MODEL`, `--model`, an Ollama model, a Kev URL, or Jev is configured.
+unless `VISTACK_LAYA_MODEL`, `--model`, a Clef or Ollama model, a Kev URL, or Jev is configured.
 
 ## Local model fallback: Kev
 
@@ -149,7 +150,7 @@ python3 scripts/vistack-decision.py decision grooming \
 ```
 
 With a configured Laya-MLX model, the order is Laya-MLX, Kev, then deterministic policy,
-after Jev and Ollama when they are opted in.
+after Jev, Clef, and Ollama when they are opted in.
 Without Laya-MLX, `--backend auto --kev-url ...` uses Kev directly. If Kev is not running,
 the deterministic policy still returns a decision. No local server is contacted unless its
 URL is configured, and `--fallback none` keeps the primary tier only.
@@ -169,7 +170,7 @@ export VISTACK_LAYA_JEV=1                               # every project in this 
 The key is read from `TYPESAFE_API_KEY`, then `TYPESAFE_KEY`, and never written to a file. An
 opted-in Jev leads the ladder: it answers a split fork in about 350 ms warm and about 0.5 s
 from a cold CLI call, and the local checkpoint then loads only when Jev cannot answer.
-Without Jev, the local tiers lead, Ollama first when it is configured. TypeSafe publishes no balance endpoint, so a 401, 402, or
+Without Jev, the local tiers lead, Clef first when it is configured, then Ollama. TypeSafe publishes no balance endpoint, so a 401, 402, or
 403 is taken to mean the key or credits are gone: Jev is skipped for an hour, recorded in
 `~/.cache/vistack/jev-status.json`, and the local tiers answer instead. A 429 or 529 is a
 normal transient failure. `decisions status --probe` makes one single-question call to
@@ -178,6 +179,110 @@ prove the key and remaining credits. That call is billed.
 The TypeSafe agent skill is not installed: both of its install paths clone from a GitHub
 organisation outside the allowed origin realm. This adapter follows the published API
 documentation instead.
+
+## Local fork tier: Clef
+
+[Clef-flash](https://huggingface.co/Cloudflare/clef-flash) is Cloudflare's 9B decision model,
+post-trained from Qwen3.5-9B. It is described in the
+[Clef announcement](https://blog.cloudflare.com/clef-decision-models/) and released under
+Apache-2.0. One forward pass returns a probability for every allowed option of every
+question. Its bundled `systemone()` answers the same `POST /v1/systemone` body that Jev and
+Ollama speak, so the adapter is another System One client.
+
+The weights are 19 GB of BF16, and they cannot load on every CLI call. Clef therefore runs as
+one resident server per machine, `laya/clef_server.py`, in its own venv. The server:
+
+- listens on `127.0.0.1:8011` only;
+- serves `GET /health` and `POST /v1/systemone`;
+- runs one inference at a time;
+- needs no key, and the state never leaves the machine.
+
+```bash
+python3 scripts/vistack-decision.py decisions setup --clef        # venv + 19 GB download
+python3 scripts/vistack-decision.py decisions on --clef-model Cloudflare/clef-flash
+python3 scripts/vistack-decision.py decisions clef-start --wait 180
+python3 scripts/vistack-decision.py decisions clef-stop
+```
+
+`decisions on` only records the model. `clef-start` starts the server and prints its pid, log
+file, and stop command. `/vistack:decisions-on` asks whether to use Clef, runs the setup when
+the user picks it, and then starts the server.
+
+### Pinned code
+
+The model repository ships `joint_schema_model.py`, and the server imports it. Setup and the
+server pin the revision that was reviewed, `17f0b0ad64efb65d273590632833508766b2aae6`.
+
+- The server refuses to load a snapshot whose revision differs from the pin, so no
+  unreviewed code runs.
+- `--clef-revision` moves the pin. Review the new file before moving it.
+- A local directory passed as `--clef-model` is loaded as given.
+
+### Place in the ladder
+
+Clef sits after Jev and before Ollama, and it has its own confidence threshold, 0.85. The
+other tiers use the global 0.65.
+
+- Its right answers on split forks were all at 0.93 or above.
+- Its one wrong split-fork answer (`tier-unclear`, mechanical instead of complex) came at
+  0.79.
+- In its raw answers on all 108 scenarios, the wrong-answer count fell from 13 of 68 at 0.65
+  and above to 2 of 47 at 0.85 and above. Both of those two are on forks the deterministic
+  policy settles itself, so Clef is never asked them.
+
+`--clef-min-confidence` and `VISTACK_LAYA_CLEF_MIN_CONFIDENCE` move the threshold. The
+evidence behind it is 10 split forks, so re-measure when the scenario set grows.
+
+### Measurements
+
+Measured on 2026-10-02 on an Apple M3 Pro with 36 GB, on the 108 labelled scenarios in
+`examples/laya/scenarios.jsonl`, warm. Ten of them are split forks. The Clef rows used MPS,
+BF16, and the 6000-character state cap.
+
+| Ladder | Split forks settled | Wrong | Sharp precision | Latency per split fork |
+|---|---|---|---|---|
+| deterministic only | 0 of 10 | 0 | 98 of 98 | under 1 ms |
+| Clef alone at 0.65 | 9 of 10 | 1 (`tier-unclear`) | 106 of 107 | 1.1-1.8 s |
+| Clef alone at 0.85 | 8 of 10 | 0 | 106 of 106 | 1.1-1.8 s |
+| `nimble` alone | 8 of 10 | 1 (`file-user-docs`) | 105 of 106 | 0.9-1.3 s |
+| Jev, then Clef at 0.65 | 9 of 10 (Jev 7, Clef 2) | 1 (`tier-unclear`) | 106 of 107 | Jev 0.29-0.37 s, Clef 1.6-1.7 s |
+| Jev, then `nimble` | 8 of 10 (Jev 7, `nimble` 1) | 0 | 106 of 106 | Jev 0.28-0.37 s, `nimble` 0.45 s |
+| Jev, then Clef at 0.85, then `nimble` | 9 of 10 (Jev 7, Clef 1, `nimble` 1) | 0 | 107 of 107 | Clef and `nimble` only on forks Jev left |
+
+The last row composes the per-tier answers in ladder order. Without Jev, Clef at 0.85 then
+`nimble` also settles 9 of 10 with none wrong. `nimble` first keeps its `file-user-docs` miss,
+because `nimble` answers that fork at 0.91, above its threshold. Clef answered that fork
+correctly, at 0.96.
+
+### What it costs
+
+- Load: 27.6 s from the OS file cache.
+- First call: 16 to 26 s, because MPS compiles its kernels then. The server runs that call
+  before it reports `ready`, and later input lengths do not recompile.
+- A warm call grows with the prompt: about 1 s at 255 tokens, 2 s at 500, and 3.8 s at 1,000.
+  On a Mac, transformers has no fast linear-attention kernel for Qwen3.5 and falls back to
+  plain torch. The model card's 38.8 ms median is on an H200.
+- Memory: about 20 GB, held by the GPU driver. On Apple Silicon the process RSS reads about
+  1.2 GB, so `decisions status` reports the server's own `memory_gb` instead. With
+  `nimble` loaded too, the two hold about 30 GB, which is too much for a 36 GB machine with
+  other work open. Keep one resident.
+
+### Configuration
+
+| Setting | Flag | Environment |
+|---|---|---|
+| Model id or directory | `--clef-model` | `VISTACK_LAYA_CLEF_MODEL` |
+| Server URL | `--clef-url` | `VISTACK_LAYA_CLEF_URL` |
+| Pinned revision | `--clef-revision` | `VISTACK_LAYA_CLEF_REVISION` |
+| Timeout (ms) | `--clef-timeout-ms` | `VISTACK_LAYA_CLEF_TIMEOUT_MS` |
+| Threshold | `--clef-min-confidence` | `VISTACK_LAYA_CLEF_MIN_CONFIDENCE` |
+| Server interpreter | none | `VISTACK_LAYA_CLEF_PYTHON` |
+
+The timeout defaults to 8000 ms and the state cap to 6000 characters. A server that is
+stopped, still loading, or failed makes the tier unavailable, with the reason. The fork then
+goes to the next tier. `--clef-model none` turns the tier off even when the environment names
+a model. Cloudflare also hosts the model as `@cf/cloudflare/clef-flash` on Workers AI. That
+endpoint needs an account id and token and is not wired in.
 
 ## Local fork tier: Ollama
 
@@ -196,8 +301,9 @@ decision models and asks which one to use.
 
 ### Place in the ladder
 
-Ollama sits after Jev and before Laya-MLX. It answers any fork the tier before it left
-unsettled: Jev unavailable, unsure, or rejected by a gate. Without Jev, Ollama leads. Sharp
+Ollama sits after Clef and before Laya-MLX. It answers any fork the tiers before it left
+unsettled: unavailable, unsure, or rejected by a gate. With neither Jev nor Clef, Ollama
+leads. Sharp
 forks never reach it.
 
 ### Measurements
@@ -332,7 +438,7 @@ These switches select deterministic policy; they do not disable viStack routing,
 evidence, or safety rules.
 
 The same choices can be committed to a machine-local, ignored config file. The file is
-created by `decisions on`/`decisions off`; `decisions on --model <id> --jev --ollama-model <tag>`
+created by `decisions on`/`decisions off`; `decisions on --model <id> --jev --clef-model <id> --ollama-model <tag>`
 records those fields, and the other backend fields can be added by the project owner:
 
 ```json
@@ -341,6 +447,8 @@ records those fields, and the other backend fields can be added by the project o
   "enabled": true,
   "model": "convaiinnovations/laya",
   "jev": true,
+  "clef_model": "Cloudflare/clef-flash",
+  "clef_url": "http://127.0.0.1:8011",
   "ollama_model": "nimble",
   "ollama_url": "http://127.0.0.1:11434",
   "ollama_keep_alive": "30m",
@@ -352,13 +460,15 @@ records those fields, and the other backend fields can be added by the project o
 }
 ```
 
-`"ollama_model": "none"` turns the Ollama tier off and keeps the other fields. `decisions
+`"clef_model": "none"` and `"ollama_model": "none"` turn those tiers off and keep the other
+fields. `decisions
 status` reports what will actually run: the ladder, the interpreter, whether `laya_mlx`
 imports, whether the checkpoint is cached, whether a Jev key is present or was refused, the
-`ollama` block (`model`, `url`, `reachable`, `version`, `installed`, `decision_models`,
+`clef` block (`model`, `revision`, `venv_exists`, `cached`, `server` with `running`, `pid`,
+and `health`), the `ollama` block (`model`, `url`, `reachable`, `version`, `installed`, `decision_models`,
 `loaded`, `missing`) with a `hint`, and the fork tally from the decision history. `--probe`
-also sends one question to the Ollama model. That call is local and free, unlike the billed
-Jev probe.
+also sends one question to the Clef server and the Ollama model. Those calls are local and
+free, unlike the billed Jev probe.
 
 Keep this file and `.codex/vistack/decision-history.jsonl` out of version control. An ignored
 file is also the safest place for a developer-specific host model choice.
@@ -534,8 +644,8 @@ reviewable workflow change.
 
 The engine returns the deterministic policy result when the configured refinement backends
 are missing, cannot load, time out, return malformed output, fall below the confidence
-threshold, or fail a safety gate. If configured, the order is opted-in Jev, local Ollama,
-Laya-MLX, local Kev, explicit host CLI, then deterministic policy. The sidecar also converts malformed
+threshold, or fail a safety gate. If configured, the order is opted-in Jev, local Clef, local
+Ollama, Laya-MLX, local Kev, explicit host CLI, then deterministic policy. The sidecar also converts malformed
 JSONL requests into an error response and keeps serving subsequent requests.
 
 viStack must continue when the sidecar is unavailable. A coordinator can omit the hook and

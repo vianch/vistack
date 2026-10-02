@@ -19,6 +19,7 @@ evidence.
 | Credentials | `_private/knowledge/key-maker.json` |
 | Surface | Playwright through the repository's approved browser/control skill for a Vercel preview; otherwise the repository's control skill or project command. |
 | PR reporting | The repository's PR skill and [GitHub attachment procedure](../../docs/guide/github-attachments.md). |
+| Video | `skills/qa-video/SKILL.md`, with evidence under `<state-root>/qa/<slug>/`. |
 
 If `_private/knowledge/key-maker.json` does not exist or cannot be read, stop before login
 and ask the user for the correct path or filename. Do not guess, search unrelated locations,
@@ -59,33 +60,41 @@ values. This is FENCE 4.
    the fallback target.
 4. Run every scenario end to end. Capture one screenshot at the exact moment of every
    assertion point, named `<scenario>-<step>.png`. One screenshot at the end of a scenario
-   does not cover earlier assertions.
+   does not cover earlier assertions. Run each browser scenario through
+   `skills/qa-video/SKILL.md`, which records its video and takes those screenshots in the
+   same pass. When no video can be made, write `none: <reason>` in its place.
 5. Record the scenario, assertion point, steps, expected result, actual result, pass or
-   fail, screenshot, and diff hunk.
+   fail, screenshot, video reference, and diff hunk.
 6. Record a pass only when the screenshot exists and shows the claimed state. A missing,
    unreadable, stale, or secret-bearing artifact is a fail.
 7. Post the results table through the project PR skill. Check `gh --version` and confirm
    `gh pr comment --help` lists `--attach`, following [GitHub attachments](../../docs/guide/github-attachments.md).
-   Attach every approved screenshot with one `--attach` flag per file and reference the
-   same local path in the matching evidence cell so `gh` replaces it with a hosted image.
+   Attach every approved screenshot and scenario video with one `--attach` flag per file
+   and reference the same local path in the matching evidence cell so `gh` replaces it with
+   a hosted file.
    Keep existing screenshot embeds; use native attachments for new uploads. Ask the user
    for images only when the running interface cannot be reached.
 8. Re-read the posted PR comment and verify that it contains one row per assertion point,
-   every row has an embedded screenshot, and the reported PR head matches the tested head.
+   every row has an embedded screenshot and a video reference or its `none` reason, and the
+   reported PR head matches the tested head.
 9. A failed assertion returns to its owning slice with the evidence attached. Do not fix
    product code from the verifier role. Triage a failing automated check through
    `skills/prove-it-works/SKILL.md` before routing it.
 
 ## Results table
 
-| scenario | assertion point | steps | expected | actual | pass/fail | embedded screenshot | diff hunk |
-|---|---|---|---|---|---|---|---|
-| `<name>` | `<step>` | `<actions>` | `<predicate>` | `<observation>` | `pass` | `![<step>](<uploaded-image-url>)` | `<file:line>` |
+| scenario | assertion point | steps | expected | actual | pass/fail | embedded screenshot | video | diff hunk |
+|---|---|---|---|---|---|---|---|---|
+| `<name>` | `<step>` | `<actions>` | `<predicate>` | `<observation>` | `pass` | `![<step>](<uploaded-image-url>)` | `<scenario>.mp4 @ 00:04-00:09` | `<file:line>` |
+
+The screenshot decides pass or fail. The video shows how the page reached that state, and
+its `@ start-end` comes from the scenario's manifest.
 
 ## Exit criteria
 
 Every required assertion point has a screenshot captured on the tested PR head, every row
-maps to a diff hunk, every screenshot is embedded in the posted PR results table, and the
+maps to a diff hunk, every screenshot is embedded in the posted PR results table, every
+browser scenario cites a video that passed `check` or the reason it has none, and the
 comment has been verified after posting. Any failure remains open and blocks merge-ready
 status.
 

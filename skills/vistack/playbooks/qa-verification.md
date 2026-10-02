@@ -26,9 +26,11 @@
    screenshots, comments, or tracked files.
 5. Run every scenario end to end. Capture one screenshot at every assertion point with a
    stable `<scenario>-<step>.png` name. One screenshot at the end of a scenario does not
-   cover earlier assertions.
+   cover earlier assertions. Record each browser scenario through `skills/qa-video/SKILL.md`:
+   `doctor`, a scenario module with one step per assertion point, `record`, `finish`, and
+   `check`. A scenario with no video records `none: <reason>`.
 6. Record one results row per assertion point: scenario, assertion point, steps, expected
-   result, actual result, pass or fail, screenshot path, and diff hunk.
+   result, actual result, pass or fail, screenshot path, video reference, and diff hunk.
 7. Triage a failing automated check with `skills/prove-it-works/SKILL.md` before routing it.
    A pass without a matching screenshot is a fail. A failed assertion returns to its owning
    slice with the evidence attached. If `_private/knowledge/key-maker.json` is missing or
@@ -37,7 +39,8 @@
    names, never secret values. This is FENCE 4.
 8. Post the results table through the project PR skill. Check `gh --version` and confirm
    `gh pr comment --help` lists `--attach`; follow [GitHub attachments](../../docs/guide/github-attachments.md).
-   Attach each new screenshot with `gh --attach` and reference its local path in the
-   matching table row. Keep historical hosted references. Re-read the PR comment and
-   verify the tested head SHA, one row per assertion point, and one attached image per row.
+   Attach each new screenshot and scenario video with `gh --attach` and reference its local
+   path in the matching table row. Keep historical hosted references. Re-read the PR comment
+   and verify the tested head SHA, one row per assertion point, one attached image per row,
+   and a video or its `none` reason per browser scenario.
 9. Run the adversarial health check after QA. Update state, ledger, and session record.

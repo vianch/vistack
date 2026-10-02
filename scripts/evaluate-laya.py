@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from laya.engine import DecisionEngine
+from laya.engine import BACKENDS, FALLBACKS, DecisionEngine
 from laya.policy import evaluate
 from laya.runtime import reexec_with_runtime
 from laya.schema import DecisionContext
@@ -32,7 +32,7 @@ def split_of(scenario_id: str, held_out_percent: int = HELD_OUT_PERCENT) -> str:
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("scenario_file", nargs="?", default="examples/laya/scenarios.jsonl")
-    parser.add_argument("--backend", choices=("deterministic", "mlx", "kev", "jev", "ollama", "host-llm", "auto"), default="deterministic")
+    parser.add_argument("--backend", choices=BACKENDS, default="deterministic")
     parser.add_argument("--model")
     parser.add_argument("--host", choices=("claude", "codex"))
     parser.add_argument("--host-model")
@@ -41,8 +41,12 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--jev", action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument("--ollama-model", help="Ollama System One model, e.g. nimble")
     parser.add_argument("--ollama-url")
-    parser.add_argument("--timeout-ms", type=int, default=2000, help="engine budget; Ollama waits at least 8000 ms")
-    parser.add_argument("--fallback", choices=("none", "kev", "jev", "host-llm"))
+    parser.add_argument("--clef-model", help="Clef model served by `decisions clef-start`, e.g. Cloudflare/clef-flash")
+    parser.add_argument("--clef-url", help="Clef server, default http://127.0.0.1:8011")
+    parser.add_argument("--clef-timeout-ms", type=int, help="Clef budget; defaults to the larger of --timeout-ms and 8000")
+    parser.add_argument("--clef-min-confidence", type=float, help="Clef's own answer floor, default 0.85")
+    parser.add_argument("--timeout-ms", type=int, default=2000, help="engine budget; Ollama and Clef wait at least 8000 ms")
+    parser.add_argument("--fallback", choices=FALLBACKS)
     parser.add_argument("--effort", choices=("low", "medium", "high"), default="low")
     parser.add_argument("--min-confidence", type=float, default=0.65)
     parser.add_argument("--raw", action="store_true", help="also score the first model answer before any gate")
@@ -61,6 +65,10 @@ def main(argv: list[str] | None = None) -> None:
         jev=args.jev,
         ollama_model=args.ollama_model,
         ollama_url=args.ollama_url,
+        clef_model=args.clef_model,
+        clef_url=args.clef_url,
+        clef_timeout_ms=args.clef_timeout_ms,
+        clef_min_confidence=args.clef_min_confidence,
         fallback=args.fallback,
         effort=args.effort,
         min_confidence=args.min_confidence,

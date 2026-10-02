@@ -23,6 +23,9 @@ STRING_FIELDS = {
     "ollama_model": "VISTACK_LAYA_OLLAMA_MODEL",
     "ollama_url": "VISTACK_LAYA_OLLAMA_URL",
     "ollama_keep_alive": "VISTACK_LAYA_OLLAMA_KEEP_ALIVE",
+    "clef_model": "VISTACK_LAYA_CLEF_MODEL",
+    "clef_url": "VISTACK_LAYA_CLEF_URL",
+    "clef_revision": "VISTACK_LAYA_CLEF_REVISION",
     "consult": "VISTACK_LAYA_CONSULT",
 }
 
@@ -72,10 +75,14 @@ class Settings:
     kev_model: str | None = None
     jev: bool | None = None
     jev_model: str | None = None
-    # ``none`` is kept as written: it is how a project turns off a model the environment names.
+    # ``none`` is kept as written, for Ollama and Clef: it is how a project turns off a model the
+    # environment names.
     ollama_model: str | None = None
     ollama_url: str | None = None
     ollama_keep_alive: str | None = None
+    clef_model: str | None = None
+    clef_url: str | None = None
+    clef_revision: str | None = None
     consult: str | None = None
     source: str = "default"
 

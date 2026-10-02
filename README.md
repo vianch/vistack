@@ -8,22 +8,30 @@ feature, a refactor, a design implementation, an investigation. One entry point,
 playbook, one role phase per slice, stopping at merge-ready.
 
 `vistack` is the identifier you install and invoke. **viStack** is what it is called in
-prose. Same thing.
+prose. Same thing. It runs on Claude Code, Codex, Grok Build, and OpenCode.
+
+**Contents:** [install](#install) · [usage](#usage) ·
+[QA evidence: screenshots and video](#qa-evidence-screenshots-and-video) ·
+[what it gives you](#what-it-gives-you) ·
+[reuse in another project repository](#reuse-in-another-project-repository) ·
+[resuming](#resuming) · [update guide](#update-guide) · [limits](#limits) ·
+[uninstall](#uninstall) · [troubleshooting](#troubleshooting)
 
 ---
 
 ## install
 
-viStack supports both Claude Code and Codex. The repository carries both manifests and keeps
-the same playbooks, principles, and skill names across the two hosts.
+viStack supports Claude Code, Codex, Grok Build, and OpenCode. The repository carries a
+manifest per host and keeps the same playbooks, principles, and skill names on all of them.
 
 ### Current versions
 
 | Host | Version | Manifest |
 |---|---:|---|
-| Claude Code | `0.14.0` | `.claude-plugin/plugin.json` |
-| Codex | `0.14.0` | `.codex-plugin/plugin.json` |
-| Grok | `0.14.0` | `.grok-plugin/plugin.json` |
+| Claude Code | `0.21.0` | `.claude-plugin/plugin.json` |
+| Codex | `0.21.0` | `.codex-plugin/plugin.json` |
+| Grok Build | `0.21.0` | `.grok-plugin/plugin.json` |
+| OpenCode | follows the checkout | `integrations/opencode/vistack.js` |
 
 ### Claude Code
 
@@ -86,6 +94,14 @@ codex plugin list
 current thread because Claude's `commands/` and `agents/` directories are not Codex runtime
 components. Codex state uses `.codex/vistack/state/` and `.codex/vistack/worktrees/`. See the
 [Codex guide](docs/guide/codex.md) for local development and update instructions.
+
+### Grok Build and OpenCode
+
+Grok Build reads `.grok-plugin/plugin.json`, which points at the same `skills/`, `commands/`,
+and `agents/` directories. Its marketplace entry must pin a published commit SHA. OpenCode
+loads the bridge at `integrations/opencode/vistack.js` from `.opencode/plugins/`, which adds the
+decision and QA video tools. Both are covered step by step in
+[`docs/guide/grok-opencode.md`](docs/guide/grok-opencode.md).
 
 ---
 
@@ -271,6 +287,17 @@ Matches `html-report`: the deliverable is a page, so no worktree and no PR. The 
 Code. A run with more than one slice, or any unattended run, ends with a run report the same
 way.
 
+### A QA pass with video
+
+```
+/vistack Run QA on https://github.com/ORG/REPO/pull/321. Done means every assertion point
+has a screenshot on the PR head and every browser scenario has a checked video.
+```
+
+Matches `qa-verification`. Each assertion point gets its screenshot, and each browser
+scenario gets a video with one chapter per assertion point. See
+[QA evidence](#qa-evidence-screenshots-and-video) below.
+
 ### Sticky mode
 
 - **Follow-up turns stay in the mode.** Answering a question, adding a constraint, or asking
@@ -300,7 +327,7 @@ The data flow is deliberately one-way:
 task and viStack state
         -> DecisionContext
         -> deterministic policy          sharp -> runs in code
-        -> split forks only: Jev (opt-in) -> Ollama (local) -> Laya-MLX -> Kev -> host CLI
+        -> split forks only: Jev (opt-in) -> Clef (local) -> Ollama (local) -> Laya-MLX -> Kev -> host CLI
         -> safety validation             sharp -> runs in code
         -> advisory Decision             split -> the main session decides
         -> existing viStack rule and coordinator
@@ -388,11 +415,29 @@ because it sends the redacted decision state to TypeSafe: `decisions on --jev` f
 opted-in Jev leads the ladder, and the local tiers answer when Jev is refused or
 offline. See the guide for the checkpoint comparison.
 
+[Clef-flash](https://huggingface.co/Cloudflare/clef-flash) is Cloudflare's 9B decision model
+(Apache-2.0). It speaks the same System One protocol and runs on this machine, with no key.
+Its 19 GB of weights load once into a resident loopback server:
+
+```bash
+python3 scripts/vistack-decision.py decisions setup --clef        # venv + 19 GB download, pinned revision
+python3 scripts/vistack-decision.py decisions on --clef-model Cloudflare/clef-flash
+python3 scripts/vistack-decision.py decisions clef-start --wait 180
+```
+
+`/vistack:decisions-on` asks about Clef along with the Ollama model. Clef answers the split
+forks Jev left unsettled, and it accepts an answer only at 0.85 confidence or higher, its own
+measured threshold. On the 108 labelled scenarios, Jev, then Clef, then `nimble` settled 9 of
+10 split forks with none wrong. On an Apple M3 Pro, Clef takes 1 to 2 s per fork it handles
+and holds about 20 GB of GPU memory. The guide has the measurements, the pinned-revision
+rule, and the memory note:
+[`docs/guide/laya-decision-engine.md`](docs/guide/laya-decision-engine.md#local-fork-tier-clef).
+
 [Ollama](https://ollama.com/library/nimble) serves the same System One protocol locally, with
 no key, and the state never leaves the machine. Opt in with
 `decisions on --ollama-model nimble` (or `tev1:0.8b`, or `none` to turn it off). It answers
-any split fork Jev left unsettled. Measured on the 80 labelled scenarios, Jev then `nimble`
-settled 8 of 10 split forks with none wrong, at 1 to 4 s per fork `nimble` handles. The guide
+any split fork Jev and Clef left unsettled. Measured on the 108 labelled scenarios, Jev then
+`nimble` settled 8 of 10 split forks with none wrong, at 1 to 4 s per fork `nimble` handles. The guide
 has the table, the load and memory costs, and the confidence-scale caveat:
 [`docs/guide/laya-decision-engine.md`](docs/guide/laya-decision-engine.md#local-fork-tier-ollama).
 
@@ -437,7 +482,8 @@ schema, runtime research, benchmarks, failure behavior, and extension procedure.
   the published commit SHA; generate it with
   `python3 scripts/grok-marketplace-entry.py --sha <sha>`.
 - OpenCode support is in `integrations/opencode/vistack.js`. Copy it to
-  `.opencode/plugins/vistack.js` to expose `vistack_decision` and `vistack_decisions_toggle`.
+  `.opencode/plugins/vistack.js` to expose `vistack_decision`, `vistack_decisions_toggle`, and
+  `vistack_qa_video`.
 
 See [`docs/guide/grok-opencode.md`](docs/guide/grok-opencode.md) for marketplace and plugin
 installation details.
@@ -457,6 +503,60 @@ server. The page's `LIVE SYNC` toggle pauses polling without stopping it. See
 [`docs/guide/visualizer.md`](docs/guide/visualizer.md) for data sources and offline fixtures.
 The lifecycle skill provides the same controls through `vistack:visualizer on`, `off`, and
 `status`.
+
+---
+
+## QA evidence: screenshots and video
+
+A QA pass ends with a results table, one row per assertion point. The screenshot taken at
+that point decides pass or fail. Each browser scenario is also recorded as a video, so a
+reviewer can see how the page reached that state: the transition, the order of events, the
+timing. A video never turns a fail into a pass.
+
+| Row field | Comes from |
+|---|---|
+| screenshot | `<scenario>-<step>.png`, captured at the end of the step |
+| video | `<scenario>.mp4 @ 00:04-00:09`, with times read from the scenario's manifest |
+| diff hunk | the `file:line` that made the scenario necessary |
+
+The [`qa-video`](skills/qa-video/SKILL.md) skill does the recording. It runs the same way on
+every host.
+
+| Host | Runs it with |
+|---|---|
+| Claude Code | `node "${CLAUDE_PLUGIN_ROOT}/skills/qa-video/scripts/qa-video.mjs"` inside the plugin |
+| Codex, Grok Build | the same script from the installed plugin path |
+| OpenCode | the `vistack_qa_video` tool in `integrations/opencode/vistack.js` |
+
+Run directly from a consuming project (the evidence directory is git-ignored):
+
+```bash
+QA=/path/to/vistack/skills/qa-video/scripts/qa-video.mjs
+node "$QA" doctor
+cp /path/to/vistack/skills/qa-video/assets/scenario.example.mjs .claude/state/qa/321/checkout.mjs
+node "$QA" record --scenario .claude/state/qa/321/checkout.mjs --out .claude/state/qa/321 \
+  --url https://preview.example.app --head abc1234 --title-card
+node "$QA" finish --manifest .claude/state/qa/321/checkout.manifest.json --mp4 --sheet
+node "$QA" check --manifest .claude/state/qa/321/checkout.manifest.json
+```
+
+| Command | Does | Needs |
+|---|---|---|
+| `doctor` | reports what this machine can produce | nothing |
+| `record` | runs the scenario module, writes the `.webm`, one PNG per step, and the manifest | Playwright in the project, plus its browser |
+| `finish` | writes `.vtt` and `.srt` captions, plus the MP4 fitted to 10 MB, GIF, screenshot slideshow, and contact sheet when asked | ffmpeg with libx264 for video outputs, ImageMagick for the sheet |
+| `check` | validates the manifest, file signatures, step times, and the size budget | nothing |
+
+The scenario module logs in through a separate context that is not recorded, so credentials
+are never typed on camera. Credentials come from environment variables, never from
+command-line arguments. Without ffmpeg the `.webm` is still produced, and the outputs that
+need it are marked `skipped`.
+
+The script is Node with no dependencies because Playwright is a Node package first, and a
+project that uses it already has its browsers installed. Shelling out to ffmpeg and
+ImageMagick with argument lists avoids the quoting bugs of a bash pipeline. Hand edits such
+as trimming, speeding up, side-by-side before and after, and palette GIFs are in
+[`skills/qa-video/references/ffmpeg-imagemagick.md`](skills/qa-video/references/ffmpeg-imagemagick.md).
 
 ---
 
@@ -489,9 +589,6 @@ files are the source of truth, so they are not restated here.
 | [`agent-design`](skills/vistack/playbooks/agent-design.md) | a new agent, bot, or subagent for Claude Code, Codex, or OpenCode |
 | [`worktree-cleanup`](skills/vistack/playbooks/worktree-cleanup.md) | an evidence-based audit of stale worktrees |
 | [`html-report`](skills/vistack/playbooks/html-report.md) | the deliverable is a page: report, chart, diagram, timeline, board, toggle editor, design tokens |
-
-Specialist skills include [`visualizer`](skills/visualizer/SKILL.md) for starting, stopping,
-and inspecting the local workflow observer.
 | [`session-pickup`](skills/vistack/playbooks/session-pickup.md) | resuming work whose session is gone; state file and ledger exist |
 | [`pause-safely`](skills/vistack/playbooks/pause-safely.md) | stop now, stay resumable, hold nothing |
 | [`babysit`](skills/vistack/playbooks/babysit.md) | a run is dispatched; watch it, unstick it, report at boundaries |
@@ -510,7 +607,7 @@ and inspecting the local workflow observer.
 | [`design-implementer`](agents/design-implementer.md) | the same, sourced from Figma; reports deviations instead of inventing values | `sonnet` | session |
 | [`unblocker`](agents/unblocker.md) | the bounded blocker loop and its escalation dossier | `opus` | session |
 | [`pr-author`](agents/pr-author.md) | draft PRs, the stacked chain over 500 lines, reviewer assignment | `opus` | session |
-| [`qa-verifier`](agents/qa-verifier.md) | the QA contract: scenarios from the diff, screenshots, results table | `sonnet` | session |
+| [`qa-verifier`](agents/qa-verifier.md) | the QA contract: scenarios from the diff, screenshots, scenario videos, results table | `sonnet` | session |
 | [`health-check`](agents/health-check.md) | adversarial audit of the diff against the acceptance criteria | `haiku` | — |
 | [`advisor`](agents/advisor.md) | fallback reviewer when the advisor tool is off: plan, repeat, done | `fable` | `xhigh` |
 | [`design-runner`](agents/design-runner.md) | one independent `architect` candidate: usage first, then types and a rationale | `opus` | session |
@@ -565,13 +662,15 @@ invokes a principle must name the decision the principle changed.
 [`slice-plan`](skills/slice-plan/SKILL.md) (decomposition, conflict matrix) ·
 [`unblock`](skills/unblock/SKILL.md) (the bounded loop) ·
 [`qa-verify`](skills/qa-verify/SKILL.md) (the QA contract) ·
+[`qa-video`](skills/qa-video/SKILL.md) (scenario videos and media edits) ·
 [`stack-split`](skills/stack-split/SKILL.md) (the >500-line split) ·
 [`session-ledger`](skills/session-ledger/SKILL.md) (the issue comment) ·
 [`swarm`](skills/swarm/SKILL.md) (parallel verification) ·
 [`show-me-your-work`](skills/show-me-your-work/SKILL.md) (overnight ledger audit) ·
 [`build-the-lever`](skills/build-the-lever/SKILL.md) (rerunnable checks) ·
 [`unslop`](skills/unslop/SKILL.md) (concrete prose) ·
-[`html-report`](skills/html-report/SKILL.md) (pages and the run report).
+[`html-report`](skills/html-report/SKILL.md) (pages and the run report) ·
+[`visualizer`](skills/visualizer/SKILL.md) (the local workflow observer).
 
 Direct entries include [`overnight`](skills/overnight/SKILL.md),
 [`automate-me`](skills/automate-me/SKILL.md), [`design-agent`](skills/design-agent/SKILL.md),
@@ -604,6 +703,10 @@ Before `autopilot-stack`, `autopilot-full`, or `overnight` will run in a new rep
    FENCE 4.
 3. **A lint command and a test command the implementer can run**, both green on the base
    branch before a run starts. A suite already red gives every slice the same false signal.
+
+For scenario videos, the project also needs Playwright in its `node_modules` and its browser
+installed (`npx playwright install chromium`). ffmpeg and ImageMagick are optional. Without
+them the video stays a `.webm`, and `qa-video.mjs doctor` reports what is missing.
 
 Also worth setting up once: `.claude/state/`, `.claude/worktrees/`, `.codex/vistack/state/`,
 and `.codex/vistack/worktrees/` in `.gitignore`. The coordinator checks them before the first
@@ -649,9 +752,10 @@ disagree, and reconciliation is the step that decides which is true. Column sema
 
 Semver in [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json):
 
-The Codex manifest at [`.codex-plugin/plugin.json`](.codex-plugin/plugin.json) carries the same
-release version. Keep both versions aligned; Codex cachebusters are added only to the Codex
-manifest during local iteration and do not replace the release semver.
+The Codex manifest at [`.codex-plugin/plugin.json`](.codex-plugin/plugin.json) and the Grok
+manifest at [`.grok-plugin/plugin.json`](.grok-plugin/plugin.json) carry the same release
+version. Keep all three aligned. Codex cachebusters are added only to the Codex manifest
+during local iteration and do not replace the release semver.
 
 | Bump | For |
 |---|---|
@@ -714,7 +818,7 @@ codex plugin marketplace upgrade vistack
 codex plugin add vistack@vistack
 ```
 
-3. Confirm `vistack` reports version `0.14.0` and is enabled:
+3. Confirm `vistack` reports version `0.21.0` and is enabled:
 
 ```bash
 codex plugin list
@@ -792,7 +896,10 @@ run decided what it did. Delete them by hand if you want them gone.
 | **The QA step fails at login** | access ran before the PR target finished building, or the approved credential procedure is unavailable | wait for the target to finish, then check access. Do not substitute another environment or credential path |
 | **`/plugin install vistack` cannot find it** | more than one registered marketplace carries the name, or the entry is missing from `marketplace.json` | qualify it: `/plugin install vistack`, using the `name` field from `.claude-plugin/marketplace.json` |
 | **A run stops to ask something every few minutes** | the request had no checkable finish condition, so nothing can settle a step | re-state it with `Done means <checkable condition>` and start again |
+| **`qa-video.mjs record` exits 2 with "Playwright not installed in <dir>"** | the script runs from the plugin, so it resolves Playwright from the current directory, not its own | run it from the consuming project, or set `QA_VIDEO_PLAYWRIGHT` to the Playwright package path |
+| **The QA video stays `.webm` and `mp4` is `skipped`** | no system ffmpeg with libx264. Playwright's bundled ffmpeg only writes VP8 | install ffmpeg (`brew install ffmpeg`, or the platform package), then rerun `finish` |
+| **`finish` marks the MP4 `over-budget`** | the scenario is too long for the attachment budget even after the bitrate re-encode | split it into shorter scenarios, or attach the slideshow or contact sheet |
 
 ---
 
-Author: the viStack maintainers 
+Author: the viStack maintainers

@@ -36,6 +36,10 @@ def _engine(args: argparse.Namespace) -> DecisionEngine:
         ollama_url=args.ollama_url or settings.ollama_url,
         ollama_keep_alive=args.ollama_keep_alive or settings.ollama_keep_alive,
         ollama_timeout_ms=args.ollama_timeout_ms,
+        clef_model=args.clef_model or settings.clef_model,
+        clef_url=args.clef_url or settings.clef_url,
+        clef_timeout_ms=args.clef_timeout_ms,
+        clef_min_confidence=args.clef_min_confidence,
         consult=args.consult or settings.consult,
         fallback=args.fallback or settings.fallback,
         dtype=args.dtype,
@@ -69,6 +73,10 @@ def _add_runtime_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--ollama-url", help="Ollama server; defaults to OLLAMA_HOST, then http://127.0.0.1:11434")
     parser.add_argument("--ollama-keep-alive", help="how long Ollama keeps the model loaded, default 30m")
     parser.add_argument("--ollama-timeout-ms", type=int, help="Ollama budget; defaults to the larger of --timeout-ms and 8000")
+    parser.add_argument("--clef-model", help="Clef model served by `decisions clef-start`: a Hugging Face id or local directory; none turns the tier off")
+    parser.add_argument("--clef-url", help="Clef server, default http://127.0.0.1:8011")
+    parser.add_argument("--clef-timeout-ms", type=int, help="Clef budget; defaults to the larger of --timeout-ms and 8000")
+    parser.add_argument("--clef-min-confidence", type=float, help="Clef's own answer floor, default 0.85; the stricter of it and --min-confidence applies")
     parser.add_argument("--consult", choices=CONSULT_MODES, help="always also records a model opinion on sharp forks")
     parser.add_argument("--dtype", choices=("float16", "float32", "bfloat16"), default="float16")
     parser.add_argument("--device", choices=("cpu", "gpu", "metal"))
@@ -115,14 +123,21 @@ def build_parser() -> argparse.ArgumentParser:
     forks.add_argument("--history")
 
     toggle = commands.add_parser("decisions", aliases=["laya"], help="show, change, or install the fork-layer decision models")
-    toggle.add_argument("action", choices=("on", "off", "status", "setup"))
+    toggle.add_argument("action", choices=("on", "off", "status", "setup", "clef-start", "clef-stop"))
     toggle.add_argument("--config", help="switch file; defaults to the host's state root")
     toggle.add_argument("--model", help="on/setup: the checkpoint to use")
     toggle.add_argument("--jev", action=argparse.BooleanOptionalAction, default=None, help="on: opt this project into Jev")
     toggle.add_argument("--ollama-model", help="on: the local Ollama model, e.g. nimble; none turns the tier off")
     toggle.add_argument("--ollama-url", help="on: the Ollama server URL")
+    toggle.add_argument("--clef-model", help="on/setup/clef-start: Cloudflare/clef-flash or a local directory; none turns the tier off")
+    toggle.add_argument("--clef-url", help="on/clef-start: the Clef server URL, default http://127.0.0.1:8011")
+    toggle.add_argument("--clef-revision", help="on/setup/clef-start: the full commit sha a Hub id must resolve to")
+    toggle.add_argument("--clef", action="store_true", help="setup: install the Clef runtime instead of laya-mlx")
+    toggle.add_argument("--wait", type=float, default=0.0, help="clef-start: seconds to wait for the model to load and warm up")
     toggle.add_argument(
-        "--probe", action="store_true", help="status: one tiny Jev call to prove key and credits, and one local Ollama decision"
+        "--probe",
+        action="store_true",
+        help="status: one tiny Jev call to prove key and credits, one local Ollama decision, and one Clef decision when its server is ready",
     )
     toggle.add_argument("--dry-run", action="store_true", help="setup: print the commands only")
     return parser
@@ -137,6 +152,8 @@ def _configured_engine(settings: Settings) -> DecisionEngine:
         ollama_model=settings.ollama_model,
         ollama_url=settings.ollama_url,
         ollama_keep_alive=settings.ollama_keep_alive,
+        clef_model=settings.clef_model,
+        clef_url=settings.clef_url,
         fallback=settings.fallback,
         host=settings.host,
         consult=settings.consult,
@@ -178,7 +195,7 @@ def _preload_ollama(engine: DecisionEngine) -> dict:
 
 
 def _status(args: argparse.Namespace) -> dict:
-    from . import runtime
+    from . import clef, runtime
     from .system_one import default_status_path, jev_api_key, read_status
 
     settings = read_settings(args.config)
@@ -201,6 +218,7 @@ def _status(args: argparse.Namespace) -> dict:
         "kev_url": settings.kev_url,
         "kev_model": settings.kev_model,
         "ollama": _ollama_status(engine.ollama_model, engine.ollama_url),
+        "clef": clef.status(engine.clef_model, settings.clef_revision, engine.clef_url),
     }
     tally = fork_summary(default_history_path())
     report["forks"] = {
@@ -215,7 +233,16 @@ def _status(args: argparse.Namespace) -> dict:
         report["jev"]["probe"] = runtime.probe_jev()
         if engine.ollama_model:
             report["ollama"]["probe"] = runtime.probe_ollama(engine.ollama_model, engine.ollama_url)
+        if report["clef"]["server"]["health"].get("status") == "ready":
+            report["clef"]["probe"] = clef.probe(engine.clef_url)
     return report
+
+
+def _clef_target(args: argparse.Namespace) -> tuple[str | None, str | None, str | None]:
+    """``clef`` fills in the pinned defaults for anything left unset."""
+
+    settings = read_settings(args.config)
+    return args.clef_model or settings.clef_model, args.clef_revision or settings.clef_revision, args.clef_url or settings.clef_url
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -240,16 +267,44 @@ def main(argv: list[str] | None = None) -> None:
                 jev=args.jev,
                 ollama_model=args.ollama_model,
                 ollama_url=args.ollama_url,
+                clef_model=args.clef_model,
+                clef_url=args.clef_url,
+                clef_revision=args.clef_revision,
             )
             preload = _preload_ollama(_configured_engine(read_settings(path))) if args.action == "on" else {}
             report = {**_status(argparse.Namespace(config=str(path), probe=False)), "config": str(path)}
             report["ollama"].update(preload)
+            # Loading and warming the 19 GB model takes most of a minute, so `on` only reports the
+            # server; clef-start runs it.
+            if args.action == "on" and report["clef"]["model"]:
+                report["clef"]["running"] = report["clef"]["server"]["running"]
             print(json.dumps(report, sort_keys=True))
         elif args.action == "setup":
-            from .runtime import setup
+            if args.clef:
+                from .clef import setup as clef_setup
 
-            result = setup(args.model or read_settings(args.config).model, dry_run=args.dry_run)
+                model, revision, _ = _clef_target(args)
+                result = clef_setup(model, revision, dry_run=args.dry_run)
+            else:
+                from .runtime import setup
+
+                result = setup(args.model or read_settings(args.config).model, dry_run=args.dry_run)
             print(json.dumps(result, indent=2, sort_keys=True))
+            if not result["ok"]:
+                raise SystemExit(1)
+        elif args.action == "clef-start":
+            from .clef import start
+
+            model, revision, url = _clef_target(args)
+            result = start(model, revision, url, wait_s=args.wait)
+            print(json.dumps(result, sort_keys=True))
+            if not result["ok"]:
+                raise SystemExit(1)
+        elif args.action == "clef-stop":
+            from .clef import stop
+
+            result = stop()
+            print(json.dumps(result, sort_keys=True))
             if not result["ok"]:
                 raise SystemExit(1)
         else:

@@ -33,6 +33,11 @@ from .system_one import CLEF_MODEL, CLEF_PORT, CLEF_REPO, CLEF_REVISION
 
 LOOPBACK = "127.0.0.1"
 MAX_BODY_BYTES = 2 * 1024 * 1024
+# A client that times out (8 s by default) does not stop the inference it started, so requests
+# behind it would queue and time out in turn. Measured on a 36 GB Mac with Clef and nimble both
+# resident: swap at 25 of 26.6 GB and every call over 8 s. A request that cannot start within
+# this wait gets 503, and its client has given up by then anyway.
+LOCK_WAIT_S = 10.0
 DEVICES = ("auto", "cuda", "mps", "cpu")
 DTYPES = ("bfloat16", "float16", "float32")
 WARMUP_REQUEST = {
@@ -248,9 +253,11 @@ class ClefHandler(BaseHTTPRequestHandler):
         if not isinstance(request, dict):
             self._reply(400, {"error": "the body must be a JSON object"})
             return
+        if not state.lock.acquire(timeout=self.server.lock_wait_s):
+            self._reply(503, {"error": "Clef is busy with an earlier request"})
+            return
         try:
-            with state.lock:
-                response = runner(request)
+            response = runner(request)
         except ValueError as exc:
             self._reply(400, {"error": str(exc)})
             return
@@ -259,14 +266,17 @@ class ClefHandler(BaseHTTPRequestHandler):
             _log(f"inference failed: {type(exc).__name__}")
             self._reply(500, {"error": f"{type(exc).__name__}: {exc}"})
             return
+        finally:
+            state.lock.release()
         self._reply(200, response)
 
 
 class ClefServer(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, state: ServerState, port: int) -> None:
+    def __init__(self, state: ServerState, port: int, *, lock_wait_s: float = LOCK_WAIT_S) -> None:
         self.state = state
+        self.lock_wait_s = lock_wait_s
         super().__init__((LOOPBACK, port), ClefHandler)
 
 

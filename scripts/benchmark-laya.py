@@ -21,7 +21,7 @@ if str(ROOT) not in sys.path:
 
 from laya.runtime import reexec_with_runtime
 
-from laya.engine import DecisionEngine
+from laya.engine import BACKENDS, FALLBACKS, DecisionEngine
 
 
 def percentile(values: list[float], fraction: float) -> float:
@@ -49,7 +49,7 @@ def context() -> dict:
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--backend", choices=("deterministic", "mlx", "kev", "ollama", "host-llm", "auto"), default="deterministic")
+    parser.add_argument("--backend", choices=BACKENDS, default="deterministic")
     parser.add_argument("--model")
     parser.add_argument("--host", choices=("claude", "codex"))
     parser.add_argument("--host-model")
@@ -57,8 +57,10 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--kev-model", default="kev-latest")
     parser.add_argument("--ollama-model", help="Ollama System One model, e.g. nimble")
     parser.add_argument("--ollama-url")
-    parser.add_argument("--timeout-ms", type=int, default=2000, help="engine budget; Ollama waits at least 8000 ms")
-    parser.add_argument("--fallback", choices=("none", "kev", "host-llm"))
+    parser.add_argument("--clef-model", help="Clef model served by `decisions clef-start`, e.g. Cloudflare/clef-flash")
+    parser.add_argument("--clef-url")
+    parser.add_argument("--timeout-ms", type=int, default=2000, help="engine budget; Ollama and Clef wait at least 8000 ms")
+    parser.add_argument("--fallback", choices=FALLBACKS)
     parser.add_argument("--effort", choices=("low", "medium", "high"), default="low")
     parser.add_argument("--runs", type=int, default=25)
     args = parser.parse_args(argv)
@@ -74,6 +76,8 @@ def main(argv: list[str] | None = None) -> None:
         kev_model=args.kev_model,
         ollama_model=args.ollama_model,
         ollama_url=args.ollama_url,
+        clef_model=args.clef_model,
+        clef_url=args.clef_url,
         fallback=args.fallback,
         effort=args.effort,
         timeout_ms=args.timeout_ms,

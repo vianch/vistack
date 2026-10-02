@@ -247,12 +247,23 @@ BF16, and the 6000-character state cap.
 | `nimble` alone | 8 of 10 | 1 (`file-user-docs`) | 105 of 106 | 0.9-1.3 s |
 | Jev, then Clef at 0.65 | 9 of 10 (Jev 7, Clef 2) | 1 (`tier-unclear`) | 106 of 107 | Jev 0.29-0.37 s, Clef 1.6-1.7 s |
 | Jev, then `nimble` | 8 of 10 (Jev 7, `nimble` 1) | 0 | 106 of 106 | Jev 0.28-0.37 s, `nimble` 0.45 s |
-| Jev, then Clef at 0.85, then `nimble` | 9 of 10 (Jev 7, Clef 1, `nimble` 1) | 0 | 107 of 107 | Clef and `nimble` only on forks Jev left |
+| Jev, then Clef at 0.85 | 8 of 10 (Jev 7, Clef 1) | 0 | 106 of 106 | Clef 1.6-1.7 s |
+| Jev, then Clef at 0.85, then `nimble`, on 36 GB | 8 of 10 (Jev 7, Clef 1) | 0 | 106 of 106 | `nimble` timed out under swap |
+| Clef at 0.85, then `nimble`, on 36 GB | 8 of 10 (all `nimble`) | 1 (`file-user-docs`) | 105 of 106 | Clef timed out under swap |
 
-The last row composes the per-tier answers in ladder order. Without Jev, Clef at 0.85 then
-`nimble` also settles 9 of 10 with none wrong. `nimble` first keeps its `file-user-docs` miss,
-because `nimble` answers that fork at 0.91, above its threshold. Clef answered that fork
-correctly, at 0.96.
+Every row ran end to end through the real server, except the two at 0.65, which ran before
+the per-tier threshold existed.
+
+The last two rows are the memory limit. With `nimble` loaded beside Clef, swap reached 25 of
+26.6 GB and every call took longer than its 8 s budget. The ladder then fell through:
+
+- to the policy, when `nimble` was the one timing out;
+- to `nimble`, when Clef was, so `nimble`'s `file-user-docs` miss came back.
+
+On a machine with room for both, replaying the per-tier answers in ladder order settles 9 of
+10 with none wrong. Clef answers `file-user-docs` correctly at 0.96, and `nimble` adds
+`tool-inspect-file`. `decisions status` warns when both are configured on a machine with less
+than 48 GB.
 
 ### What it costs
 
@@ -263,9 +274,11 @@ correctly, at 0.96.
   On a Mac, transformers has no fast linear-attention kernel for Qwen3.5 and falls back to
   plain torch. The model card's 38.8 ms median is on an H200.
 - Memory: about 20 GB, held by the GPU driver. On Apple Silicon the process RSS reads about
-  1.2 GB, so `decisions status` reports the server's own `memory_gb` instead. With
-  `nimble` loaded too, the two hold about 30 GB, which is too much for a 36 GB machine with
-  other work open. Keep one resident.
+  1.2 GB, so `decisions status` reports the server's own `memory_gb` instead. With `nimble`
+  loaded too, the two hold about 30 GB. On a 36 GB machine that pushed Clef past its budget, as
+  the measurements show. Keep one.
+- Busy server: a client that times out does not stop the inference it started. So a request
+  that cannot start within 10 s gets HTTP 503 instead of queueing behind the earlier ones.
 
 ### Configuration
 

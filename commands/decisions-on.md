@@ -6,8 +6,8 @@ argument-hint: "[--clef-model <hub-id>|none] [--ollama-model <tag>|none] [--jev 
 # /vistack:decisions-on
 
 1. If `$ARGUMENTS` already has both `--clef-model` and `--ollama-model`, go to step 5.
-2. Run `decisions status`. Read the `clef` block (`venv_exists`, `cached`, `server.running`)
-   and the `ollama` block (`reachable`, `decision_models`, `model`):
+2. Run `decisions status`. Read the `clef` block (`venv_exists`, `cached`, `server.running`,
+   `machine_memory_gb`) and the `ollama` block (`reachable`, `decision_models`, `model`):
 
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/vistack-decision.py" decisions status
@@ -41,8 +41,10 @@ argument-hint: "[--clef-model <hub-id>|none] [--ollama-model <tag>|none] [--jev 
    offering it. If Ollama is unreachable or has no decision model, skip the Ollama question,
    tell the user (`ollama serve` starts it), and continue without `--ollama-model`.
 
-   On a machine with less than about 40 GB of memory, add to the question text that Clef and
-   `nimble` together hold about 30 GB, so it is better to keep only one of them resident.
+   When `clef.machine_memory_gb` is under 48, say in the question text to pick only one of
+   Clef and `nimble`. Together they hold about 30 GB. Measured on 36 GB, with both resident,
+   the calls ran past their budget and the ladder fell through to the weaker answer. When the
+   user picks both anyway, pass both and relay the `warning` that the report returns.
 4. If the user chose Clef while `clef.venv_exists` or `clef.cached` is false, run the setup
    now. The user's choice in step 3 is the consent for the download. Show the plan, then run
    it:

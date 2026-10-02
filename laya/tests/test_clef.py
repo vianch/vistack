@@ -426,6 +426,21 @@ class ClefServerTests(unittest.TestCase):
                 worker.join(5)
         self.assertEqual((codes, release.peak), ([200] * 4, 1))
 
+    def test_a_request_that_cannot_start_in_time_gets_503_instead_of_queueing(self):
+        release = FakeRelease(delay=0.5)
+        with ServerHarness(release) as harness:
+            harness.ready()
+            harness.server.lock_wait_s = 0.05
+            codes: list[int] = []
+            workers = [threading.Thread(target=lambda: codes.append(harness.post(VALID)[0])) for _ in range(2)]
+            for worker in workers:
+                worker.start()
+            for worker in workers:
+                worker.join(5)
+            # The lock is released after a busy reply and after a served one alike.
+            self.assertEqual(harness.post(VALID)[0], 200)
+        self.assertEqual(sorted(codes), [200, 503])
+
     def test_request_bodies_never_reach_the_log(self):
         with ServerHarness(FakeRelease()) as harness:
             harness.ready()
@@ -718,7 +733,17 @@ class ClefCommandTests(unittest.TestCase):
         write_enabled(self.config, True, clef_model=REPO, clef_revision=REVISION)
         report = self.run_cli("decisions", "status", "--config", self.config)
         self.assertEqual((report["clef"]["model"], report["clef"]["revision"], report["clef"]["server"]["running"]), (REPO, REVISION, False))
+        self.assertIsInstance(report["clef"]["machine_memory_gb"], float)
         self.assertIn("decisions clef-start", report["clef"]["hint"])
+
+    def test_status_warns_when_clef_and_ollama_share_a_small_machine(self):
+        write_enabled(self.config, True, clef_model=REPO, ollama_model="nimble")
+        with patch("laya.cli._ollama_status", return_value={}), patch("laya.clef.memory_gb", return_value=36.0):
+            report = self.run_cli("decisions", "status", "--config", self.config)
+        self.assertIn("Keep one", report["warning"])
+        with patch("laya.cli._ollama_status", return_value={}), patch("laya.clef.memory_gb", return_value=64.0):
+            report = self.run_cli("decisions", "status", "--config", self.config)
+        self.assertNotIn("warning", report)
 
     def test_status_without_clef_configured_stays_quiet(self):
         report = self.run_cli("decisions", "status", "--config", self.config)

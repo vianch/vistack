@@ -21,5 +21,6 @@ about 19 GB, pinned to the reviewed revision. It needs about 20 GB of free memor
 model runs.
 
 Run the setup without `--dry-run` only after the user agrees. The entry script switches to the
-Laya venv on its own. Clef runs as a separate server, started with `decisions clef-start`.
-Print the returned `export` lines, so the user can pin them in their shell profile.
+Laya venv on its own; print the Laya setup's returned `export` lines so the user can pin them in
+their shell profile. Clef runs as a separate server: after its setup, record it with
+`decisions on --clef-model Cloudflare/clef-flash` and start it with `decisions clef-start`.

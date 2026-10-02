@@ -194,6 +194,20 @@ def _preload_ollama(engine: DecisionEngine) -> dict:
     return {"preloaded": True, "preload_error": None}
 
 
+# Clef holds about 20 GB and nimble about 9.5 GB. With both resident on a 36 GB Mac, swap reached
+# 25 of 26.6 GB, every Clef call ran past its 8 s budget, and the ladder fell through to nimble.
+BOTH_LOCAL_MIN_GB = 48
+
+
+def _memory_warning(engine: DecisionEngine, memory_gb: float | None) -> str | None:
+    if not (engine.clef_model and engine.ollama_model) or memory_gb is None or memory_gb >= BOTH_LOCAL_MIN_GB:
+        return None
+    return (
+        f"Clef (about 20 GB) and Ollama {engine.ollama_model} are both configured on a {memory_gb:g} GB machine; "
+        "with both resident the Clef calls time out. Keep one: `decisions on --ollama-model none` or `--clef-model none`"
+    )
+
+
 def _status(args: argparse.Namespace) -> dict:
     from . import clef, runtime
     from .system_one import default_status_path, jev_api_key, read_status
@@ -227,6 +241,9 @@ def _status(args: argparse.Namespace) -> dict:
         "split": tally["split"],
         "by_type": {name: {key: bucket[key] for key in ("forks", "sharp", "mean_confidence")} for name, bucket in tally["by_type"].items()},
     }
+    warning = _memory_warning(engine, clef.memory_gb())
+    if warning:
+        report["warning"] = warning
     if engine.model and not report["laya_mlx"]:
         report["hint"] = "run `vistack-decision.py decisions setup`, or set VISTACK_LAYA_PYTHON to a Python with laya-mlx"
     if args.probe:

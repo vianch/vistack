@@ -357,6 +357,7 @@ def status(model: str | None = None, revision: str | None = None, url: str | Non
         "python": python,
         "venv_exists": bool(python) and Path(python or "").exists(),
         "cached": cached(chosen, pinned),
+        "machine_memory_gb": memory_gb(),
         "server": {
             "running": health["reachable"],
             "pid": pid,

@@ -427,9 +427,15 @@ python3 scripts/vistack-decision.py decisions clef-start --wait 180
 
 `/vistack:decisions-on` asks about Clef along with the Ollama model. Clef answers the split
 forks Jev left unsettled, and it accepts an answer only at 0.85 confidence or higher, its own
-measured threshold. On the 108 labelled scenarios, Jev, then Clef, then `nimble` settled 9 of
-10 split forks with none wrong. On an Apple M3 Pro, Clef takes 1 to 2 s per fork it handles
-and holds about 20 GB of GPU memory. The guide has the measurements, the pinned-revision
+measured threshold. On the 108 labelled scenarios, measured end to end:
+
+- Clef alone settled 8 of 10 split forks with none wrong; `nimble` alone settled 8 with one
+  wrong.
+- Jev, then Clef settled 8 of 10 with none wrong.
+
+On an Apple M3 Pro, Clef takes 1 to 2 s per fork it handles and holds about 20 GB of GPU
+memory. On a machine under 48 GB, run Clef or `nimble`, not both: with both resident, the
+calls time out. The guide has the measurements, the pinned-revision
 rule, and the memory note:
 [`docs/guide/laya-decision-engine.md`](docs/guide/laya-decision-engine.md#local-fork-tier-clef).
 

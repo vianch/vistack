@@ -1,3 +1,6 @@
 __pycache__/
 *.pyc
 .claude/settings.local.json
+# Written by Claude Code when it loads the deck mod from this folder.
+.claude-plugin/types/
+/tsconfig.json

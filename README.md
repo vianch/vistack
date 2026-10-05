@@ -10,7 +10,7 @@ playbook, one role phase per slice, stopping at merge-ready.
 `vistack` is the identifier you install and invoke. **viStack** is what it is called in
 prose. Same thing. It runs on Claude Code, Codex, Grok Build, and OpenCode.
 
-**Version:** `0.23.0`
+**Version:** `0.24.0`
 
 **Contents:** [install](#install) · [usage](#usage) ·
 [QA evidence: screenshots and video](#qa-evidence-screenshots-and-video) ·
@@ -482,6 +482,25 @@ server. The page's `LIVE SYNC` toggle pauses polling without stopping it. See
 [`docs/guide/visualizer.md`](docs/guide/visualizer.md) for data sources and offline fixtures.
 The lifecycle skill provides the same controls through `vistack:visualizer on`, `off`, and
 `status`.
+
+### Deck: an in-session pane (Claude Code)
+
+viStack ships a Claude Code mod: a docked pane with eight tabs (Board, Agents, Cost, Session,
+Changes, Timeline, Flow, Recall). It shows what waits on you, each subagent with its model,
+tokens, and cost, cost per model and per execution, context and rate limits, the files
+edited, where a turn's time went, viStack run state and worktrees, and a search over the
+session's prompts. `/deck` opens it, `/deck <tab>` jumps to a tab, `1` to `8` switch tabs in
+the pane, and `g` opens lazygit beside the session.
+
+It loads with the plugin: after an install or update, run `/reload-plugins`. PR listing and
+lazygit stay off until you set your realm:
+
+```json
+{ "pluginConfigs": { "vistack": { "options": { "realm": "github.com/your-org" } } } }
+```
+
+See [`docs/guide/deck.md`](docs/guide/deck.md) for the tabs, options, model suggestions, and
+what the deck reads and runs.
 
 ---
 

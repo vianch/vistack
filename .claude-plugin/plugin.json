@@ -2,12 +2,57 @@
   "name": "vistack",
   "displayName": "viStack",
   "description": "Standing entry point for engineering work with sticky routing, evidence-backed playbooks, unattended overnight runs, and merge-ready draft PRs without merging. The canonical command is vistack; run, orchestrator, and coordinator are equivalent aliases.",
-  "version": "0.23.0",
+  "version": "0.24.0",
   "author": {
     "name": "Victor",
     "url": "https://github.com/vianch"
   },
   "homepage": "https://github.com/vianch/viStack",
   "repository": "https://github.com/vianch/viStack",
-  "keywords": ["workflow", "coordinator", "playbooks", "autonomous", "qa", "video", "decision-engine", "laya", "ollama", "cloudflare", "reports"]
+  "keywords": ["workflow", "coordinator", "playbooks", "autonomous", "qa", "video", "decision-engine", "laya", "ollama", "cloudflare", "reports", "mods", "dashboard"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "realm": {
+      "type": "string",
+      "title": "Git realm",
+      "description": "Host and owner whose repositories the deck may run git and gh against, e.g. github.com/your-org. Empty: no gh PR listing and no lazygit.",
+      "default": ""
+    },
+    "jevMode": {
+      "type": "string",
+      "title": "Model suggestions",
+      "description": "off: no suggestion. suggest: show and record the fork layer's model pick. apply: also set it on built-in subagent types that named no model.",
+      "default": "suggest",
+      "options": [
+        "off",
+        "suggest",
+        "apply"
+      ]
+    },
+    "autoOpen": {
+      "type": "boolean",
+      "title": "Open on start",
+      "description": "Dock the deck when a session starts and the terminal is wide enough.",
+      "default": true
+    },
+    "lazygitLauncher": {
+      "type": "string",
+      "title": "lazygit launcher",
+      "description": "Where lazygit opens: auto picks tmux inside tmux, else the terminal app.",
+      "default": "auto",
+      "options": [
+        "auto",
+        "tmux",
+        "ghostty",
+        "iterm",
+        "terminal"
+      ]
+    },
+    "vistackRoot": {
+      "type": "string",
+      "title": "viStack root",
+      "description": "Folder holding scripts/vistack-decision.py; empty finds it beside the deck or in the installed marketplace copy.",
+      "default": ""
+    }
+  }
 }

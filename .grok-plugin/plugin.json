@@ -1,6 +1,6 @@
 {
   "name": "vistack",
-  "version": "0.23.0",
+  "version": "0.24.0",
   "description": "Evidence-driven engineering workflows with an optional local typed decision engine.",
   "author": {
     "name": "Victor",

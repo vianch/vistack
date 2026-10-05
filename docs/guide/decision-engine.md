@@ -14,7 +14,7 @@ DecisionContext -> deterministic policy --sharp--> typed Decision (fork: sharp) 
                          |
                        split
                          v
-                  refinement ladder: Jev (opt-in) -> Ollama clef-flash (local, opt-in)
+                  refinement ladder: Jev (opt-in) -> Cloudflare clef-flash (opt-in) -> Ollama clef-flash (local, opt-in)
                          |
                   safety gates --pass--> typed Decision (fork: sharp) -> runs in code
                          |
@@ -102,6 +102,61 @@ The TypeSafe agent skill is not installed: both of its install paths clone from 
 organisation outside the allowed origin realm. This adapter follows the published API
 documentation instead.
 
+## Hosted fork tier: Cloudflare Workers AI
+
+Cloudflare serves the same 9B decision model as `@cf/cloudflare/clef-flash` on Workers AI. It
+sits between Jev and Ollama. It is opt-in, because it sends the bounded, redacted decision
+state to Cloudflare, as Jev does and Ollama does not:
+
+```bash
+python3 scripts/vistack-decision.py decisions on --cloudflare   # this project; --no-cloudflare turns it off
+export VISTACK_LAYA_CLOUDFLARE=1                               # every project in this shell
+```
+
+`--backend cloudflare` and `--fallback cloudflare` select it on the engine commands, and the
+switch file key is `"cloudflare": true`. Credentials alone do not opt in.
+
+**Credentials** come from the environment only and are never written to the switch file:
+`CLOUDFLARE_API_TOKEN` (or `CLOUDFLARE_AUTH_TOKEN`) and `CLOUDFLARE_ACCOUNT_ID`. The token needs
+`Workers AI · Read` and `Workers AI · Edit` on the account. Create it in the dashboard under
+AI -> Workers AI -> Use REST API -> Create a Workers AI API Token, or under My Profile -> API
+Tokens with the Workers AI template; Account Resources must include the account. A token with
+no account resources still reports "active" at `/user/tokens/verify`, yet `/ai/run` returns 401
+code 10000.
+
+**Cost guard.** Workers AI gives 10,000 Neurons a day free, reset at 00:00 UTC
+([pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/)); `clef-flash`
+costs 8,182 Neurons per million input tokens. A machine-wide ledger at
+`~/.cache/vistack/cloudflare-status.json` reserves an upper-bound estimate before each call and
+reconciles to the reported usage after it. The default daily cap is 9,000 Neurons;
+`VISTACK_LAYA_CLOUDFLARE_DAILY_NEURONS` may lower it, never above 10,000. The local count sees
+only this machine, while the allocation is per account, so Cloudflare's own refusal is
+authoritative:
+
+| Response | Meaning | Effect |
+|---|---|---|
+| 429 code 3036 | "Daily free allocation of 10,000 neurons exceeded" | tier parked until 00:00 UTC |
+| 403 code 5035 | the model requires Workers Paid | tier refused for an hour |
+| auth failure | token or account wrong | tier refused for an hour |
+| 429 code 3040 | capacity | transient; the fork moves on |
+
+When the cap is reached or Cloudflare refuses, the tier sends nothing and split forks go to the
+Ollama `clef-flash`.
+
+**Measured 2026-10-05:** one live decision with 217 input tokens took 0.77 s and cost about 1.8
+Neurons (output tokens 0), so the 9,000 cap covers several thousand forks a day at the
+6,000-character state limit.
+
+**Floor.** The tier keeps an answer only at 0.85 confidence, inherited from the Ollama
+`clef-flash` measurements (same weights). It is not yet measured on Workers AI; re-measure with
+`python3 scripts/evaluate-laya.py --backend cloudflare --check`.
+
+`decisions status` shows a `cloudflare` block: `enabled`, `token` (bool), `account` (bool),
+`model`, `min_confidence`, and `budget` (`day`, `used`, `cap`, `free_allocation`, `remaining`,
+`calls`, `resets_at`, `exhausted`, `refused`). A fork answered here shows as
+`cloudflare:clef-flash` in status and history. `--probe` makes one tiny Cloudflare call, only
+when the tier is opted in.
+
 ## Local fork tier: Ollama
 
 [Ollama](https://ollama.com) serves decision models through `POST /v1/systemone`, the same
@@ -124,8 +179,8 @@ whether to use it and pulls it when the user picks it.
 
 ### Place in the ladder
 
-Ollama follows Jev. It answers any fork Jev left unsettled: unavailable, unsure, or rejected
-by a gate. Without Jev, Ollama leads. Sharp forks never reach it.
+Ollama is last. It answers any fork Jev and Cloudflare left unsettled: unavailable, unsure, or
+rejected by a gate. Without them, Ollama leads. Sharp forks never reach it.
 
 ### Threshold
 
@@ -232,10 +287,12 @@ python3 scripts/vistack-decision.py decisions status
 
 The older `laya on|off|status` spelling still works as an alias.
 
-The switch lives in the host's state root: `.claude/vistack/laya.json` under Claude Code
-(detected from `CLAUDECODE`) and `.codex/vistack/laya.json` elsewhere. Under Claude Code a
+The switch lives in the host's state root: `.claude/vistack/decisions.json` under Claude Code
+(detected from `CLAUDECODE`) and `.codex/vistack/decisions.json` elsewhere. Under Claude Code a
 switch written earlier to the Codex root is still read until `decisions on` or `decisions off` writes
-the Claude one. `decision`, `serve`, and the history commands use the same root, so a toggle
+the Claude one. Before 0.23.0 the file was named `laya.json`; it is still read while no
+`decisions.json` sits beside it, and the next `decisions on` or `decisions off` writes
+`decisions.json` and removes it. `decision`, `serve`, and the history commands use the same root, so a toggle
 and the decisions it governs never disagree. A one-request emergency
 override is `--disable-laya`. The environment variable `VISTACK_LAYA_ENABLED=0` disables
 refinement for every invocation in that environment and takes precedence over the file.
@@ -243,7 +300,7 @@ These switches select deterministic policy; they do not disable viStack routing,
 evidence, or safety rules.
 
 The same choices can be committed to a machine-local, ignored config file. The file is
-created by `decisions on`/`decisions off`; `decisions on --jev --ollama-model clef-flash`
+created by `decisions on`/`decisions off`; `decisions on --jev --cloudflare --ollama-model clef-flash`
 records those fields, and the other fields can be added by the project owner:
 
 ```json
@@ -252,6 +309,7 @@ records those fields, and the other fields can be added by the project owner:
   "enabled": true,
   "jev": true,
   "jev_model": "jev-latest",
+  "cloudflare": true,
   "ollama_model": "clef-flash",
   "ollama_url": "http://127.0.0.1:11434",
   "ollama_keep_alive": "30m",
@@ -260,16 +318,16 @@ records those fields, and the other fields can be added by the project owner:
 }
 ```
 
-Those are all the keys the file takes. `fallback` is `none` or `jev`, and `consult` is
+Those are all the keys the file takes. `fallback` is `none`, `jev`, or `cloudflare`, and `consult` is
 `split` or `always`. Any other key is left over from a removed tier: it is ignored, and
 `decisions on` or `decisions off` drops it when it rewrites the file. `"ollama_model":
 "none"` turns the tier off and keeps the other fields. `decisions status` reports what will
 actually run: the ladder, the interpreter, whether a Jev key is present or was refused, the
-`ollama` block (`model`, `url`, `reachable`, `version`, `version_ok`, `installed`,
+`cloudflare` block, the `ollama` block (`model`, `url`, `reachable`, `version`, `version_ok`, `installed`,
 `decision_models`, `supported`, `loaded`, `missing`, `min_confidence`) with a `hint`, the
 `obsolete` block (`fields`, `env`) with a top-level `hint`, and the fork tally from the
 decision history. `--probe` also sends one question to the Ollama model. That call is local
-and free, unlike the billed Jev probe.
+and free, unlike the billed Jev probe and the Cloudflare probe, which spends Neurons.
 
 Keep this file and `.codex/vistack/decision-history.jsonl` out of version control. An ignored
 file is also the safest place for a developer-specific host model choice.
@@ -444,7 +502,7 @@ reviewable workflow change.
 
 The engine returns the deterministic policy result when the configured refinement backends
 are missing, cannot load, time out, return malformed output, fall below the confidence
-threshold, or fail a safety gate. If configured, the order is opted-in Jev, the local Ollama
+threshold, or fail a safety gate. If configured, the order is opted-in Jev, opted-in Cloudflare, the local Ollama
 model, then deterministic policy. The sidecar also converts malformed JSONL requests into an
 error response and keeps serving subsequent requests.
 
@@ -536,6 +594,8 @@ fallback and evidence predicate are independently testable.
   context.
 - Jev is hosted and opt-in; it can incur a small cost and it receives the redacted decision
   state.
+- Cloudflare is hosted and opt-in; it receives the redacted decision state and spends free
+  daily Neurons, capped at 9,000 by default.
 - `clef-flash` is not fine-tuned on viStack outcomes; its answers are held to the safety
   gates and its own floor.
 - Choice quality can degrade with large option sets, so question schemas keep choices small
@@ -545,7 +605,8 @@ fallback and evidence predicate are independently testable.
 
 ## Removed in 0.22.0
 
-Version 0.22.0 keeps two refinement tiers: hosted Jev and the local Ollama `clef-flash`. It
+Version 0.22.0 kept two refinement tiers: hosted Jev and the local Ollama `clef-flash`; 0.23.0 adds
+opt-in Cloudflare Workers AI `@cf/cloudflare/clef-flash` between them. Version 0.22.0
 removed the Clef server that ran the Hugging Face weights in its own environment, the
 in-process Laya checkpoint runtime and its setup command, the separately run local decision
 server tier, the host CLI tier, and the earlier Ollama decision models.

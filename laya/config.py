@@ -10,6 +10,10 @@ from typing import Any
 
 
 LEGACY_STATE_ROOT = ".codex/vistack"
+CONFIG_NAME = "decisions.json"
+# The switch file's name before 0.23.0: read while no decisions.json exists beside it, and
+# removed when the switch is next written.
+LEGACY_CONFIG_NAME = "laya.json"
 FALSE_VALUES = {"0", "false", "off", "no", "disabled"}
 TRUE_VALUES = {"1", "true", "on", "yes", "enabled"}
 STRING_FIELDS = {
@@ -23,14 +27,17 @@ STRING_FIELDS = {
 # Every switch-file key and every VISTACK_LAYA_ variable the package reads. Anything else is
 # left over from a removed tier: it is ignored, reported by ``decisions status``, and dropped
 # when the switch file is rewritten.
-KNOWN_FIELDS = frozenset({*STRING_FIELDS, "enabled", "jev", "schema_version"})
+BOOLEAN_FIELDS = {"jev": "VISTACK_LAYA_JEV", "cloudflare": "VISTACK_LAYA_CLOUDFLARE"}
+KNOWN_FIELDS = frozenset({*STRING_FIELDS, *BOOLEAN_FIELDS, "enabled", "schema_version"})
 ENV_PREFIX = "VISTACK_LAYA_"
 KNOWN_ENV = frozenset(
     {
         *STRING_FIELDS.values(),
+        *BOOLEAN_FIELDS.values(),
         "VISTACK_LAYA_CACHE_DIR",
+        "VISTACK_LAYA_CLOUDFLARE_DAILY_NEURONS",
+        "VISTACK_LAYA_CLOUDFLARE_TIMEOUT_MS",
         "VISTACK_LAYA_ENABLED",
-        "VISTACK_LAYA_JEV",
         "VISTACK_LAYA_OLLAMA_MIN_CONFIDENCE",
         "VISTACK_LAYA_OLLAMA_TIMEOUT_MS",
     }
@@ -44,7 +51,7 @@ def state_root() -> str:
 
 
 def default_config_path() -> str:
-    return f"{state_root()}/laya.json"
+    return f"{state_root()}/{CONFIG_NAME}"
 
 
 def default_history_path() -> str:
@@ -52,7 +59,7 @@ def default_history_path() -> str:
 
 
 def cache_dir() -> Path:
-    """Machine-wide, never per-project: the Jev refusal record."""
+    """Machine-wide, never per-project: the Jev refusal record and the Cloudflare Neuron ledger."""
 
     root = os.environ.get("VISTACK_LAYA_CACHE_DIR")
     if root:
@@ -60,15 +67,27 @@ def cache_dir() -> Path:
     return Path(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")) / "vistack"
 
 
+def _earlier_name(path: Path) -> Path | None:
+    """The same switch under its pre-0.23.0 name, when only that file exists."""
+
+    legacy = path.with_name(LEGACY_CONFIG_NAME)
+    return legacy if path.name == CONFIG_NAME and not path.exists() and legacy.exists() else None
+
+
 def resolve_config_path(path: str | Path | None = None) -> Path:
     """An explicit path wins. Otherwise the host's path, or the Codex-root file written before
-    the Claude root existed, so an earlier ``decisions off`` keeps holding."""
+    the Claude root existed, so an earlier ``decisions off`` keeps holding. Each is also found
+    under its earlier name, ``laya.json``."""
 
     if path is not None:
-        return Path(path)
+        explicit = Path(path)
+        return _earlier_name(explicit) or explicit
     host = Path(default_config_path())
-    legacy = Path(LEGACY_STATE_ROOT) / "laya.json"
-    return legacy if not host.exists() and legacy.exists() else host
+    for candidate in (host, Path(LEGACY_STATE_ROOT) / CONFIG_NAME):
+        found = candidate if candidate.exists() else _earlier_name(candidate)
+        if found is not None:
+            return found
+    return host
 
 
 @dataclass(frozen=True)
@@ -77,6 +96,7 @@ class Settings:
     fallback: str | None = None
     jev: bool | None = None
     jev_model: str | None = None
+    cloudflare: bool | None = None
     # ``none`` is kept as written: it is how a project turns off a model the environment names.
     ollama_model: str | None = None
     ollama_url: str | None = None
@@ -102,7 +122,7 @@ def obsolete_env() -> tuple[str, ...]:
 
 def _environment_fields() -> dict[str, Any]:
     fields: dict[str, Any] = {name: os.environ.get(variable) or None for name, variable in STRING_FIELDS.items()}
-    fields["jev"] = _env_flag("VISTACK_LAYA_JEV")
+    fields.update({name: _env_flag(variable) for name, variable in BOOLEAN_FIELDS.items()})
     fields["obsolete_env"] = obsolete_env()
     return fields
 
@@ -128,10 +148,11 @@ def read_settings(path: str | Path | None = None) -> Settings:
         if field_value is not None and not isinstance(field_value, str):
             raise ValueError(f"Laya config {name} must be a string: {config_path}")
         fields[name] = field_value
-    jev = value.get("jev", fields["jev"])
-    if jev is not None and not isinstance(jev, bool):
-        raise ValueError(f"Laya config jev must be boolean: {config_path}")
-    fields["jev"] = jev
+    for name in BOOLEAN_FIELDS:
+        field_value = value.get(name, fields[name])
+        if field_value is not None and not isinstance(field_value, bool):
+            raise ValueError(f"Laya config {name} must be boolean: {config_path}")
+        fields[name] = field_value
     fields["obsolete_fields"] = tuple(sorted(key for key in value if key not in KNOWN_FIELDS))
     return Settings(enabled=enabled, source=str(config_path), **fields)
 
@@ -154,4 +175,6 @@ def write_enabled(path: str | Path | None, enabled: bool, **updates: Any) -> Pat
     existing.update({key: item for key, item in updates.items() if item is not None})
     existing.update({"schema_version": 1, "enabled": enabled})
     config_path.write_text(json.dumps(existing, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if source.name == LEGACY_CONFIG_NAME and source != config_path and source.parent == config_path.parent:
+        source.unlink(missing_ok=True)
     return config_path

@@ -1,0 +1,6 @@
+{
+  "cloudflare": true,
+  "enabled": true,
+  "ollama_model": "clef-flash",
+  "schema_version": 1
+}

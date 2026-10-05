@@ -106,9 +106,9 @@ class HostStateRootTests(unittest.TestCase):
 
     def test_claude_code_uses_the_claude_state_root(self):
         with patch.dict(os.environ, {"CLAUDECODE": "1"}):
-            self.assertEqual(default_config_path(), ".claude/vistack/laya.json")
+            self.assertEqual(default_config_path(), ".claude/vistack/decisions.json")
         with patch.dict(os.environ, {"CLAUDECODE": ""}):
-            self.assertEqual(default_config_path(), ".codex/vistack/laya.json")
+            self.assertEqual(default_config_path(), ".codex/vistack/decisions.json")
 
     def test_an_earlier_codex_root_switch_still_holds_under_claude(self):
         Path(".codex/vistack").mkdir(parents=True)
@@ -116,11 +116,36 @@ class HostStateRootTests(unittest.TestCase):
         with patch.dict(os.environ, {"CLAUDECODE": "1", "VISTACK_LAYA_ENABLED": ""}):
             self.assertFalse(read_settings().enabled)
             written = write_enabled(None, True, ollama_model="clef-flash", jev=True)
-            self.assertEqual(str(written), ".claude/vistack/laya.json")
-            self.assertEqual(resolve_config_path(), Path(".claude/vistack/laya.json"))
+            self.assertEqual(str(written), ".claude/vistack/decisions.json")
+            self.assertEqual(resolve_config_path(), Path(".claude/vistack/decisions.json"))
             settings = read_settings()
         self.assertTrue(settings.enabled)
         self.assertEqual((settings.ollama_model, settings.jev), ("clef-flash", True))
+
+    def test_a_switch_under_its_earlier_name_holds_and_moves_on_the_next_write(self):
+        Path(".claude/vistack").mkdir(parents=True)
+        Path(".claude/vistack/laya.json").write_text('{"enabled": false, "ollama_model": "clef-flash"}')
+        with patch.dict(os.environ, {"CLAUDECODE": "1", "VISTACK_LAYA_ENABLED": ""}):
+            self.assertEqual(resolve_config_path(), Path(".claude/vistack/laya.json"))
+            self.assertFalse(read_settings().enabled)
+            written = write_enabled(None, True, cloudflare=True)
+            settings = read_settings()
+        self.assertEqual(str(written), ".claude/vistack/decisions.json")
+        self.assertFalse(Path(".claude/vistack/laya.json").exists())
+        self.assertEqual((settings.enabled, settings.ollama_model, settings.cloudflare), (True, "clef-flash", True))
+
+    def test_an_explicit_decisions_path_finds_the_earlier_name_beside_it(self):
+        Path("laya.json").write_text('{"enabled": false}')
+        self.assertEqual(resolve_config_path("decisions.json"), Path("laya.json"))
+        self.assertFalse(read_settings("decisions.json").enabled)
+        write_enabled("decisions.json", True)
+        self.assertEqual(sorted(path.name for path in Path(".").glob("*.json")), ["decisions.json"])
+
+    def test_the_new_name_wins_when_both_exist(self):
+        Path("laya.json").write_text('{"enabled": false}')
+        Path("decisions.json").write_text('{"enabled": true}')
+        self.assertTrue(read_settings("decisions.json").enabled)
+        self.assertTrue(Path("laya.json").exists())
 
     def test_off_keeps_the_model_and_jev_choice(self):
         write_enabled("laya.json", True, ollama_model="clef-flash", jev=True)

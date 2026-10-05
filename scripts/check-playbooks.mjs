@@ -121,7 +121,7 @@ const ladderNames = ladder.map((tier) => tier[0].toUpperCase() + tier.slice(1));
 const retired = [
   [/\b(?:nimble|tev1)\b/i, "an earlier Ollama decision model, no longer supported; the supported models are OLLAMA_MODELS in laya/ollama_models.py"],
   [/laya[-_]mlx|\bMLXBackend\b|convaiinnovations/i, "the Laya-MLX tier was removed; the tiers are LADDER in laya/engine.py"],
-  [/clef[-_]server|clef-(?:start|stop)|Cloudflare\/clef-flash|setup --clef/i, "the Hugging Face Clef server was removed; clef-flash runs on Ollama (OLLAMA_MODELS in laya/ollama_models.py)"],
+  [/clef[-_]server|clef-(?:start|stop)|(?<!@cf\/)Cloudflare\/clef-flash|setup --clef/i, "the Hugging Face Clef server was removed; clef-flash runs on Ollama (OLLAMA_MODELS in laya/ollama_models.py)"],
   [/\bkev\b|kev[-_]url|host[-_]llm|laya-setup/i, "the Kev and host-CLI tiers were removed; the tiers are LADDER in laya/engine.py"],
   [/VISTACK_LAYA_(?:MODEL|PYTHON|HOST|KEV|CLEF|WORKDIR)\b/, "an obsolete variable; laya/config.py reports leftovers under `obsolete`"],
 ];
@@ -177,6 +177,17 @@ for (const path of lintFiles) {
     }
   }
 }
+
+// The README repeats the release version, so every host manifest and that line must agree.
+const manifestPaths = [".claude-plugin", ".codex-plugin", ".grok-plugin"].map((host) => join(repositoryRoot, host, "plugin.json"));
+const versions = await Promise.all(manifestPaths.map(async (path) => [path, JSON.parse(await read(path)).version]));
+const release = versions[0][1];
+for (const [path, version] of versions) {
+  if (version !== release) fail(path, `version ${version} differs from .claude-plugin/plugin.json ${release}`);
+}
+const readmePath = join(repositoryRoot, "README.md");
+const readmeVersion = (await read(readmePath)).match(/^\*\*Version:\*\* `(\d+\.\d+\.\d+)`$/m)?.[1];
+if (readmeVersion !== release) fail(readmePath, `version line reads ${readmeVersion ?? "nothing"}; .claude-plugin/plugin.json is ${release}`);
 
 if (errors.length > 0) {
   for (const error of errors) console.error(`FAIL ${error}`);

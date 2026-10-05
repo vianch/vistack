@@ -93,9 +93,10 @@ The design is a **router → playbook → agent** chain, with all coordination s
    off, the `advisor` agent reviews a dossier instead.
 6. **Laya is the fork layer.** Forks that need no thinker — which playbook, which file,
    which tool, which tier, retry or stop — go to `laya-decision`: deterministic policy
-   first, then, for split forks only, opted-in Jev and then a local Ollama `clef-flash`.
-   Sharp forks run in code; split forks go to the main session. Forks never reach the
-   advisor.
+   first, then, for split forks only, opted-in Jev, then opted-in Cloudflare Workers AI
+   `@cf/cloudflare/clef-flash` inside the free daily Neurons, then a local Ollama
+   `clef-flash`. Sharp forks run in code; split forks go to the main session. Forks never
+   reach the advisor.
 
 ### Run state (schema-bearing — see "Versioning")
 
@@ -180,10 +181,9 @@ dropped. An exception goes on the offending line as
 
 | Rule | Enforced by | Proved against |
 |---|---|---|
-| No `git` or `gh`, and no reads of `.github/` or `.git/`, in this working copy | `.claude/hooks/no-git.py`, a PreToolUse hook in the local `.claude/settings.local.json` | denies the recorded `git --version`, `git -C . status`, and `cat .github/workflows/...` |
 | Supported Ollama decision models and the tier ladder each have one home | `OLLAMA_MODELS` in `laya/ollama_models.py` and `LADDER` in `laya/engine.py`, read by the CLI and status; `scripts/check-playbooks.mjs` fails a retired tier name and a `decisions-*` description that disagrees with `LADDER` | the 0.21.0 tree: `commands/decisions-off.md:2` listed (Jev, Ollama, Laya) against a six-tier ladder |
 | `node --test` takes test files, not a directory | `scripts/verify.sh` is the one command; `scripts/check-playbooks.mjs` fails a directory passed to `node --test` | the directory form recorded in the claude5-tuneup and qa-video ledgers (`skills/html-report/scripts/`) |
 | A script path resolves from the plugin root; the working directory stays in the consuming repository | `scripts/check-playbooks.mjs` fails "from the plugin root" without "resolves" | 0.21.0 `skills/routine-healthcheck/SKILL.md:49` and this file's layout table |
 | An edit is live only when the installed copy matches this checkout | `scripts/verify.sh` drift step | this change against the installed 0.21.0 copy |
 | Routes, playbooks, skill names, and referenced paths agree | `scripts/check-playbooks.mjs` | 15 recorded FAIL lines while adding `html-report` and `qa-video` |
-| One version bump per change, in its own commit | nothing: a forgotten bump shows only in git history. The README no longer repeats the version, so a bump touches the three manifests only | — |
+| One version bump per change, in its own commit | nothing for the bump itself: a forgotten bump shows only in git history. `scripts/check-playbooks.mjs` fails when the three manifests or the README version line disagree | a README version line left at 0.22.0 against 0.23.0 manifests |

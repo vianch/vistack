@@ -1,6 +1,6 @@
 ---
-description: "Turn on the fork-layer decision models (Jev, Ollama) for this consuming project"
-argument-hint: "[--ollama-model clef-flash|none] [--jev | --no-jev] [--config <path>]"
+description: "Turn on the fork-layer decision models (Jev, Cloudflare, Ollama) for this consuming project"
+argument-hint: "[--ollama-model clef-flash|none] [--jev | --no-jev] [--cloudflare | --no-cloudflare] [--config <path>]"
 ---
 
 # /vistack:decisions-on
@@ -18,7 +18,7 @@ argument-hint: "[--ollama-model clef-flash|none] [--jev | --no-jev] [--config <p
    Otherwise ask one multiple-choice question. Under Claude Code, make it a single
    AskUserQuestion call; on other hosts, ask in plain text.
 
-   **Which Ollama decision model runs on split forks after Jev?**
+   **Which Ollama decision model runs on split forks after Jev and Cloudflare?**
 
    - `clef-flash` (recommended). Cloudflare's 9B decision model, served by Ollama on this
      machine. Measured on an Apple M3 Pro with 36 GB:
@@ -49,13 +49,19 @@ argument-hint: "[--ollama-model clef-flash|none] [--jev | --no-jev] [--config <p
    - the returned `ladder`;
    - `ollama`: `model`, `preloaded`, `missing`, `min_confidence`;
    - `jev`: `enabled`, `key`, `refused` (never a key value);
+   - `cloudflare`: `enabled`, `token`, `account`, `budget.used`, `budget.remaining`,
+     `budget.resets_at` (never a credential value);
    - the top-level `hint`, when there is one. It names settings left over from removed
      decision tiers and how to clear them.
 
-The switch is written to the host's state root, `.claude/vistack/laya.json` under Claude
-Code. `--ollama-model none` turns the Ollama tier off. `decisions on` loads the model at
-once, so the first fork does not pay for the load.
+The switch is written to the host's state root, `.claude/vistack/decisions.json` under
+Claude Code; an earlier `laya.json` there is read once and replaced. `--ollama-model none`
+turns the Ollama tier off. `decisions on` loads the model at once, so the first fork does
+not pay for the load.
 
 `--jev` opts this project into hosted TypeSafe Jev, which sends the bounded, redacted
-decision state to TypeSafe. Ollama keeps the state on the machine. Without `--jev`,
-`decisions on` never adds a cloud tier.
+decision state to TypeSafe. `--cloudflare` opts it into Workers AI
+`@cf/cloudflare/clef-flash`, which sends the same state to Cloudflare, inside the free daily
+Neurons, with `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` read from the environment.
+Credentials alone do not opt in, and `--no-cloudflare` turns the tier off. Ollama keeps the
+state on the machine. Without `--jev` or `--cloudflare`, `decisions on` never adds a cloud tier.

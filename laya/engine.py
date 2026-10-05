@@ -1,9 +1,10 @@
 """Decision engine: deterministic policy, a refinement ladder, and safety gates.
 
 The deterministic policy answers every fork first. A sharp answer runs in code without a
-model turn. Only a split answer climbs the ladder — Jev when opted in, then the local Ollama
-model — and the first typed answer that clears the confidence threshold and every safety gate
-makes the fork sharp. Anything else stays split and goes back to the main session.
+model turn. Only a split answer climbs the ladder — Jev when opted in, then Cloudflare Workers
+AI when opted in and inside the free daily Neurons, then the local Ollama model — and the first
+typed answer that clears the confidence threshold and every safety gate makes the fork sharp.
+Anything else stays split and goes back to the main session.
 """
 
 from __future__ import annotations
@@ -33,13 +34,15 @@ from .schema import (
 )
 
 
-BACKENDS = ("auto", "deterministic", "jev", "ollama")
-FALLBACKS = ("none", "jev")
+BACKENDS = ("auto", "deterministic", "jev", "cloudflare", "ollama")
+FALLBACKS = ("none", "jev", "cloudflare")
 # Every refinement tier, best first: ``auto`` makes the first configured one the primary and the
-# other follows. Opted-in Jev leads: it settled 7 of 10 labelled split forks, all correctly, at
-# about 340 ms. The local Ollama model answers what Jev leaves unsettled, held to its own floor
-# (``laya.ollama_models``); clef-flash alone settled 7 of 10 at that floor, none wrongly.
-LADDER = ("jev", "ollama")
+# others follow. Opted-in Jev leads: it settled 7 of 10 labelled split forks, all correctly, at
+# about 340 ms. Opted-in Cloudflare answers what Jev leaves, with clef-flash on Workers AI, only
+# while the day's free Neurons last (``laya.cloudflare``). The local Ollama model answers the
+# rest and everything after the cap, held to its own floor (``laya.ollama_models``); clef-flash
+# alone settled 7 of 10 at that floor, none wrongly.
+LADDER = ("jev", "cloudflare", "ollama")
 CONSULT_MODES = ("split", "always")
 TRUE_VALUES = {"1", "true", "on", "yes", "enabled"}
 # The 2000 ms engine default timed out an earlier 9B decision model 11 times on the
@@ -168,6 +171,22 @@ def _jev_backend(*, model: str | None, timeout_ms: int) -> Any:
     return JevBackend(api_key=key, model=model, timeout_ms=timeout_ms)
 
 
+def _cloudflare_backend(*, timeout_ms: int | None) -> Any:
+    from .cloudflare import DEFAULT_TIMEOUT_MS, cloudflare_credentials, daily_cap, missing_credentials
+    from .system_one import CloudflareBackend
+
+    token, account = cloudflare_credentials()
+    if not token or not account:
+        return _Unavailable(f"Cloudflare is enabled but {missing_credentials(token, account)}")
+    # A mistyped variable turns the tier off with the reason rather than failing the engine.
+    try:
+        cap = daily_cap()
+        budget_ms = _budget_setting(timeout_ms, "VISTACK_LAYA_CLOUDFLARE_TIMEOUT_MS", "cloudflare_timeout_ms") or DEFAULT_TIMEOUT_MS
+    except ValueError as exc:
+        return _Unavailable(str(exc))
+    return CloudflareBackend(api_token=token, account_id=account, cap=cap, timeout_ms=budget_ms)
+
+
 def _ollama_backend(model: str, *, url: str | None, keep_alive: str | None, timeout_ms: int, min_confidence: float | None) -> Any:
     from .system_one import OllamaBackend
 
@@ -182,9 +201,10 @@ def _ollama_backend(model: str, *, url: str | None, keep_alive: str | None, time
 class DecisionEngine:
     """A safe advisory decision engine.
 
-    ``backend='auto'`` uses deterministic policy unless an opted-in Jev or an Ollama model is
-    configured. A single instance keeps its backends and their failure counts, which the JSONL
-    server and library callers that make repeated decisions reuse.
+    ``backend='auto'`` uses deterministic policy unless an opted-in hosted tier (Jev,
+    Cloudflare) or an Ollama model is configured. A single instance keeps its backends and
+    their failure counts, which the JSONL server and library callers that make repeated
+    decisions reuse.
     """
 
     def __init__(
@@ -194,6 +214,8 @@ class DecisionEngine:
         fallback: str | None = None,
         jev: bool | None = None,
         jev_model: str | None = None,
+        cloudflare: bool | None = None,
+        cloudflare_timeout_ms: int | None = None,
         ollama_model: str | None = None,
         ollama_url: str | None = None,
         ollama_keep_alive: str | None = None,
@@ -229,6 +251,14 @@ class DecisionEngine:
         # asked for: the setting, VISTACK_LAYA_JEV, or --fallback jev. A key alone is not intent.
         self.jev = (_flag(os.environ.get("VISTACK_LAYA_JEV")) if jev is None else jev) or self.fallback_mode == "jev" or backend == "jev"
         self.jev_model = jev_model or os.environ.get("VISTACK_LAYA_JEV_MODEL")
+        # Cloudflare also sends the state off the machine, so it joins the same way: the
+        # setting, VISTACK_LAYA_CLOUDFLARE, --fallback cloudflare, or --backend cloudflare.
+        self.cloudflare = (
+            (_flag(os.environ.get("VISTACK_LAYA_CLOUDFLARE")) if cloudflare is None else cloudflare)
+            or self.fallback_mode == "cloudflare"
+            or backend == "cloudflare"
+        )
+        self.cloudflare_timeout_ms = cloudflare_timeout_ms
         self.ollama_model = _model_setting(ollama_model, "VISTACK_LAYA_OLLAMA_MODEL")
         self.ollama_url = ollama_url or os.environ.get("VISTACK_LAYA_OLLAMA_URL")
         self.ollama_keep_alive = ollama_keep_alive or os.environ.get("VISTACK_LAYA_OLLAMA_KEEP_ALIVE")
@@ -253,7 +283,11 @@ class DecisionEngine:
         self._fallback_name, self._fallback_backend = self._fallbacks[0] if self._fallbacks else (None, None)
 
     def _configured(self, mode: str) -> bool:
-        return self.jev if mode == "jev" else bool(self.ollama_model)
+        if mode == "jev":
+            return self.jev
+        if mode == "cloudflare":
+            return self.cloudflare
+        return bool(self.ollama_model)
 
     def _make_backend(self, mode: str) -> tuple[str | None, Any]:
         if mode == "deterministic":
@@ -268,10 +302,15 @@ class DecisionEngine:
         return self._tier(mode)
 
     def _tier(self, mode: str) -> tuple[str, Any]:
-        """Ollama is named for its model, so history and the ladder show ``ollama:clef-flash``."""
+        """Ollama and Cloudflare are named for their model, so history and the ladder show
+        ``ollama:clef-flash`` and ``cloudflare:clef-flash``."""
 
         if mode == "jev":
             return "jev", _jev_backend(model=self.jev_model, timeout_ms=self.timeout_ms)
+        if mode == "cloudflare":
+            from .cloudflare import BODY_MODEL
+
+            return f"cloudflare:{BODY_MODEL}", _cloudflare_backend(timeout_ms=self.cloudflare_timeout_ms)
         backend = _ollama_backend(
             self.ollama_model or "",
             url=self.ollama_url,

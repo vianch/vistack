@@ -30,8 +30,8 @@ def decide(context):
 
 
 def refined(context, tier, confidence=0.95):
-    engine = DecisionEngine(backend="mlx", model="configured")
-    engine._mlx = fake_model({"tier": {"type": "choice", "choice": tier, "confidence": confidence}})
+    engine = DecisionEngine(backend="ollama", ollama_model="clef-flash")
+    engine._backend = fake_model({"tier": {"type": "choice", "choice": tier, "confidence": confidence}})
     return engine.decide(context)
 
 

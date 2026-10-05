@@ -1,89 +1,61 @@
 ---
-description: "Turn on the fork-layer decision models (Jev, Clef, Ollama, Laya) for this consuming project"
-argument-hint: "[--clef-model <hub-id>|none] [--ollama-model <tag>|none] [--jev | --no-jev] [--model <hub-id>] [--config <path>]"
+description: "Turn on the fork-layer decision models (Jev, Ollama) for this consuming project"
+argument-hint: "[--ollama-model clef-flash|none] [--jev | --no-jev] [--config <path>]"
 ---
 
 # /vistack:decisions-on
 
-1. If `$ARGUMENTS` already has both `--clef-model` and `--ollama-model`, go to step 5.
-2. Run `decisions status`. Read the `clef` block (`venv_exists`, `cached`, `server.running`,
-   `machine_memory_gb`) and the `ollama` block (`reachable`, `decision_models`, `model`):
+1. If `$ARGUMENTS` already sets `--ollama-model`, go to step 5.
+2. Run `decisions status` and read its `ollama` block (`reachable`, `version`, `version_ok`,
+   `supported`, `model`):
 
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/vistack-decision.py" decisions status
    ```
 
-3. Ask the user in one message, with one multiple-choice question for each flag that
-   `$ARGUMENTS` does not already set. Under Claude Code, put both questions in a single
-   question-tool call (AskUserQuestion); on other hosts, ask in plain text.
+3. If `ollama.reachable` is false, skip the question. Tell the user that `ollama serve`, or
+   opening the Ollama app, starts Ollama, and go to step 5 without `--ollama-model`.
+   Otherwise ask one multiple-choice question. Under Claude Code, make it a single
+   AskUserQuestion call; on other hosts, ask in plain text.
 
-   **Clef:** should the local Clef-flash decision model run after Jev?
+   **Which Ollama decision model runs on split forks after Jev?**
 
-   - `Cloudflare/clef-flash` (recommended). A 9B decision model on this machine:
-     - about 19 GB on disk, and about 20 GB of GPU memory while its server runs;
-     - 1 to 2 s per split fork on an Apple M3 Pro;
-     - on the labelled scenarios it settled 8 of 10 split forks, none wrong, at its 0.85
-       threshold.
+   - `clef-flash` (recommended). Cloudflare's 9B decision model, served by Ollama on this
+     machine. Measured on an Apple M3 Pro with 36 GB:
+     - 10.9 GB on disk and 14.2 GB of memory while loaded, about 7 s to load;
+     - about 1 s per split fork it answers;
+     - on the 108 labelled scenarios it settled 7 of 10 split forks, none wrong, at its
+       0.85 threshold.
 
-     When `clef.venv_exists` or `clef.cached` is false, say that choosing it first runs a
-     setup that downloads about 19 GB.
-   - `none`: no Clef tier.
-
-   **Ollama:** which local Ollama decision model runs after Clef? Offer only installed
-   models:
-
-   - `nimble`: about 9.5 GB while loaded, 1 to 4 s per split fork.
-   - `tev1:0.8b`: fastest at about 0.1 to 0.4 s, but it settled none of the measured split
-     forks at the default threshold.
+     When `ollama.supported` is empty, say that choosing it first runs
+     `ollama pull clef-flash`, about 11 GB. When `ollama.version_ok` is false, say that it
+     needs Ollama 0.35.1 or newer.
    - `none`: no Ollama tier.
-
-   Name a model that is not installed with its `ollama pull <tag>` command instead of
-   offering it. If Ollama is unreachable or has no decision model, skip the Ollama question,
-   tell the user (`ollama serve` starts it), and continue without `--ollama-model`.
-
-   When `clef.machine_memory_gb` is under 48, say in the question text to pick only one of
-   Clef and `nimble`. Together they hold about 30 GB. Measured on 36 GB, with both resident,
-   the calls ran past their budget and the ladder fell through to the weaker answer. When the
-   user picks both anyway, pass both and relay the `warning` that the report returns.
-4. If the user chose Clef while `clef.venv_exists` or `clef.cached` is false, run the setup
-   now. The user's choice in step 3 is the consent for the download. Show the plan, then run
-   it:
+4. If the user chose `clef-flash` and `ollama.supported` is empty, pull it now. The choice
+   in step 3 is the consent for the download:
 
    ```bash
-   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/vistack-decision.py" decisions setup --clef --dry-run
-   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/vistack-decision.py" decisions setup --clef
+   ollama pull clef-flash
    ```
 
-   If setup fails, report the failing command it returns and continue with
-   `--clef-model none`.
-5. Run the switch. Omit any flag whose question was skipped:
+   If the pull fails, report its error and continue with `--ollama-model none`.
+5. Run the switch. Omit `--ollama-model <choice>` when step 1 or step 3 skipped the question:
 
    ```bash
-   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/vistack-decision.py" decisions on --clef-model <choice> --ollama-model <choice> $ARGUMENTS
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/vistack-decision.py" decisions on --ollama-model <choice> $ARGUMENTS
    ```
 
-6. If Clef is on, start its server and wait for it to be ready:
-
-   ```bash
-   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/vistack-decision.py" decisions clef-start --wait 180
-   ```
-
-   The server is machine-wide: it listens on `127.0.0.1:8011`, serves every project, and
-   runs until `decisions clef-stop`. Report its `pid`, `log`, and `stop_command`.
-7. Report:
+6. Report:
    - the returned `ladder`;
-   - `clef`: `model`, `server.running`, `memory_gb`, `status`;
-   - `ollama`: `model`, `preloaded`, `missing`;
+   - `ollama`: `model`, `preloaded`, `missing`, `min_confidence`;
    - `jev`: `enabled`, `key`, `refused` (never a key value);
-   - `laya_mlx` and `checkpoint_cached`.
+   - the top-level `hint`, when there is one. It names settings left over from removed
+     decision tiers and how to clear them.
 
 The switch is written to the host's state root, `.claude/vistack/laya.json` under Claude
-Code. `--clef-model none` and `--ollama-model none` turn those tiers off. `--model` records
-the Laya checkpoint, for example `convaiinnovations/laya`.
+Code. `--ollama-model none` turns the Ollama tier off. `decisions on` loads the model at
+once, so the first fork does not pay for the load.
 
 `--jev` opts this project into hosted TypeSafe Jev, which sends the bounded, redacted
-decision state to TypeSafe. Clef and Ollama keep the state on the machine. Without `--jev`,
+decision state to TypeSafe. Ollama keeps the state on the machine. Without `--jev`,
 `decisions on` never adds a cloud tier.
-
-If the report shows a Laya model with `laya_mlx: false`, offer `/vistack:laya-setup` and do
-not install anything unasked.

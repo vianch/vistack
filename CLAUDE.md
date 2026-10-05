@@ -9,8 +9,10 @@ Markdown (skills, agents, playbooks, docs) plus host manifests and small depende
 validation scripts. Editing a contract changes agent behavior directly. There is no product
 build.
 
-The working copy sits inside `~/.claude/plugins/marketplaces/vistack` and is **not a git
-repository** at that path. The upstream is `github.com/vianch/viStack`.
+This checkout is the source; its upstream is `github.com/vianch/viStack`. Claude Code loads
+the installed copy at `~/.claude/plugins/marketplaces/vistack`, so an edit is live only once
+that copy matches this one. `scripts/verify.sh` fails while they differ and prints the sync
+command.
 
 ## Commands
 
@@ -25,13 +27,12 @@ $vistack:vistack <request>        # canonical Codex skill in a new thread
 $vistack:run|orchestrator|coordinator <request> # equivalent aliases
 ```
 
-Verification after any edit is the inventory and the structural checker:
-`node scripts/check-playbooks.mjs`, plus `python3 -m unittest discover -t .` when Python
-changed, `node --test skills/html-report/scripts/run-report.test.mjs` when the report
-script changed, and `node --test skills/qa-video/scripts/*.test.mjs` when the QA video script changed
-(set `QA_VIDEO_PLAYWRIGHT` to a Playwright package path to run the recording tests instead
-of skipping them). A skill or agent that fails frontmatter or path rules loads as *nothing*,
-silently, with no error.
+Verification after any edit is one command, the same locally and in CI: `scripts/verify.sh`.
+It runs the structural checker and its lints (`scripts/check-playbooks.mjs`), the Python tests,
+and the Node script tests, then compares the installed copy when one is on the machine. Set
+`QA_VIDEO_PLAYWRIGHT` to a Playwright package path to run the QA video recording tests instead
+of skipping them, and run `claude plugin details vistack` for the component inventory. A skill
+or agent that fails frontmatter or path rules loads as *nothing*, silently, with no error.
 
 ## Layout and load rules
 
@@ -52,7 +53,7 @@ silently, with no error.
 | `docs/guide/*.md` | reference prose linked from skills |
 | `skills/<name>/references/*.md` | data read by that skill, **not** skills |
 | `skills/<name>/assets/*` | templates a skill copies; data, **not** skills |
-| `skills/<name>/scripts/*` | scripts bundled with a skill, run from the plugin root |
+| `skills/<name>/scripts/*` | scripts bundled with a skill; their paths resolve from the plugin root |
 | `laya/`, `prwatch/` | Python packages behind `scripts/vistack-decision.py` and `scripts/watch-pr.py` |
 
 Codex discovers the same top-level `skills/<name>/SKILL.md` files. It does not execute the
@@ -92,9 +93,9 @@ The design is a **router → playbook → agent** chain, with all coordination s
    off, the `advisor` agent reviews a dossier instead.
 6. **Laya is the fork layer.** Forks that need no thinker — which playbook, which file,
    which tool, which tier, retry or stop — go to `laya-decision`: deterministic policy
-   first, then, for split forks only, opted-in Jev, local Clef-flash, local Ollama (nimble
-   or tev1), and local Laya. Sharp forks run in code; split forks go to the main session.
-   Forks never reach the advisor.
+   first, then, for split forks only, opted-in Jev and then a local Ollama `clef-flash`.
+   Sharp forks run in code; split forks go to the main session. Forks never reach the
+   advisor.
 
 ### Run state (schema-bearing — see "Versioning")
 
@@ -149,7 +150,8 @@ any prose added to the skills.
 
 ## Versioning
 
-Semver lives in `.claude-plugin/plugin.json`:
+Semver lives in `.claude-plugin/plugin.json`; `.codex-plugin/plugin.json` and
+`.grok-plugin/plugin.json` carry the same version:
 
 - **patch** — wording, a clarified step, a fixed link, a better example
 - **minor** — a new playbook, principle, or agent
@@ -168,3 +170,20 @@ Runtime commands resolve from the plugin root (`${CLAUDE_PLUGIN_ROOT}` on Claude
 working directory stays in the consuming repository.
 
 Editing a contract: read `docs/guide/writing-contracts.md` first.
+
+## Rules and what enforces them
+
+Each rule here was broken at least twice. `/vistack:correct` (`skills/correct/SKILL.md`) adds
+a row when the operator corrects a mistake, and a row whose mistake can no longer happen is
+dropped. An exception goes on the offending line as
+`lint-ok: <rule>; <reason>; expires YYYY-MM-DD; approved-by <name>`.
+
+| Rule | Enforced by | Proved against |
+|---|---|---|
+| No `git` or `gh`, and no reads of `.github/` or `.git/`, in this working copy | `.claude/hooks/no-git.py`, a PreToolUse hook in the local `.claude/settings.local.json` | denies the recorded `git --version`, `git -C . status`, and `cat .github/workflows/...` |
+| Supported Ollama decision models and the tier ladder each have one home | `OLLAMA_MODELS` in `laya/ollama_models.py` and `LADDER` in `laya/engine.py`, read by the CLI and status; `scripts/check-playbooks.mjs` fails a retired tier name and a `decisions-*` description that disagrees with `LADDER` | the 0.21.0 tree: `commands/decisions-off.md:2` listed (Jev, Ollama, Laya) against a six-tier ladder |
+| `node --test` takes test files, not a directory | `scripts/verify.sh` is the one command; `scripts/check-playbooks.mjs` fails a directory passed to `node --test` | the directory form recorded in the claude5-tuneup and qa-video ledgers (`skills/html-report/scripts/`) |
+| A script path resolves from the plugin root; the working directory stays in the consuming repository | `scripts/check-playbooks.mjs` fails "from the plugin root" without "resolves" | 0.21.0 `skills/routine-healthcheck/SKILL.md:49` and this file's layout table |
+| An edit is live only when the installed copy matches this checkout | `scripts/verify.sh` drift step | this change against the installed 0.21.0 copy |
+| Routes, playbooks, skill names, and referenced paths agree | `scripts/check-playbooks.mjs` | 15 recorded FAIL lines while adding `html-report` and `qa-video` |
+| One version bump per change, in its own commit | nothing: a forgotten bump shows only in git history. The README no longer repeats the version, so a bump touches the three manifests only | — |

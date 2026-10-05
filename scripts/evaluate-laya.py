@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare deterministic, optional MLX, human, and final outcomes on JSONL scenarios."""
+"""Compare deterministic, model-assisted, human, and final outcomes on JSONL scenarios."""
 
 from __future__ import annotations
 
@@ -14,9 +14,9 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from laya.cli import OLLAMA_MODEL_HELP, ollama_model_argument
 from laya.engine import BACKENDS, FALLBACKS, DecisionEngine
 from laya.policy import evaluate
-from laya.runtime import reexec_with_runtime
 from laya.schema import DecisionContext
 
 HELD_OUT_PERCENT = 30
@@ -33,21 +33,13 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("scenario_file", nargs="?", default="examples/laya/scenarios.jsonl")
     parser.add_argument("--backend", choices=BACKENDS, default="deterministic")
-    parser.add_argument("--model")
-    parser.add_argument("--host", choices=("claude", "codex"))
-    parser.add_argument("--host-model")
-    parser.add_argument("--kev-url")
-    parser.add_argument("--kev-model", default="kev-latest")
     parser.add_argument("--jev", action=argparse.BooleanOptionalAction, default=None)
-    parser.add_argument("--ollama-model", help="Ollama System One model, e.g. nimble")
+    parser.add_argument("--ollama-model", type=ollama_model_argument, help=OLLAMA_MODEL_HELP)
     parser.add_argument("--ollama-url")
-    parser.add_argument("--clef-model", help="Clef model served by `decisions clef-start`, e.g. Cloudflare/clef-flash")
-    parser.add_argument("--clef-url", help="Clef server, default http://127.0.0.1:8011")
-    parser.add_argument("--clef-timeout-ms", type=int, help="Clef budget; defaults to the larger of --timeout-ms and 8000")
-    parser.add_argument("--clef-min-confidence", type=float, help="Clef's own answer floor, default 0.85")
-    parser.add_argument("--timeout-ms", type=int, default=2000, help="engine budget; Ollama and Clef wait at least 8000 ms")
+    parser.add_argument("--ollama-timeout-ms", type=int, help="Ollama budget; defaults to the larger of --timeout-ms and 8000")
+    parser.add_argument("--ollama-min-confidence", type=float, help="the Ollama model's own answer floor, default from its table entry")
+    parser.add_argument("--timeout-ms", type=int, default=2000, help="engine budget; Ollama waits at least 8000 ms")
     parser.add_argument("--fallback", choices=FALLBACKS)
-    parser.add_argument("--effort", choices=("low", "medium", "high"), default="low")
     parser.add_argument("--min-confidence", type=float, default=0.65)
     parser.add_argument("--raw", action="store_true", help="also score the first model answer before any gate")
     parser.add_argument("--check", action="store_true", help="exit 1 when a sharp fork misses a labelled human action")
@@ -57,20 +49,12 @@ def main(argv: list[str] | None = None) -> None:
     deterministic = DecisionEngine(backend="deterministic", min_confidence=args.min_confidence)
     assisted = DecisionEngine(
         backend=args.backend,
-        model=args.model,
-        host=args.host,
-        host_model=args.host_model,
-        kev_url=args.kev_url,
-        kev_model=args.kev_model,
         jev=args.jev,
         ollama_model=args.ollama_model,
         ollama_url=args.ollama_url,
-        clef_model=args.clef_model,
-        clef_url=args.clef_url,
-        clef_timeout_ms=args.clef_timeout_ms,
-        clef_min_confidence=args.clef_min_confidence,
+        ollama_timeout_ms=args.ollama_timeout_ms,
+        ollama_min_confidence=args.ollama_min_confidence,
         fallback=args.fallback,
-        effort=args.effort,
         min_confidence=args.min_confidence,
         timeout_ms=args.timeout_ms,
     )
@@ -156,6 +140,4 @@ def main(argv: list[str] | None = None) -> None:
 
 
 if __name__ == "__main__":
-    # Move to the venv that has laya-mlx, if one is configured, before the engine loads a model.
-    reexec_with_runtime([str(Path(__file__).resolve()), *sys.argv[1:]])
     main()

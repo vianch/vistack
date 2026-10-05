@@ -1,9 +1,8 @@
-"""HTTP adapters for the System One protocol: a local Kev server, a local Ollama server, a
-resident Clef server, and hosted TypeSafe Jev.
+"""HTTP adapters for the System One protocol: a local Ollama server and hosted TypeSafe Jev.
 
-All four speak ``POST /v1/systemone`` with ``{state, model, questions}`` and return typed
-``answers``. Keeping the adapters HTTP-only means the viStack plugin installs neither Kev,
-Ollama, PyTorch, nor the TypeSafe SDK into a consuming repository.
+Both speak ``POST /v1/systemone`` with ``{state, model, questions}`` and return typed
+``answers``. Keeping the adapters HTTP-only means the viStack plugin installs neither Ollama
+nor the TypeSafe SDK into a consuming repository.
 """
 
 from __future__ import annotations
@@ -19,7 +18,8 @@ from urllib.parse import urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 from .config import cache_dir
-from .mlx_backend import ContextOverflow, LayaUnavailable
+from .errors import ContextOverflow, LayaUnavailable
+from .ollama_models import OLLAMA_MODELS, supported_ollama_model, unsupported_reason
 
 
 JEV_URL = "https://api.typesafe.ai"
@@ -33,18 +33,9 @@ OLLAMA_PORT = 11434
 OLLAMA_KEEP_ALIVE = "30m"
 # /api/ps is cheap but not free; a long-lived ``serve`` re-checks residency at most this often.
 OLLAMA_LOADED_TTL_S = 60.0
-# The reviewed snapshot: the server imports code shipped in it, so the commit is pinned.
-CLEF_REPO = "Cloudflare/clef-flash"
-CLEF_REVISION = "17f0b0ad64efb65d273590632833508766b2aae6"
-CLEF_MODEL = "clef-flash"
-CLEF_PORT = 8011
-CLEF_URL = f"http://127.0.0.1:{CLEF_PORT}"
-# Measured on the 108 labelled scenarios: at 0.65 Clef settled 9 of 10 split forks with one
-# wrong at 0.79, every right split-fork answer scored 0.93 or higher, and raw wrong answers fell
-# from 13 of 68 at 0.65 to 2 of 47 at 0.85.
-CLEF_MIN_CONFIDENCE = 0.85
-CLEF_READY_TTL_S = 60.0
-CLEF_START_HINT = "start it with `vistack-decision.py decisions clef-start`"
+# The probes' question; warm() also sends it to load a model.
+PROBE_STATE = {"build": "green"}
+PROBE_QUESTIONS = {"green": {"type": "noul", "instructions": "Is the build passing?"}}
 # Ollama never truncates input: "prompt 0 has 2510 tokens; expected 1–2050 (...)".
 OVERFLOW_PATTERN = re.compile(r"has (\d+) tokens; expected \d+\s*[–—-]\s*(\d+)")
 MAX_ERROR_CHARS = 200
@@ -97,7 +88,7 @@ def default_ollama_url() -> str:
 
 
 def same_model(configured: str, listed: Any) -> bool:
-    """``nimble`` and ``nimble:latest`` name the same Ollama model."""
+    """``clef-flash`` and ``clef-flash:latest`` name the same Ollama model."""
 
     def tagged(name: str) -> str:
         return name if ":" in name.rsplit("/", 1)[-1] else f"{name}:latest"
@@ -210,22 +201,14 @@ class SystemOneBackend:
         return result
 
 
-class KevBackend(SystemOneBackend):
-    """A local Kev server; no key, no cooldown file."""
-
-    name = "kev"
-
-    def __init__(self, url: str = "http://127.0.0.1:8009", *, model: str = "kev-latest", timeout_ms: int = 2000) -> None:
-        super().__init__(url, model=model, timeout_ms=timeout_ms)
-
-
 class OllamaBackend(SystemOneBackend):
-    """A local Ollama (0.35.0+) serving a System One model such as ``nimble``. No key, no
-    cooldown file, and the state never leaves the machine."""
+    """A local Ollama serving a supported System One model (``laya.ollama_models``). No key,
+    no cooldown file, and the state never leaves the machine. Its answers must clear
+    ``min_confidence`` as well as the engine threshold."""
 
     name = "ollama"
-    # A latency cap, not the window: nimble's prefill grows with the state, about 1 s for one
-    # question and 2.2-3.3 s for three questions at 4k characters, 4 s at 6k.
+    # A latency cap, not the window: clef-flash loads a 16,384-token window, and at this cap a
+    # warm split fork took 0.88-1.28 s on an M3 Pro.
     max_state_chars = 6000
 
     def __init__(
@@ -236,10 +219,15 @@ class OllamaBackend(SystemOneBackend):
         keep_alive: str | None = None,
         timeout_ms: int = 8000,
         load_timeout_ms: int = 60000,
+        min_confidence: float | None = None,
     ) -> None:
+        supported = supported_ollama_model(model)
+        if supported is None:
+            raise LayaUnavailable(unsupported_reason(model))
         super().__init__(url or default_ollama_url(), model=model, timeout_ms=timeout_ms)
         self.keep_alive = keep_alive or OLLAMA_KEEP_ALIVE
         self.load_timeout_ms = load_timeout_ms
+        self.min_confidence = OLLAMA_MODELS[supported].min_confidence if min_confidence is None else min_confidence
         self._loaded_at: float | None = None
 
     def _keep_alive(self) -> str | int:
@@ -274,49 +262,10 @@ class OllamaBackend(SystemOneBackend):
             if isinstance(item, dict)
         )
         if not resident:
-            # A generate request without a prompt loads the model and answers once it is loaded.
-            self._send("/api/generate", {"model": self.model, "keep_alive": self._keep_alive()}, timeout_s=self.load_timeout_ms / 1000.0)
+            # A decision model answers only System One: clef-flash refuses /api/generate with
+            # HTTP 400 "does not support generate". One tiny question loads it, about 7 s cold.
+            self._send("/v1/systemone", self._body(PROBE_STATE, PROBE_QUESTIONS), timeout_s=self.load_timeout_ms / 1000.0)
         self._loaded_at = time.monotonic()
-
-
-class ClefBackend(SystemOneBackend):
-    """Cloudflare clef-flash held by ``laya.clef_server`` in its own venv. The 19 GB model
-    cannot load per call, so this adapter only checks that the server is ready and never
-    starts it; no key, no cooldown file, and the state never leaves the machine. Its answers
-    must clear ``min_confidence`` as well as the engine threshold."""
-
-    name = "clef"
-    # Warm, a split fork at this cap takes 1.1-1.8 s on an M3 Pro (MPS).
-    max_state_chars = 6000
-
-    def __init__(
-        self, url: str | None = None, *, model: str = CLEF_MODEL, timeout_ms: int = 8000, min_confidence: float | None = None
-    ) -> None:
-        super().__init__(url or CLEF_URL, model=model, timeout_ms=timeout_ms)
-        self.min_confidence = CLEF_MIN_CONFIDENCE if min_confidence is None else min_confidence
-        self._ready_at: float | None = None
-
-    def _unreachable(self, exc: Exception) -> str:
-        if isinstance(exc, URLError):
-            return f"Clef is not running at {self.url}; {CLEF_START_HINT}"
-        return super()._unreachable(exc)
-
-    def warm(self) -> None:
-        """Fail fast unless the server reports ready; a load in progress is never waited on."""
-
-        if self._ready_at is not None and time.monotonic() - self._ready_at < CLEF_READY_TTL_S:
-            return
-        health = self._send("/health", None, timeout_s=1.0)
-        status = health.get("status") if isinstance(health, dict) else None
-        if status == "loading":
-            elapsed = health.get("load_seconds")
-            seconds = f"{elapsed:.0f}s" if isinstance(elapsed, (int, float)) else "an unknown time"
-            raise LayaUnavailable(f"Clef at {self.url} is still loading its model ({seconds} elapsed)")
-        if status == "failed":
-            raise LayaUnavailable(f"Clef at {self.url} failed to load: {health.get('error') or 'no error recorded'}")
-        if status != "ready":
-            raise LayaUnavailable(f"Clef at {self.url} reported an unknown status: {status!r}")
-        self._ready_at = time.monotonic()
 
 
 class JevBackend(SystemOneBackend):
@@ -342,18 +291,46 @@ class JevBackend(SystemOneBackend):
         )
 
 
-def ollama_inventory(url: str | None = None, *, timeout_s: float = 1.0) -> dict[str, Any]:
-    """What a local Ollama has installed, can decide with, and holds in memory. Never raises:
-    status reports an unreachable server rather than failing on it."""
+def _version(text: Any) -> tuple[int, ...] | None:
+    match = re.match(r"(\d+)\.(\d+)\.(\d+)", text) if isinstance(text, str) else None
+    return tuple(int(part) for part in match.groups()) if match else None
+
+
+def _version_ok(version: Any, model: str | None) -> bool | None:
+    """Whether the server can serve the configured model, or every supported model when none
+    is configured; ``None`` when the version is unknown."""
+
+    found = _version(version)
+    if found is None:
+        return None
+    configured = supported_ollama_model(model)
+    targets = [OLLAMA_MODELS[configured]] if configured else list(OLLAMA_MODELS.values())
+    return all(found >= (_version(target.min_ollama) or ()) for target in targets)
+
+
+def ollama_inventory(url: str | None = None, *, model: str | None = None, timeout_s: float = 1.0) -> dict[str, Any]:
+    """What a local Ollama has installed, can decide with, supports, and holds in memory.
+    Never raises: status reports an unreachable server rather than failing on it."""
 
     base = (url or default_ollama_url()).rstrip("/")
-    report: dict[str, Any] = {"url": base, "reachable": False, "version": None, "installed": [], "decision_models": [], "loaded": []}
+    report: dict[str, Any] = {
+        "url": base,
+        "reachable": False,
+        "version": None,
+        "version_ok": None,
+        "installed": [],
+        "decision_models": [],
+        "supported": [],
+        "loaded": [],
+    }
     try:
         version = _fetch_json(f"{base}/api/version", timeout_s=timeout_s)
         report["reachable"] = True
         report["version"] = version.get("version") if isinstance(version, dict) else None
+        report["version_ok"] = _version_ok(report["version"], model)
         tags = _fetch_json(f"{base}/api/tags", timeout_s=timeout_s)
         report["installed"] = [item["name"] for item in tags.get("models") or [] if isinstance(item, dict) and isinstance(item.get("name"), str)]
+        report["supported"] = [name for name in report["installed"] if supported_ollama_model(name)]
         running = _fetch_json(f"{base}/api/ps", timeout_s=timeout_s)
         report["loaded"] = [
             {key: item.get(key) for key in ("name", "context_length", "expires_at")}
@@ -369,15 +346,29 @@ def ollama_inventory(url: str | None = None, *, timeout_s: float = 1.0) -> dict[
     return report
 
 
-def clef_health(url: str | None = None, *, timeout_s: float = 1.0) -> dict[str, Any]:
-    """The Clef server's ``/health`` with ``reachable`` and ``url`` added. Never raises: status
-    reports a server that is down rather than failing on it."""
+def probe_jev() -> dict[str, Any]:
+    """One single-question call: proves the key works and the account still has credits."""
 
-    base = (url or CLEF_URL).rstrip("/")
+    key = jev_api_key()
+    if not key:
+        return {"ok": False, "reason": "neither TYPESAFE_API_KEY nor TYPESAFE_KEY is set"}
+    started = time.perf_counter()
     try:
-        value = _fetch_json(f"{base}/health", timeout_s=timeout_s)
-    except Exception as exc:
-        return {"url": base, "reachable": False, "status": None, "error": str(getattr(exc, "reason", None) or exc) or type(exc).__name__}
-    if not isinstance(value, dict):
-        return {"url": base, "reachable": True, "status": None, "error": "health is not a JSON object"}
-    return {**value, "url": base, "reachable": True}
+        JevBackend(api_key=key, timeout_ms=5000).predict(PROBE_STATE, PROBE_QUESTIONS)
+    except LayaUnavailable as exc:
+        return {"ok": False, "reason": str(exc)}
+    return {"ok": True, "latency_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+
+def probe_ollama(model: str, url: str | None = None) -> dict[str, Any]:
+    """One single-question decision against the local model; free, and nothing leaves the
+    machine. The load runs first and untimed, so the latency is the decision alone."""
+
+    try:
+        backend = OllamaBackend(model, url=url)
+        backend.warm()
+        started = time.perf_counter()
+        backend.predict(PROBE_STATE, PROBE_QUESTIONS)
+    except LayaUnavailable as exc:
+        return {"ok": False, "reason": str(exc)}
+    return {"ok": True, "latency_ms": round((time.perf_counter() - started) * 1000, 1)}

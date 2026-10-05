@@ -14,16 +14,18 @@ from pathlib import Path
 from unittest.mock import patch
 from urllib.error import HTTPError, URLError
 
-from laya import cli, runtime
+from laya import cli
 from laya.config import read_settings, write_enabled
 from laya.engine import DecisionEngine
-from laya.mlx_backend import ContextOverflow, LayaUnavailable
-from laya.system_one import OllamaBackend, default_ollama_url, ollama_inventory
+from laya.errors import ContextOverflow, LayaUnavailable
+from laya.ollama_models import OLLAMA_MODELS, supported_ollama_model
+from laya.system_one import OllamaBackend, default_ollama_url, ollama_inventory, probe_ollama
 
 
 URL = "http://127.0.0.1:11434"
 TWO = {"continue": "keep going", "block": "stop"}
 MECHANICAL = {"answers": {"tier": {"type": "choice", "choice": "mechanical", "confidence": 0.91}}}
+GENERATE_REFUSED = '{"error":"\\"clef-flash\\" does not support generate"}'
 SPLIT_FORK = {"decision_type": "tier-selection", "task": {"request": "Update the order summary panel"}}
 OVERFLOW = '{"error":"prompt 0 has 2510 tokens; expected 1–2050 (input is never truncated)"}'
 
@@ -65,9 +67,29 @@ class FakeOllama:
         return [body for seen, body, _ in self.requests if seen == path]
 
 
+def tier_answer(confidence):
+    return {"answers": {"tier": {"type": "choice", "choice": "mechanical", "confidence": confidence}}}
+
+
+class SupportedModelTests(unittest.TestCase):
+    def test_tags_of_a_supported_model_name_its_entry(self):
+        for tag in ("clef-flash", "clef-flash:latest", "clef-flash:9b", " Clef-Flash "):
+            self.assertEqual(supported_ollama_model(tag), "clef-flash", tag)
+        for tag in ("nimble", "tev1:0.8b", "clef-flash:2b", "Cloudflare/clef-flash", "", None):
+            self.assertIsNone(supported_ollama_model(tag), tag)
+
+    def test_an_unsupported_model_is_refused_with_the_fix(self):
+        with self.assertRaisesRegex(LayaUnavailable, r"nimble is not a supported .*supported: clef-flash.*ollama pull clef-flash"):
+            OllamaBackend("nimble", url=URL)
+
+    def test_the_floor_comes_from_the_table_unless_overridden(self):
+        self.assertEqual(OllamaBackend("clef-flash:latest", url=URL).min_confidence, OLLAMA_MODELS["clef-flash"].min_confidence)
+        self.assertEqual(OllamaBackend("clef-flash", url=URL, min_confidence=0.7).min_confidence, 0.7)
+
+
 class OllamaBackendTests(unittest.TestCase):
     def backend(self, **options):
-        return OllamaBackend("nimble", url=URL, **options)
+        return OllamaBackend("clef-flash", url=URL, **options)
 
     def test_request_goes_to_system_one_without_a_key(self):
         fake = FakeOllama(v1_systemone={"answers": {}})
@@ -75,7 +97,7 @@ class OllamaBackendTests(unittest.TestCase):
             self.backend().predict({"phase": "x"}, {"next": {"type": "choice", "criteria": TWO}})
         sent = fake.bodies("/v1/systemone")[0]
         self.assertEqual(fake.paths(), ["/v1/systemone"])
-        self.assertEqual((sent["model"], sent["keep_alive"], sent["state"]), ("nimble", "30m", {"phase": "x"}))
+        self.assertEqual((sent["model"], sent["keep_alive"], sent["state"]), ("clef-flash", "30m", {"phase": "x"}))
         with patch("laya.system_one.urlopen", return_value=response({"answers": {}})) as call:
             self.backend(keep_alive="-1").predict({}, {"next": {"type": "noul", "instructions": "?"}})
         request = call.call_args.args[0]
@@ -98,13 +120,13 @@ class OllamaBackendTests(unittest.TestCase):
             self.assertEqual(default_ollama_url(), "http://gpu-box:abc")
             with patch("laya.system_one.urlopen", side_effect=ValueError("nonnumeric port: 'abc'")):
                 self.assertFalse(ollama_inventory()["reachable"])
-                result = DecisionEngine(backend="auto", ollama_model="nimble").decide(SPLIT_FORK)
+                result = DecisionEngine(backend="auto", ollama_model="clef-flash").decide(SPLIT_FORK)
         self.assertEqual(result.fork, "split")
 
     def test_missing_model_says_to_pull_it(self):
-        missing = http_error(404, '{"error":"model \'nimble\' not found"}')
+        missing = http_error(404, '{"error":"model \'clef-flash\' not found"}')
         with patch("laya.system_one.urlopen", side_effect=missing):
-            with self.assertRaisesRegex(LayaUnavailable, "ollama pull nimble"):
+            with self.assertRaisesRegex(LayaUnavailable, "ollama pull clef-flash"):
                 self.backend().predict({}, {"next": {"type": "choice", "criteria": TWO}})
 
     def test_refused_connection_says_to_start_the_server(self):
@@ -139,7 +161,7 @@ class OllamaBackendTests(unittest.TestCase):
             self.assertEqual((caught.exception.prompt_tokens, caught.exception.limit_tokens), (2510, 2050))
 
     def test_warm_skips_the_load_when_the_model_is_resident(self):
-        fake = FakeOllama(api_ps={"models": [{"name": "nimble:latest", "context_length": 8194}]})
+        fake = FakeOllama(api_ps={"models": [{"name": "clef-flash:latest", "context_length": 16384}]})
         with patch("laya.system_one.urlopen", fake):
             backend = self.backend()
             backend.warm()
@@ -147,16 +169,21 @@ class OllamaBackendTests(unittest.TestCase):
         # The second warm is inside the confirmed-loaded window and makes no request.
         self.assertEqual(fake.paths(), ["/api/ps"])
 
-    def test_warm_blocks_on_the_load_when_the_model_is_absent(self):
-        fake = FakeOllama(api_ps={"models": []}, api_generate={"done": True, "done_reason": "load"})
+    def test_warm_loads_with_one_system_one_question_not_generate(self):
+        # clef-flash refuses /api/generate, so a warm-up that used it never loaded the model.
+        refusal = http_error(400, GENERATE_REFUSED)
+        self.addCleanup(refusal.close)
+        fake = FakeOllama(api_ps={"models": []}, api_generate=refusal, v1_systemone={"answers": {"green": {"type": "noul", "noul": 0.94}}})
         with patch("laya.system_one.urlopen", fake):
             self.backend(load_timeout_ms=45000).warm()
-        self.assertEqual(fake.paths(), ["/api/ps", "/api/generate"])
-        self.assertEqual(fake.requests[1][1:], ({"model": "nimble", "keep_alive": "30m"}, 45.0))
+        self.assertEqual(fake.paths(), ["/api/ps", "/v1/systemone"])
+        _, sent, timeout = fake.requests[1]
+        self.assertEqual((sent["model"], sent["keep_alive"], timeout), ("clef-flash", "30m", 45.0))
+        self.assertEqual([question["type"] for question in sent["questions"].values()], ["noul"])
         self.assertEqual(fake.requests[0][2], 1.0)
 
     def test_warm_rechecks_after_the_confirmed_window(self):
-        fake = FakeOllama(api_ps=[{"models": [{"name": "nimble:latest"}]}, {"models": [{"name": "nimble:latest"}]}])
+        fake = FakeOllama(api_ps=[{"models": [{"name": "clef-flash:latest"}]}, {"models": [{"name": "clef-flash:latest"}]}])
         with patch("laya.system_one.urlopen", fake):
             backend = self.backend()
             backend.warm()
@@ -168,9 +195,9 @@ class OllamaBackendTests(unittest.TestCase):
         with patch("laya.system_one.urlopen", side_effect=URLError(ConnectionRefusedError(61, "refused"))):
             with self.assertRaisesRegex(LayaUnavailable, "ollama serve"):
                 self.backend().warm()
-        fake = FakeOllama(api_ps={"models": []}, api_generate=http_error(404, '{"error":"model not found"}'))
+        fake = FakeOllama(api_ps={"models": []}, v1_systemone=http_error(404, '{"error":"model not found"}'))
         with patch("laya.system_one.urlopen", fake):
-            with self.assertRaisesRegex(LayaUnavailable, "ollama pull nimble"):
+            with self.assertRaisesRegex(LayaUnavailable, "ollama pull clef-flash"):
                 self.backend().warm()
 
 
@@ -178,38 +205,46 @@ class InventoryTests(unittest.TestCase):
     def test_unreachable_server_is_reported_not_raised(self):
         with patch("laya.system_one.urlopen", side_effect=URLError(ConnectionRefusedError(61, "refused"))):
             report = ollama_inventory(URL)
-        self.assertEqual((report["reachable"], report["installed"], report["loaded"]), (False, [], []))
+        self.assertEqual((report["reachable"], report["installed"], report["loaded"], report["version_ok"]), (False, [], [], None))
         self.assertIn("error", report)
 
-    def test_decision_models_are_the_installed_models_with_the_capability(self):
+    def inventory(self, version, **options):
         fake = FakeOllama(
-            api_version={"version": "0.35.0"},
-            api_tags={"models": [{"name": "nimble:latest"}, {"name": "llama3:8b"}]},
-            api_ps={"models": [{"name": "nimble:latest", "context_length": 8194, "expires_at": "2026-09-30T12:00:00Z", "size": 1}]},
-            api_show=[{"capabilities": ["decision"]}, {"capabilities": ["completion"]}],
+            api_version={"version": version},
+            api_tags={"models": [{"name": "clef-flash:latest"}, {"name": "nimble:latest"}, {"name": "llama3:8b"}]},
+            api_ps={"models": [{"name": "clef-flash:latest", "context_length": 16384, "expires_at": "2026-10-05T12:00:00Z", "size": 1}]},
+            api_show=[{"capabilities": ["decision"]}, {"capabilities": ["decision"]}, {"capabilities": ["completion"]}],
         )
         with patch("laya.system_one.urlopen", fake):
-            report = ollama_inventory(URL)
-        self.assertEqual(report["version"], "0.35.0")
-        self.assertEqual(report["decision_models"], ["nimble:latest"])
-        self.assertEqual(report["loaded"], [{"name": "nimble:latest", "context_length": 8194, "expires_at": "2026-09-30T12:00:00Z"}])
+            return ollama_inventory(URL, **options)
+
+    def test_supported_and_decision_models_are_reported_apart(self):
+        report = self.inventory("0.35.1")
+        self.assertEqual(report["decision_models"], ["clef-flash:latest", "nimble:latest"])
+        self.assertEqual(report["supported"], ["clef-flash:latest"])
+        self.assertEqual(report["loaded"], [{"name": "clef-flash:latest", "context_length": 16384, "expires_at": "2026-10-05T12:00:00Z"}])
         self.assertNotIn("error", report)
+
+    def test_the_server_version_is_checked_against_the_model(self):
+        self.assertTrue(self.inventory("0.35.1")["version_ok"])
+        self.assertTrue(self.inventory("0.36.0-rc1", model="clef-flash")["version_ok"])
+        self.assertFalse(self.inventory("0.35.0", model="clef-flash:latest")["version_ok"])
+        self.assertIsNone(self.inventory("dev")["version_ok"])
 
 
 class OllamaLadderTests(unittest.TestCase):
     def names(self, **options):
         return [name for name, _ in DecisionEngine(**options).ladder()]
 
-    def test_ollama_follows_opted_in_jev_and_leads_the_local_tiers(self):
-        configured = {"model": "configured", "kev_url": "http://127.0.0.1:8009", "ollama_model": "nimble"}
-        self.assertEqual(self.names(backend="auto", jev=True, **configured), ["jev", "ollama:nimble", "laya-mlx", "kev"])
-        self.assertEqual(self.names(backend="auto", **configured), ["ollama:nimble", "laya-mlx", "kev"])
-        self.assertEqual(self.names(backend="ollama", jev=True, **configured), ["ollama:nimble", "jev", "laya-mlx", "kev"])
-        self.assertEqual(self.names(backend="ollama", fallback="none", **configured), ["ollama:nimble"])
+    def test_ollama_follows_opted_in_jev(self):
+        self.assertEqual(self.names(backend="auto", jev=True, ollama_model="clef-flash"), ["jev", "ollama:clef-flash"])
+        self.assertEqual(self.names(backend="auto", ollama_model="clef-flash"), ["ollama:clef-flash"])
+        self.assertEqual(self.names(backend="ollama", jev=True, ollama_model="clef-flash"), ["ollama:clef-flash", "jev"])
+        self.assertEqual(self.names(backend="ollama", jev=True, ollama_model="clef-flash", fallback="none"), ["ollama:clef-flash"])
 
     def test_none_turns_the_tier_off_over_the_environment(self):
-        with patch.dict(os.environ, {"VISTACK_LAYA_OLLAMA_MODEL": "nimble"}):
-            self.assertEqual(self.names(backend="auto"), ["ollama:nimble"])
+        with patch.dict(os.environ, {"VISTACK_LAYA_OLLAMA_MODEL": "clef-flash"}):
+            self.assertEqual(self.names(backend="auto"), ["ollama:clef-flash"])
             self.assertEqual(self.names(backend="auto", ollama_model="none"), [])
             self.assertEqual(self.names(backend="auto", ollama_model="None"), [])
             self.assertEqual(self.names(backend="auto", ollama_model=""), [])
@@ -218,9 +253,19 @@ class OllamaLadderTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "ollama-model"):
             DecisionEngine(backend="ollama")
 
+    def test_an_unsupported_model_is_an_unavailable_tier_that_names_the_fix(self):
+        with patch("laya.system_one.urlopen") as call, patch.dict(os.environ, {"VISTACK_LAYA_OLLAMA_MODEL": "nimble"}):
+            engine = DecisionEngine(backend="auto")
+            result = engine.decide(SPLIT_FORK)
+        call.assert_not_called()
+        self.assertEqual([name for name, _ in engine.ladder()], ["ollama:nimble"])
+        self.assertEqual((result.backend, result.fork), ("deterministic-fallback", "split"))
+        self.assertIn("nimble is not a supported Ollama decision model; supported: clef-flash", result.fallback_reason)
+        self.assertIn("`decisions on --ollama-model clef-flash`", result.fallback_reason)
+
     def test_ollama_gets_a_longer_budget_than_the_engine_default(self):
         def timeout(**options):
-            return DecisionEngine(backend="ollama", ollama_model="nimble", **options).ladder()[0][1].timeout_ms
+            return DecisionEngine(backend="ollama", ollama_model="clef-flash", **options).ladder()[0][1].timeout_ms
 
         self.assertEqual(timeout(), 8000)
         self.assertEqual(timeout(timeout_ms=12000), 12000)
@@ -229,18 +274,40 @@ class OllamaLadderTests(unittest.TestCase):
             self.assertEqual(timeout(), 4500)
 
     def test_settled_fork_names_the_ollama_model(self):
-        fake = FakeOllama(api_ps={"models": [{"name": "nimble:latest"}]}, v1_systemone=MECHANICAL)
+        fake = FakeOllama(api_ps={"models": [{"name": "clef-flash:latest"}]}, v1_systemone=MECHANICAL)
         with patch("laya.system_one.urlopen", fake):
-            result = DecisionEngine(backend="auto", ollama_model="nimble").decide(SPLIT_FORK)
-        self.assertEqual((result.backend, result.action, result.fork), ("ollama:nimble", "mechanical", "sharp"))
+            result = DecisionEngine(backend="auto", ollama_model="clef-flash").decide(SPLIT_FORK)
+        self.assertEqual((result.backend, result.action, result.fork), ("ollama:clef-flash", "mechanical", "sharp"))
         self.assertEqual(fake.bodies("/v1/systemone")[0]["keep_alive"], "30m")
+
+
+class ModelFloorTests(unittest.TestCase):
+    def decide(self, confidence, **options):
+        fake = FakeOllama(api_ps={"models": [{"name": "clef-flash:latest"}]}, v1_systemone=tier_answer(confidence))
+        with patch("laya.system_one.urlopen", fake):
+            return DecisionEngine(backend="ollama", ollama_model="clef-flash", min_confidence=0.65, **options).decide(SPLIT_FORK)
+
+    def test_the_model_floor_applies_over_the_global_threshold(self):
+        rejected = self.decide(0.84)
+        self.assertEqual((rejected.action, rejected.fork), ("complex", "split"))
+        self.assertIn("confidence 0.840 is below 0.850", rejected.fallback_reason)
+        accepted = self.decide(0.86)
+        self.assertEqual((accepted.action, accepted.fork, accepted.backend), ("mechanical", "sharp", "ollama:clef-flash"))
+
+    def test_the_floor_can_be_moved_but_never_below_the_global_threshold(self):
+        self.assertEqual(self.decide(0.84, ollama_min_confidence=0.8).fork, "sharp")
+        with patch.dict(os.environ, {"VISTACK_LAYA_OLLAMA_MIN_CONFIDENCE": "0.8"}):
+            self.assertEqual(self.decide(0.84).fork, "sharp")
+        self.assertEqual(self.decide(0.6, ollama_min_confidence=0.5).fork, "split")
+        with self.assertRaisesRegex(ValueError, "between 0 and 1"):
+            DecisionEngine(backend="ollama", ollama_model="clef-flash", ollama_min_confidence=1.5)
 
 
 class OverflowRetryTests(unittest.TestCase):
     CONTEXT = {"decision_type": "tier-selection", "task": {"request": "Update the order summary panel. " + "detail " * 700}}
 
     def engine(self):
-        engine = DecisionEngine(backend="ollama", ollama_model="nimble", fallback="none")
+        engine = DecisionEngine(backend="ollama", ollama_model="clef-flash", fallback="none")
         engine.ladder()[0][1]._loaded_at = time.monotonic()
         return engine
 
@@ -251,8 +318,8 @@ class OverflowRetryTests(unittest.TestCase):
             result = engine.decide(self.CONTEXT)
         first, second = (json.dumps(body["state"]) for body in fake.bodies("/v1/systemone"))
         self.assertLess(len(second), len(first) * 2050 / 2510)
-        self.assertEqual((result.backend, result.action, result.fork), ("ollama:nimble", "mechanical", "sharp"))
-        self.assertEqual(engine._failures["ollama:nimble"], 0)
+        self.assertEqual((result.backend, result.action, result.fork), ("ollama:clef-flash", "mechanical", "sharp"))
+        self.assertEqual(engine._failures["ollama:clef-flash"], 0)
 
     def test_a_failed_retry_counts_as_one_failure(self):
         fake = FakeOllama(v1_systemone=[http_error(400, OVERFLOW), http_error(400, OVERFLOW)])
@@ -260,7 +327,7 @@ class OverflowRetryTests(unittest.TestCase):
             engine = self.engine()
             result = engine.decide(self.CONTEXT)
         self.assertEqual(len(fake.bodies("/v1/systemone")), 2)
-        self.assertEqual((result.fork, engine._failures["ollama:nimble"]), ("split", 1))
+        self.assertEqual((result.fork, engine._failures["ollama:clef-flash"]), ("split", 1))
         self.assertIn("2510 tokens", result.fallback_reason)
 
 
@@ -276,11 +343,11 @@ class PerBackendBudgetTests(unittest.TestCase):
         class Impatient(Patient):
             timeout_ms = None
 
-        engine = DecisionEngine(backend="mlx", model="configured", timeout_ms=100)
-        engine._mlx = Patient()
-        self.assertEqual(engine.decide(SPLIT_FORK).backend, "laya-mlx")
-        engine = DecisionEngine(backend="mlx", model="configured", timeout_ms=100)
-        engine._mlx = Impatient()
+        engine = DecisionEngine(backend="ollama", ollama_model="clef-flash", timeout_ms=100)
+        engine._backend = Patient()
+        self.assertEqual(engine.decide(SPLIT_FORK).backend, "ollama:clef-flash")
+        engine = DecisionEngine(backend="ollama", ollama_model="clef-flash", timeout_ms=100)
+        engine._backend = Impatient()
         self.assertIn("exceeded 100 ms", engine.decide(SPLIT_FORK).fallback_reason)
 
     def test_each_backend_receives_state_within_its_own_budget(self):
@@ -294,10 +361,10 @@ class PerBackendBudgetTests(unittest.TestCase):
                 seen[self.name] = state
                 raise LayaUnavailable("recorded")
 
-        engine = DecisionEngine(backend="mlx", model="configured", kev_url="http://127.0.0.1:8009")
-        engine._mlx = Recording("small", 1500)
+        engine = DecisionEngine(backend="ollama", ollama_model="clef-flash", jev=True)
+        engine._backend = Recording("small", 1500)
         engine._fallback_backend = Recording("large", 12000)
-        engine._fallbacks = [("kev", engine._fallback_backend)]
+        engine._fallbacks = [("jev", engine._fallback_backend)]
         engine.decide({"decision_type": "tier-selection", "task": {"request": "Update the panel. " + "word " * 600}})
         self.assertLess(len(json.dumps(seen["small"])), len(json.dumps(seen["large"])))
 
@@ -306,15 +373,15 @@ class OllamaSettingsTests(unittest.TestCase):
     def test_ollama_keys_round_trip_through_the_switch_file(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "laya.json"
-            write_enabled(path, True, ollama_model="nimble", ollama_url="http://gpu-box:11434", ollama_keep_alive="1h")
+            write_enabled(path, True, ollama_model="clef-flash", ollama_url="http://gpu-box:11434", ollama_keep_alive="1h")
             settings = read_settings(path)
             self.assertEqual(json.loads(path.read_text())["schema_version"], 1)
-        self.assertEqual((settings.ollama_model, settings.ollama_url, settings.ollama_keep_alive), ("nimble", "http://gpu-box:11434", "1h"))
+        self.assertEqual((settings.ollama_model, settings.ollama_url, settings.ollama_keep_alive), ("clef-flash", "http://gpu-box:11434", "1h"))
 
     def test_the_file_turns_off_a_model_the_environment_names(self):
-        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"VISTACK_LAYA_OLLAMA_MODEL": "nimble"}):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"VISTACK_LAYA_OLLAMA_MODEL": "clef-flash"}):
             path = Path(directory) / "laya.json"
-            self.assertEqual(read_settings(path).ollama_model, "nimble")
+            self.assertEqual(read_settings(path).ollama_model, "clef-flash")
             write_enabled(path, True, ollama_model="none")
             self.assertEqual(read_settings(path).ollama_model, "none")
 
@@ -339,6 +406,14 @@ class DecisionsCommandTests(unittest.TestCase):
             cli.main(list(argv))
         return json.loads(output.getvalue())
 
+    def reachable(self, version="0.35.1", installed=("clef-flash:latest",)):
+        return FakeOllama(
+            api_version={"version": version},
+            api_tags={"models": [{"name": name} for name in installed]},
+            api_ps={"models": []},
+            api_show={"capabilities": ["decision"]},
+        )
+
     def test_both_spellings_run_the_status_action(self):
         for command in ("decisions", "laya"):
             report = self.run_cli(command, "status", "--config", self.config)
@@ -346,35 +421,79 @@ class DecisionsCommandTests(unittest.TestCase):
 
     def test_on_writes_the_model_and_preloads_it(self):
         with patch("laya.system_one.OllamaBackend.warm") as warm:
-            report = self.run_cli("decisions", "on", "--ollama-model", "nimble", "--config", self.config)
+            report = self.run_cli("decisions", "on", "--ollama-model", "clef-flash", "--config", self.config)
         warm.assert_called_once_with()
-        self.assertEqual(json.loads(Path(self.config).read_text())["ollama_model"], "nimble")
-        self.assertEqual((report["ollama"]["model"], report["ollama"]["preloaded"]), ("nimble", True))
-        self.assertIn("ollama:nimble", report["ladder"])
+        self.assertEqual(json.loads(Path(self.config).read_text())["ollama_model"], "clef-flash")
+        self.assertEqual((report["ollama"]["model"], report["ollama"]["preloaded"], report["ollama"]["min_confidence"]), ("clef-flash", True, 0.85))
+        self.assertEqual(report["ladder"], ["deterministic", "ollama:clef-flash"])
+
+    def test_on_refuses_an_unsupported_model_and_names_the_supported_one(self):
+        errors = io.StringIO()
+        with contextlib.redirect_stderr(errors), self.assertRaises(SystemExit) as caught:
+            cli.main(["decisions", "on", "--ollama-model", "nimble", "--config", self.config])
+        self.assertEqual(caught.exception.code, 2)
+        self.assertIn("nimble is not a supported Ollama decision model; supported: clef-flash", errors.getvalue())
+        self.assertIn("ollama pull clef-flash", errors.getvalue())
+        self.assertFalse(Path(self.config).exists())
+
+    def test_the_actions_are_on_off_and_status_only(self):
+        for action in ("setup", "clef-start", "clef-stop"):
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                cli.build_parser().parse_args(["decisions", action])
 
     def test_a_failed_preload_is_reported_and_does_not_fail_the_command(self):
-        report = self.run_cli("decisions", "on", "--ollama-model", "nimble", "--config", self.config)
+        report = self.run_cli("decisions", "on", "--ollama-model", "clef-flash", "--config", self.config)
         self.assertFalse(report["ollama"]["preloaded"])
         self.assertIn("ollama serve", report["ollama"]["preload_error"])
 
     def test_status_with_an_unreachable_server_hints_at_starting_it(self):
-        write_enabled(self.config, True, ollama_model="nimble")
+        write_enabled(self.config, True, ollama_model="clef-flash")
         report = self.run_cli("decisions", "status", "--config", self.config)
-        self.assertEqual((report["ollama"]["model"], report["ollama"]["reachable"]), ("nimble", False))
+        self.assertEqual((report["ollama"]["model"], report["ollama"]["reachable"]), ("clef-flash", False))
         self.assertIn("ollama serve", report["ollama"]["hint"])
 
     def test_status_names_a_configured_model_that_is_not_pulled(self):
-        write_enabled(self.config, True, ollama_model="nimble")
-        fake = FakeOllama(
-            api_version={"version": "0.35.0"},
-            api_tags={"models": [{"name": "tev1:0.8b"}]},
-            api_ps={"models": []},
-            api_show={"capabilities": ["decision"]},
-        )
-        with patch("laya.system_one.urlopen", fake):
+        write_enabled(self.config, True, ollama_model="clef-flash")
+        with patch("laya.system_one.urlopen", self.reachable(installed=("qwen3-vl:4b",))):
             report = self.run_cli("decisions", "status", "--config", self.config)
-        self.assertTrue(report["ollama"]["missing"])
-        self.assertIn("ollama pull nimble", report["ollama"]["hint"])
+        self.assertEqual((report["ollama"]["missing"], report["ollama"]["supported"]), (True, []))
+        self.assertIn("ollama pull clef-flash", report["ollama"]["hint"])
+
+    def test_status_says_when_ollama_is_too_old_for_the_model(self):
+        write_enabled(self.config, True, ollama_model="clef-flash")
+        with patch("laya.system_one.urlopen", self.reachable(version="0.35.0")):
+            report = self.run_cli("decisions", "status", "--config", self.config)
+        self.assertFalse(report["ollama"]["version_ok"])
+        self.assertIn("needs Ollama 0.35.1 or newer", report["ollama"]["hint"])
+
+    def test_status_reports_leftovers_from_removed_tiers_without_failing(self):
+        old = {"enabled": True, "clef_model": "Cloudflare/clef-flash", "model": "convaiinnovations/laya", "ollama_model": "nimble"}
+        Path(self.config).write_text(json.dumps(old))
+        with patch.dict(os.environ, {"VISTACK_LAYA_MODEL": "convaiinnovations/laya"}):
+            report = self.run_cli("decisions", "status", "--config", self.config)
+        self.assertEqual(report["obsolete"], {"fields": ["clef_model", "model"], "env": ["VISTACK_LAYA_MODEL"]})
+        self.assertIn("remove VISTACK_LAYA_MODEL from your shell profile", report["hint"])
+        self.assertIn("run `decisions on` to rewrite the switch file without clef_model, model", report["hint"])
+        self.assertIn("nimble is not a supported Ollama decision model", report["ollama"]["hint"])
+        self.assertIn("`decisions on --ollama-model clef-flash`", report["ollama"]["hint"])
+        self.assertIsNone(report["ollama"]["min_confidence"])
+
+    def test_status_without_leftovers_has_no_hint(self):
+        report = self.run_cli("decisions", "status", "--config", self.config)
+        self.assertEqual(report["obsolete"], {"fields": [], "env": []})
+        self.assertNotIn("hint", report)
+
+    def test_probe_calls_jev_only_when_it_is_opted_in(self):
+        write_enabled(self.config, True, ollama_model="none")
+        with patch.dict(os.environ, {"TYPESAFE_API_KEY": "test-key"}), patch("laya.system_one.probe_jev") as probe:
+            report = self.run_cli("decisions", "status", "--probe", "--config", self.config)
+            probe.assert_not_called()
+            self.assertEqual((report["jev"]["enabled"], report["jev"]["key"]), (False, True))
+            write_enabled(self.config, True, jev=True)
+            probe.return_value = {"ok": True, "latency_ms": 1.0}
+            report = self.run_cli("decisions", "status", "--probe", "--config", self.config)
+        probe.assert_called_once_with()
+        self.assertEqual(report["jev"]["probe"], {"ok": True, "latency_ms": 1.0})
 
     def test_off_by_none_removes_the_tier(self):
         report = self.run_cli("decisions", "on", "--ollama-model", "none", "--config", self.config)
@@ -383,24 +502,33 @@ class DecisionsCommandTests(unittest.TestCase):
 
     def test_runtime_options_reach_the_engine(self):
         args = cli.build_parser().parse_args(
-            ["decision", "tier-selection", "--ollama-model", "tev1:0.8b", "--ollama-url", URL, "--config", self.config]
-            + ["--ollama-keep-alive", "1h", "--ollama-timeout-ms", "3000"]
+            ["decision", "tier-selection", "--ollama-model", "clef-flash:9b", "--ollama-url", URL, "--config", self.config]
+            + ["--ollama-keep-alive", "1h", "--ollama-timeout-ms", "3000", "--ollama-min-confidence", "0.9"]
         )
         backend = cli._engine(args).ladder()[0][1]
-        self.assertEqual((backend.model, backend.url, backend.keep_alive, backend.timeout_ms), ("tev1:0.8b", URL, "1h", 3000))
+        self.assertEqual(
+            (backend.model, backend.url, backend.keep_alive, backend.timeout_ms, backend.min_confidence), ("clef-flash:9b", URL, "1h", 3000, 0.9)
+        )
+
+    def test_runtime_options_refuse_an_unsupported_model(self):
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            cli.build_parser().parse_args(["decision", "tier-selection", "--ollama-model", "tev1:0.8b"])
 
 
 class ProbeTests(unittest.TestCase):
     def test_probe_reports_latency_or_the_reason(self):
-        fake = FakeOllama(api_ps={"models": [{"name": "nimble:latest"}]}, v1_systemone={"answers": {"green": {"type": "noul", "noul": 0.9}}})
+        fake = FakeOllama(api_ps={"models": [{"name": "clef-flash:latest"}]}, v1_systemone={"answers": {"green": {"type": "noul", "noul": 0.9}}})
         with patch("laya.system_one.urlopen", fake):
-            result = runtime.probe_ollama("nimble", URL)
+            result = probe_ollama("clef-flash", URL)
         self.assertTrue(result["ok"])
         self.assertIn("latency_ms", result)
         with patch("laya.system_one.urlopen", side_effect=URLError(ConnectionRefusedError(61, "refused"))):
-            result = runtime.probe_ollama("nimble", URL)
+            result = probe_ollama("clef-flash", URL)
         self.assertFalse(result["ok"])
         self.assertIn("ollama serve", result["reason"])
+        result = probe_ollama("nimble", URL)
+        self.assertFalse(result["ok"])
+        self.assertIn("ollama pull clef-flash", result["reason"])
 
 
 if __name__ == "__main__":

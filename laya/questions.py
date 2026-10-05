@@ -8,8 +8,9 @@ from typing import Any
 from .policy import option_descriptions, score_classes, select_playbook
 from .schema import DecisionContext, PLAYBOOKS, redact
 
-# Laya documents degradation above 20 options, and laya-mlx treats confidence from choices
-# with 11 or more options as uncalibrated. Keep each choice at 10 options or fewer.
+# Decision models degrade with large option sets (the Laya model card names 20), and confidence
+# from 11 or more options measured uncalibrated. Keep each choice at 10 options or fewer, well
+# inside Ollama's 2 to 26.
 MAX_CHOICE_OPTIONS = 10
 # The state budget for a backend that does not declare its own ``max_state_chars``.
 MAX_STATE_CHARS = 12000

@@ -440,7 +440,7 @@ def _tier_outputs(base: Mapping[str, Any], tier: str) -> dict[str, Any]:
 
 
 def evaluate(context: DecisionContext) -> PolicyDraft:
-    """Evaluate a context without importing MLX or making external calls."""
+    """Evaluate a context without importing a model adapter or making external calls."""
 
     decision_type = context.decision_type
     if decision_type not in DECISION_TYPES:

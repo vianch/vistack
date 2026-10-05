@@ -13,21 +13,28 @@ LEGACY_STATE_ROOT = ".codex/vistack"
 FALSE_VALUES = {"0", "false", "off", "no", "disabled"}
 TRUE_VALUES = {"1", "true", "on", "yes", "enabled"}
 STRING_FIELDS = {
-    "model": "VISTACK_LAYA_MODEL",
     "fallback": "VISTACK_LAYA_FALLBACK",
-    "host": "VISTACK_LAYA_HOST",
-    "host_model": "VISTACK_LAYA_HOST_MODEL",
-    "kev_url": "VISTACK_LAYA_KEV_URL",
-    "kev_model": "VISTACK_LAYA_KEV_MODEL",
     "jev_model": "VISTACK_LAYA_JEV_MODEL",
     "ollama_model": "VISTACK_LAYA_OLLAMA_MODEL",
     "ollama_url": "VISTACK_LAYA_OLLAMA_URL",
     "ollama_keep_alive": "VISTACK_LAYA_OLLAMA_KEEP_ALIVE",
-    "clef_model": "VISTACK_LAYA_CLEF_MODEL",
-    "clef_url": "VISTACK_LAYA_CLEF_URL",
-    "clef_revision": "VISTACK_LAYA_CLEF_REVISION",
     "consult": "VISTACK_LAYA_CONSULT",
 }
+# Every switch-file key and every VISTACK_LAYA_ variable the package reads. Anything else is
+# left over from a removed tier: it is ignored, reported by ``decisions status``, and dropped
+# when the switch file is rewritten.
+KNOWN_FIELDS = frozenset({*STRING_FIELDS, "enabled", "jev", "schema_version"})
+ENV_PREFIX = "VISTACK_LAYA_"
+KNOWN_ENV = frozenset(
+    {
+        *STRING_FIELDS.values(),
+        "VISTACK_LAYA_CACHE_DIR",
+        "VISTACK_LAYA_ENABLED",
+        "VISTACK_LAYA_JEV",
+        "VISTACK_LAYA_OLLAMA_MIN_CONFIDENCE",
+        "VISTACK_LAYA_OLLAMA_TIMEOUT_MS",
+    }
+)
 
 
 def state_root() -> str:
@@ -45,7 +52,7 @@ def default_history_path() -> str:
 
 
 def cache_dir() -> Path:
-    """Machine-wide, never per-project: the runtime venv and the Jev refusal record."""
+    """Machine-wide, never per-project: the Jev refusal record."""
 
     root = os.environ.get("VISTACK_LAYA_CACHE_DIR")
     if root:
@@ -67,24 +74,17 @@ def resolve_config_path(path: str | Path | None = None) -> Path:
 @dataclass(frozen=True)
 class Settings:
     enabled: bool = True
-    model: str | None = None
     fallback: str | None = None
-    host: str | None = None
-    host_model: str | None = None
-    kev_url: str | None = None
-    kev_model: str | None = None
     jev: bool | None = None
     jev_model: str | None = None
-    # ``none`` is kept as written, for Ollama and Clef: it is how a project turns off a model the
-    # environment names.
+    # ``none`` is kept as written: it is how a project turns off a model the environment names.
     ollama_model: str | None = None
     ollama_url: str | None = None
     ollama_keep_alive: str | None = None
-    clef_model: str | None = None
-    clef_url: str | None = None
-    clef_revision: str | None = None
     consult: str | None = None
     source: str = "default"
+    obsolete_fields: tuple[str, ...] = ()
+    obsolete_env: tuple[str, ...] = ()
 
 
 def _env_flag(name: str) -> bool | None:
@@ -96,9 +96,14 @@ def _env_flag(name: str) -> bool | None:
     return None
 
 
+def obsolete_env() -> tuple[str, ...]:
+    return tuple(sorted(name for name, value in os.environ.items() if name.startswith(ENV_PREFIX) and name not in KNOWN_ENV and value.strip()))
+
+
 def _environment_fields() -> dict[str, Any]:
     fields: dict[str, Any] = {name: os.environ.get(variable) or None for name, variable in STRING_FIELDS.items()}
     fields["jev"] = _env_flag("VISTACK_LAYA_JEV")
+    fields["obsolete_env"] = obsolete_env()
     return fields
 
 
@@ -127,12 +132,16 @@ def read_settings(path: str | Path | None = None) -> Settings:
     if jev is not None and not isinstance(jev, bool):
         raise ValueError(f"Laya config jev must be boolean: {config_path}")
     fields["jev"] = jev
+    fields["obsolete_fields"] = tuple(sorted(key for key in value if key not in KNOWN_FIELDS))
     return Settings(enabled=enabled, source=str(config_path), **fields)
 
 
 def write_enabled(path: str | Path | None, enabled: bool, **updates: Any) -> Path:
-    """Flip the switch, and set any setting given, keeping other fields."""
+    """Flip the switch, and set any setting given, keeping the other known fields."""
 
+    unknown = sorted(set(updates) - KNOWN_FIELDS)
+    if unknown:
+        raise ValueError(f"unknown Laya setting: {', '.join(unknown)}")
     source = resolve_config_path(path)
     config_path = Path(path) if path is not None else Path(default_config_path())
     config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -141,7 +150,7 @@ def write_enabled(path: str | Path | None, enabled: bool, **updates: Any) -> Pat
         value = json.loads(source.read_text(encoding="utf-8"))
         if not isinstance(value, dict):
             raise ValueError(f"Laya config must be a JSON object: {source}")
-        existing = value
+        existing = {key: item for key, item in value.items() if key in KNOWN_FIELDS}
     existing.update({key: item for key, item in updates.items() if item is not None})
     existing.update({"schema_version": 1, "enabled": enabled})
     config_path.write_text(json.dumps(existing, indent=2, sort_keys=True) + "\n", encoding="utf-8")

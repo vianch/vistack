@@ -90,8 +90,8 @@ flowchart TD
 
 The diagram shows the common routes. The full route set includes intake, design
 implementation, blocker recovery, PR stacks, QA verification, session pickup, safe pause,
-babysitting, worktree cleanup, skill authoring, agent design, preference capture, and
-`html-report`.
+babysitting, worktree cleanup, skill authoring, agent design, preference capture, mistake
+correction (`correct`), and `html-report`.
 
 ## Reports and pages
 

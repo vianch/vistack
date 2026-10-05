@@ -55,10 +55,19 @@ or agent that fails frontmatter or path rules loads as *nothing*, silently, with
 | `skills/<name>/assets/*` | templates a skill copies; data, **not** skills |
 | `skills/<name>/scripts/*` | scripts bundled with a skill; their paths resolve from the plugin root |
 | `laya/`, `prwatch/` | Python packages behind `scripts/vistack-decision.py` and `scripts/watch-pr.py` |
+| `hooks/hooks.json` | the deck mod: names `hooks/register.tsx`, the Claude Code hooks module |
+| `hooks/register.tsx`, `hooks/lib/`, `hooks/tabs/` | the deck's wiring, pure logic, and tab views; `docs/guide/deck.md` |
+| `types/index.d.ts` | the deck's session-state contract, named by `"types"` in `.claude-plugin/plugin.json` |
+| `tests/*.test.ts(x)` | the deck's tests, run by `claude plugin test .` |
 
 Codex discovers the same top-level `skills/<name>/SKILL.md` files. It does not execute the
 Claude-only `commands/` or `agents/` directories; `skills/vistack/SKILL.md` contains the host
 adapter and uses `.codex/vistack/` for Codex run state and worktrees.
+
+The deck mod is Claude Code only. `claude plugin validate .` must pass. It enforces two rules:
+`$` is passed only to functions declared at the top level of `hooks/register.tsx`, and every
+atom is declared in the file that uses it. Its `$.state` keys name the plugin (`vistack`), so
+a plugin rename renames them in `hooks/register.tsx` and `types/index.d.ts`.
 
 Two hard constraints that break loading silently when violated:
 

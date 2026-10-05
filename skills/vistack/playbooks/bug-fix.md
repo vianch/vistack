@@ -7,13 +7,16 @@ runtime or test evidence is not complete.
 
 1. State the wrong behavior and the correct behavior in separate sentences.
 2. Reproduce it on the matching surface. Record the exact steps, environment, observed
-   result, and artifact. On a browser surface, record the reproduction as a scenario with
-   `skills/qa-video/SKILL.md` so the same module replays on the PR head. Do not hand the
+   result, and artifact. On a browser surface, dispatch a background `qa-verifier` lane
+   (`skills/coordinate/SKILL.md`, QA lanes) to record the reproduction as a scenario with
+   `skills/qa-video/SKILL.md`, so the same module replays on the PR head. Do not hand the
    reproduction to the user.
-3. If it does not reproduce, tighten the trigger or instrument the surface. If it still does
-   not reproduce, report what was tried and stop this playbook without changing code.
-4. Write the failing test or capture the failing runtime artifact. Watch it fail for the
-   expected reason.
+3. If it does not reproduce, tighten the trigger, or dispatch instrumentation of the
+   surface to the tier owner. If it still does not reproduce, report what was tried and stop
+   this playbook without changing code.
+4. Dispatch the failing test to the slice owner at its tier, or the failing runtime
+   artifact to a `qa-verifier` lane (`skills/coordinate/SKILL.md`, Dispatch rules). Watch it
+   fail for the expected reason.
 5. Form distinct hypotheses and narrow them with runtime evidence. Trace the surviving
    mechanism to `file:line` before planning the fix.
 6. State the root cause in one sentence. A workaround is a ledger decision with a reason.
@@ -24,12 +27,14 @@ runtime or test evidence is not complete.
 9. Dispatch the slice owner at its tier in its own worktree: `implementer`, or
    `senior-implementer` when the fix crosses a boundary or changes a contract. The scope
    names the cause, files, test, and unchanged behavior. No bundled cleanup.
-10. Run the original reproduction, the regression test, the suite in the run order of
-    `skills/prove-it-works/SKILL.md`, and lint. Pass the diff through comment cleanup.
+10. The slice owner runs the regression test, the suite in the run order of
+    `skills/prove-it-works/SKILL.md`, and lint, and passes the diff through comment cleanup.
+    The original reproduction reruns in a `qa-verifier` lane.
 11. Open the draft PR with failing-then-passing evidence, root cause, fix, and regression
     test. Assign the configured reviewers.
-12. Run QA on the PR preview and capture the original behavior at the assertion point.
-    Replay the reproduction scenario on the PR head and cite both videos.
+12. Dispatch a background `qa-verifier` lane on the PR preview to capture the original
+    behavior at the assertion point and replay the reproduction scenario on the PR head.
+    Cite both videos.
 13. Run `health-check` to confirm the test fails when the fix is absent. Route defects back
     to the owning slice.
 14. When the router's Final report rule applies, render the run report with

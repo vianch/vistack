@@ -47,16 +47,20 @@ Once `/vistack` has run, the session is in viStack mode.
 
 ## What happens after you send it
 
-1. The principles index is read. Always first, always unconditionally.
+1. The principles index is read. Always first, always unconditionally. Your request is then
+   rewritten for accuracy for the agents and the advisor; matching uses your original words,
+   and anything you did not state is marked missing, never filled in.
 2. One playbook is matched, and its steps are copied into the task list **verbatim** — not
    paraphrased, not reordered, not merged. A step that will not be run stays visible and
    marked skipped, with the reason in the ledger.
 3. The finish condition is stated in checkable terms.
 4. Work is sliced, a conflict matrix decides what runs in parallel, and one agent per slice
-   runs in its own worktree.
+   runs in its own worktree. The main session never writes code: every write goes to the
+   agent that owns it, mechanical or complex by tier.
 5. Each finished slice raises its draft PR immediately.
-6. QA runs against each PR's own preview. A pass needs a screenshot, and every browser
-   scenario is also recorded as a video tied to its assertion points.
+6. QA runs in a background lane against each PR's own preview, one lane per PR head, while
+   other work continues. A pass needs a screenshot, and every browser scenario is also
+   recorded as a video tied to its assertion points.
 7. A Haiku health check audits each diff against the acceptance criteria.
 8. It stops at merge-ready. **It never merges.**
 
@@ -69,7 +73,8 @@ questions — except at the four fences.
 flowchart TD
     A[Your prompt] --> B[vistack]
     B --> C[Read the Principles section]
-    C --> D{Match the task}
+    C --> P[Enhance the prompt for agents and the advisor]
+    P --> D{Match the task on the original prompt}
     D -->|Read-only question| E[Investigation]
     D -->|Defect| F[Bug fix]
     D -->|New behavior| G[Feature]
@@ -91,7 +96,8 @@ flowchart TD
 The diagram shows the common routes. The full route set includes intake, design
 implementation, blocker recovery, PR stacks, QA verification, session pickup, safe pause,
 babysitting, worktree cleanup, skill authoring, agent design, preference capture, mistake
-correction (`correct`), and `html-report`.
+correction (`correct`), and `html-report`. A request to review someone else's PR by URL runs
+`review-pr`, which posts one comment-only review and never approves.
 
 ## Reports and pages
 

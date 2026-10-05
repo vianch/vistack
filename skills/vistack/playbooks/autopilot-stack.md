@@ -30,8 +30,10 @@ The terminal state is merge-ready draft PRs. It never merges.
     without stopping independent slices.
 12. Open each finished slice as a draft PR immediately. Assign reviewers. Use `stack-split`
     before opening when the diff is too large or carries multiple concerns.
-13. Run QA against each PR's own target and capture evidence at every assertion point.
-14. Run `health-check` against acceptance criteria, diff hunks, QA scenarios, and screenshots.
+13. Dispatch a background `qa-verifier` lane against each PR's own target
+    (`skills/coordinate/SKILL.md`, QA lanes) to capture evidence at every assertion point.
+14. Once the QA lane completes, run `health-check` against acceptance criteria, diff hunks,
+    QA scenarios, and screenshots.
     Route every defect to its owning slice.
 15. Clear review automation comments and re-run affected checks after every new head.
 16. Update state, ledger, and session record on every transition. Record skips explicitly.

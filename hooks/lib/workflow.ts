@@ -103,7 +103,52 @@ export const checksSummary = (rollup: readonly GhCheck[]): { checks: string; fai
   return { checks: pending > 0 ? 'pending' : 'passing', failing }
 }
 
-export const parsePrs = (stdout: string): DeckPr[] => {
+const PR_SEARCH_QUERY = `query($q: String!) {
+  search(query: $q, type: ISSUE, first: 30) {
+    nodes {
+      ... on PullRequest {
+        number title url isDraft headRefName reviewDecision
+        repository { nameWithOwner }
+        commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 50) { nodes {
+          __typename
+          ... on CheckRun { name conclusion status }
+          ... on StatusContext { context state }
+        } } } } } }
+      }
+    }
+  }
+}`
+
+// One GraphQL search for the person's open PRs across the realm owner's repositories only.
+export const prSearchArgs = (realm: { host: string; owner: string }, qualifier: 'user' | 'org'): string[] => [
+  'gh',
+  'api',
+  'graphql',
+  ...(realm.host === 'github.com' ? [] : ['--hostname', realm.host]),
+  '-f',
+  `query=${PR_SEARCH_QUERY}`,
+  '-f',
+  `q=is:pr is:open author:@me ${qualifier}:${realm.owner} archived:false`,
+]
+
+const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : [])
+
+// A check-run or status context with GraphQL's nulls dropped; a pending status counts as running.
+const checkOf = (raw: unknown): GhCheck => {
+  const node = record(raw)
+  const state = str(node.state)
+
+  return {
+    ...(str(node.name) === undefined ? {} : { name: str(node.name) }),
+    ...(str(node.context) === undefined ? {} : { context: str(node.context) }),
+    ...(str(node.conclusion) === undefined ? {} : { conclusion: str(node.conclusion) }),
+    ...(str(node.status) === undefined ? {} : { status: str(node.status) }),
+    ...(state === undefined ? {} : { state }),
+    ...(state === 'PENDING' || state === 'EXPECTED' ? { status: 'IN_PROGRESS' } : {}),
+  }
+}
+
+export const parsePrSearch = (stdout: string): DeckPr[] => {
   let value: unknown
 
   try {
@@ -112,22 +157,26 @@ export const parsePrs = (stdout: string): DeckPr[] => {
     return []
   }
 
-  if (!Array.isArray(value)) {
-    return []
-  }
+  return list(record(record(record(value).data).search).nodes)
+    .map(record)
+    .filter(pr => typeof pr.number === 'number')
+    .map(pr => {
+      const commit = record(record(list(record(pr.commits).nodes)[0]).commit)
+      const contexts = list(record(record(commit.statusCheckRollup).contexts).nodes).map(checkOf)
 
-  return value.map(raw => {
-    const pr = record(raw)
-    const rollup = Array.isArray(pr.statusCheckRollup) ? (pr.statusCheckRollup as GhCheck[]) : []
-
-    return {
-      branch: str(pr.headRefName) ?? '',
-      isDraft: pr.isDraft === true,
-      number: typeof pr.number === 'number' ? pr.number : 0,
-      review: str(pr.reviewDecision) ?? 'NONE',
-      title: str(pr.title) ?? '',
-      url: str(pr.url) ?? '',
-      ...checksSummary(rollup),
-    }
-  })
+      return {
+        branch: str(pr.headRefName) ?? '',
+        isDraft: pr.isDraft === true,
+        number: pr.number as number,
+        repo: str(record(pr.repository).nameWithOwner) ?? '',
+        review: str(pr.reviewDecision) ?? 'NONE',
+        title: str(pr.title) ?? '',
+        url: str(pr.url) ?? '',
+        ...checksSummary(contexts),
+      }
+    })
 }
+
+// A shell command that opens, closes or changes a PR, after which the PR list is stale.
+export const isPrChange = (command: string): boolean =>
+  /\bgh\s+pr\s+(create|ready|reopen|close|merge)\b/.test(command) || /\bgh\s+api\b.*\/pulls\b/.test(command)

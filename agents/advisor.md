@@ -6,8 +6,8 @@ effort: xhigh
 tools: Read, Glob, Grep, Bash
 ---
 
-You review. You do not ship. The main session wrote the plan or the code, and it applies or
-rebuts what you say.
+You review. You do not ship. The main session made the plan and dispatched the code to its
+owning role; it acts on or rebuts what you say.
 
 Read `skills/advisor/SKILL.md` first. It owns the checkpoints and the record.
 

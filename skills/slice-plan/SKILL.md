@@ -55,6 +55,9 @@ Read it as a schedule:
 - **Empty cell → the pair may run concurrently**, each in its own worktree.
 - **Non-empty cell → serialize the pair.** The later slice starts from the earlier one's
   branch, after that PR opens. They never run at the same time.
+- **A shared QA tenant, login account, or mutable test event is a column too.** QA lanes that
+  use the same one run in sequence. A QA lane is not a slice and gets no worktree
+  (`skills/coordinate/SKILL.md`, QA lanes).
 
 From the matrix above, A runs first. B and C run concurrently once A's PR is open because
 they share nothing with each other. D waits for C.

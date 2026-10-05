@@ -526,16 +526,20 @@ every host.
 | Codex, Grok Build | the same script from the installed plugin path |
 | OpenCode | the `vistack_qa_video` tool in `integrations/opencode/vistack.js` |
 
-Run directly from a consuming project (the evidence directory is git-ignored):
+Run directly from a consuming project (the evidence directory is git-ignored). In a run, a
+background QA lane does this, one per PR head, each in its own
+`<state-root>/qa/<slug>/<slice-or-pr>/<head7>/` directory; `record` refuses a directory that
+holds another head's evidence.
 
 ```bash
 QA=/path/to/vistack/skills/qa-video/scripts/qa-video.mjs
+DIR=.claude/state/qa/checkout-fix/321/abc1234
 node "$QA" doctor
-cp /path/to/vistack/skills/qa-video/assets/scenario.example.mjs .claude/state/qa/321/checkout.mjs
-node "$QA" record --scenario .claude/state/qa/321/checkout.mjs --out .claude/state/qa/321 \
+mkdir -p "$DIR" && cp /path/to/vistack/skills/qa-video/assets/scenario.example.mjs "$DIR/checkout.mjs"
+node "$QA" record --scenario "$DIR/checkout.mjs" --out "$DIR" \
   --url https://preview.example.app --head abc1234 --title-card
-node "$QA" finish --manifest .claude/state/qa/321/checkout.manifest.json --mp4 --sheet
-node "$QA" check --manifest .claude/state/qa/321/checkout.manifest.json
+node "$QA" finish --manifest "$DIR/checkout.manifest.json" --mp4 --sheet
+node "$QA" check --manifest "$DIR/checkout.manifest.json"
 ```
 
 | Command | Does | Needs |
@@ -596,7 +600,7 @@ files are the source of truth, so they are not restated here.
 
 | Agent | Owns | Model | Effort |
 |---|---|---|---|
-| [`coordinator`](agents/coordinator.md) | phase transitions, dispatch, state file, ledger, session comment. Never edits code | `opus` | session |
+| [`coordinator`](agents/coordinator.md) | phase transitions, dispatch, state file, ledger, session comment. Never edits code or runs QA; every write goes to its owner | `opus` | session |
 | [`groomer`](agents/groomer.md) | raw request → specified ticket, through the readiness gate | `opus` | session |
 | [`analyst`](agents/analyst.md) | explorer: read-only call sites, blast radius, existing patterns, coverage | `opus` | `medium` |
 | [`researcher`](agents/researcher.md) | researcher: external docs pinned to the installed version, cited | `opus` | `medium` |
@@ -611,20 +615,23 @@ files are the source of truth, so they are not restated here.
 | [`advisor`](agents/advisor.md) | fallback reviewer when the advisor tool is off: plan, repeat, done | `fable` | `xhigh` |
 | [`design-runner`](agents/design-runner.md) | one independent `architect` candidate: usage first, then types and a rationale | `opus` | session |
 | [`reviewer`](agents/reviewer.md) | one independent `interrogate` reviewer, or the `architect` judge. Read-only | `opus` | session |
+| [`pr-reviewer`](agents/pr-reviewer.md) | one senior reviewer in the PR's stack for `review-pr`; drafts findings in the operator's voice, never posts, approves, or edits. Read-only | `opus` | session |
 | [`report-writer`](agents/report-writer.md) | renders one self-contained HTML page from state, ledger, diff, or code map; never publishes | `sonnet` | session |
 | [`agent-designer`](agents/agent-designer.md) | designs one new Claude Code, Codex, or OpenCode agent and verifies it loads | `opus` | session |
 
 Models and effort sit in agent frontmatter, not in a run. The rule behind the split: put the
 model where the *uncertainty* is. The main session runs Opus 5.5 at `xhigh` and plans,
-decides, and verifies. Reading and doc lookups run on Opus at `medium`. Mechanical code goes
-to Sonnet and complex code to Opus at `xhigh`. The adversarial audit stays on Haiku. Fable
-5.1 advises at three checkpoints and never writes code.
+decides, dispatches, and verifies. It runs no work an owning role owns: code goes to the tier
+owner, QA and evidence to a background `qa-verifier` lane. Reading and doc lookups run on Opus
+at `medium`. Mechanical code goes to Sonnet and complex code to Opus at `xhigh`. The
+adversarial audit stays on Haiku. Fable 5.1 advises at three checkpoints and never writes
+code.
 
 ```text
-AGENT TREE · OPUS 5.5 WORKS · FABLE 5.1 ON CALL
+AGENT TREE · OPUS 5.5 DISPATCHES · FABLE 5.1 ON CALL
 
 Fable 5.1 · advisor · on call           Opus 5.5 · main session · xhigh
-reads the whole session                 plans + decides
+reads the whole session                 plans + decides + dispatches
   ◇ before a plan ───────────────────▶        │
                                               ▼
                                  laya · fork layer
@@ -641,6 +648,10 @@ reads the whole session                 plans + decides
   ◇ error repeats ──▶ worker                  │                          │
                   └───────────────────────────┼──────────────────────────┘
                                               ▼
+                                 qa-verifier · sonnet · background lane per PR head
+                                 screenshots + video while other lanes keep going
+                                              │
+                                              ▼
   ◇ before done ─────────────────────▶ back to main session · xhigh
                                        review + verify
 ```
@@ -653,10 +664,12 @@ invokes a principle must name the decision the principle changed.
 
 ### Specialist skills
 
-[`coordinate`](skills/coordinate/SKILL.md) (dispatch, state, ledger) ·
+[`coordinate`](skills/coordinate/SKILL.md) (dispatch, QA lanes, state, ledger) ·
+[`prompt-enhancer`](skills/prompt-enhancer/SKILL.md) (accurate requests, briefs, and dossiers; never changes scope) ·
 [`advisor`](skills/advisor/SKILL.md) (the three checkpoints) ·
 [`architect`](skills/architect/SKILL.md) (design before code) ·
 [`interrogate`](skills/interrogate/SKILL.md) (adversarial multi-reviewer pass) ·
+[`review-pr`](skills/review-pr/SKILL.md) (one comment-only review on another author's PR; never approves) ·
 [`figma-sync`](skills/figma-sync/SKILL.md) (the live Figma line) ·
 [`slice-plan`](skills/slice-plan/SKILL.md) (decomposition, conflict matrix) ·
 [`unblock`](skills/unblock/SKILL.md) (the bounded loop) ·

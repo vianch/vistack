@@ -30,9 +30,9 @@ predicate. It never merges.
    Every owner receives a complete brief with scope, checks, timebox, forbidden actions, and
    report shape. Start with one pilot when the pilot rule in `skills/coordinate/SKILL.md`
    applies.
-9. At every iteration, check the finish predicate, make the smallest evidence-backed
-   change, verify against the real artifact, and record one ledger row. Commit only when
-   the predicate moved. Discard a change that did not help.
+9. At every iteration, check the finish predicate, dispatch the smallest evidence-backed
+   change to its owner at its tier, verify against the real artifact, and record one ledger
+   row. The owner commits only when the predicate moved. Discard a change that did not help.
 10. Drain completions without waiting for a human. Route side fixes, review noise, tooling
     failures, and broken skill contracts through the appropriate playbook. Keep unrelated
     fixes in their own branch or PR and return to the original predicate.
@@ -43,8 +43,9 @@ predicate. It never merges.
 12. Reconcile state before every resume or monitor pass. If state, branches, worktrees,
     PRs, comments, or live owners disagree, record each divergence before taking action.
 13. Raise each finished slice as a draft PR immediately. Keep each PR to one concern and
-    at most 500 changed lines excluding lockfiles and generated files. Run QA and the
-    adversarial health check before calling it merge-ready.
+    at most 500 changed lines excluding lockfiles and generated files. Dispatch QA to a
+    background `qa-verifier` lane, then run the adversarial health check once it completes,
+    before calling it merge-ready.
 14. Keep the finish predicate fixed. A plateau changes the approach, not the target. Stop
     only when the predicate is met or a fence is reached.
 15. When the router's Final report rule applies, render the run report with

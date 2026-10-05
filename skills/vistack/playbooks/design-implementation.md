@@ -28,8 +28,9 @@
 12. Open each slice as a draft PR with screenshots and deviations. Attach new screenshots
     directly with `gh --attach`, following [GitHub attachments](../../docs/guide/github-attachments.md),
     then assign reviewers.
-13. Re-check the Figma nodes for changes since implementation, then run interactive QA on
-    the preview and `health-check` against the references.
+13. Re-check the Figma nodes for changes since implementation, then dispatch interactive QA
+    on the preview to a background `qa-verifier` lane and run `health-check` against the
+    references once it completes.
 14. When the router's Final report rule applies, render the run report with
     `skills/html-report/SKILL.md` first so the checkpoint reviews it. Run the advisor `done`
     checkpoint on every frame's parity evidence and the deviation list before calling the

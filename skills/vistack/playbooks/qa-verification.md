@@ -11,8 +11,10 @@
    candidate; a `vercel.com` dashboard URL is not a test target. Use
    `_private/knowledge/key-maker.json` as the credential path. Missing or expired
    credentials are FENCE 4.
-2. Read the diff and derive happy-path, edge, and regression scenarios. Split each scenario
-   into assertion points, and cite a diff hunk for every assertion point.
+2. Once the target is ready, dispatch a background `qa-verifier` lane for the PR head
+   (`skills/coordinate/SKILL.md`, QA lanes). The lane reads the diff and derives happy-path,
+   edge, and regression scenarios, splits each into assertion points, and cites a diff hunk
+   for every assertion point.
 3. Confirm the target is built and points at the PR head before logging in. A stale,
    wrong-head, or still-building Vercel link is blocked; do not substitute staging, another
    branch's preview, or an invented URL. A protection wall on a building preview is not a

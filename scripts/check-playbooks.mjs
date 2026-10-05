@@ -125,6 +125,12 @@ const retired = [
   [/\bkev\b|kev[-_]url|host[-_]llm|laya-setup/i, "the Kev and host-CLI tiers were removed; the tiers are LADDER in laya/engine.py"],
   [/VISTACK_LAYA_(?:MODEL|PYTHON|HOST|KEV|CLEF|WORKDIR)\b/, "an obsolete variable; laya/config.py reports leftovers under `obsolete`"],
 ];
+const mainSessionWork = [
+  /\bmain session (?:also |then |itself )?(?:writes?|wrote|edits?|implements?|ships?|fixes|renders?)\b/gi,
+  /\b(?:written|rendered|implemented|fixed|captured|recorded|built|edited|made)\b[^.;|]*\bdirectly by the main session\b/gi,
+  /\bOPUS [\d.]+ WORKS\b/gi,
+  /\b(?:QA|qa-video|recording|screenshots?|videos?)\b[^.;|]*\b(?:stays?|runs?|run) (?:inline|in the thread|in the main session)\b/gi,
+];
 
 for (const path of lintFiles) {
   const content = await read(path);
@@ -161,11 +167,12 @@ for (const path of lintFiles) {
     if (row || line.trim() === "") {
       if (paragraph) units.push(paragraph);
       paragraph = null;
-      if (row) units.push({ number: index + 1, text: line });
+      if (row) units.push({ number: index + 1, text: line, starts: [[0, index + 1]] });
     } else if (paragraph) {
+      paragraph.starts.push([paragraph.text.length + 1, index + 1]);
       paragraph.text += ` ${line.trim()}`;
     } else {
-      paragraph = { number: index + 1, text: line.trim() };
+      paragraph = { number: index + 1, text: line.trim(), starts: [[0, index + 1]] };
     }
   });
   if (paragraph) units.push(paragraph);
@@ -173,6 +180,19 @@ for (const path of lintFiles) {
     for (const sentence of text.split(/(?<=[.;!?])\s+/)) {
       if (/from the plugin root/i.test(sentence) && !/resolv/i.test(sentence) && !excepted(sentence, "plugin-root", path, number)) {
         fail(path, `line ${number}: "${sentence.slice(0, 70)}..." reads as a working-directory change; say the path resolves from the plugin root while the working directory stays in the consuming repository (skills/vistack/SKILL.md, Host adapter)`);
+      }
+    }
+  }
+
+  // The main session runs no work an owning role owns: code goes to the tier owner, QA to a background qa-verifier lane.
+  for (const { text, starts } of units) {
+    for (const pattern of mainSessionWork) {
+      for (const match of text.matchAll(pattern)) {
+        if (/\b(?:never|not|no)\b|n't/i.test(match[0])) continue;
+        const number = starts.findLast(([offset]) => offset <= match.index)[1];
+        if (!excepted(lines[number - 1], "main-session-work", path, number)) {
+          fail(path, `line ${number}: \`${match[0]}\` gives the main session work an owning role owns; dispatch code to its tier owner and QA to a background qa-verifier lane (skills/coordinate/SKILL.md, Dispatch rules)`);
+        }
       }
     }
   }

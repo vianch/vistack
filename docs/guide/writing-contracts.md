@@ -25,7 +25,10 @@ home and check that the pointers still describe it.
 | Topic | Home |
 |---|---|
 | The four fences | `skills/autonomy-has-fences/SKILL.md` |
-| Merge boundary, run report, script path resolution | `skills/vistack/SKILL.md` (Merge boundary, Final report, Host adapter) |
+| Merge boundary, run report, script path resolution, Codex role adoption | `skills/vistack/SKILL.md` (Merge boundary, Final report, Host adapter) |
+| Delegation (the main session runs no work an owning role owns), the tier rule, and QA lanes | `skills/coordinate/SKILL.md` (Dispatch rules, QA lanes) |
+| Enhancing a request, brief, or dossier, and what the original is kept for | `skills/prompt-enhancer/SKILL.md` |
+| Reviewing another author's PR, the COMMENT-only boundary, and the findings shape | `skills/review-pr/SKILL.md` (Permissions), `skills/review-pr/references/findings.md` |
 | External naming | `skills/vistack/principles/index.md` |
 | Monitor wake and loop exit, pilot lanes, flattened lanes and re-cuts, brief order, state file schema | `skills/coordinate/SKILL.md` |
 | Prompt-prefix stability and the reason for brief order | `skills/guard-the-context-window/SKILL.md` |

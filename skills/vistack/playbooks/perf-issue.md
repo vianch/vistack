@@ -9,22 +9,23 @@ sustained search against a target uses `overnight` or a separately scoped queue.
    and the finish threshold.
 2. Capture a baseline with the repository's performance or control procedure. Record the
    command, workload, commit, repetitions, and artifact path. When timing is noisy, prefer a
-   deterministic proxy such as an instruction, operation, query, or allocation count, and
-   check the baseline in.
+   deterministic proxy such as an instruction, operation, query, or allocation count. The
+   tier owner checks the baseline in.
 3. Run `how` or the repository's equivalent read-only architecture pass. Use the trace to
    form hypotheses. Do not claim a bottleneck from source inspection alone.
 4. Choose one hypothesis and one variable to change. Prefer deletion before caching,
    batching, indirection, lazy work, or scheduling. Name the mechanism the trace supports.
 5. If the fix crosses a function or service boundary, record the design decision and run the
    advisor `plan` checkpoint on it before implementation (`skills/advisor/SKILL.md`).
-   Dispatch one owner in one worktree with a precise scope.
-6. Capture the post-fix artifact with the same workload and measurement procedure. Run the
-   regression checks.
+   Dispatch one owner at its tier (`skills/coordinate/SKILL.md`, Dispatch rules) in one
+   worktree with a precise scope.
+6. The owner captures the post-fix artifact with the same workload and measurement
+   procedure and runs the regression checks.
 7. Compare baseline and post-fix artifacts. An inconclusive or wrong-surface result is not a
    pass. Revert a change that does not beat noise or breaks the regression gate.
 8. Record the baseline, post-fix value, delta, and artifact paths in the ledger and PR.
-   Leave a guardrail check that fails when the metric regresses past the new value
-   (`skills/build-the-lever/SKILL.md`).
+   The owner leaves a guardrail check that fails when the metric regresses past the new
+   value (`skills/build-the-lever/SKILL.md`).
 9. Run `pr-stack` or the PR creation procedure. Keep the PR draft, scoped, and below 500
    changed lines.
 10. Run the advisor `done` checkpoint on the baseline, post-fix artifact, and delta before

@@ -5,9 +5,10 @@ description: "Consult the advisor at the three moments that change a run's outco
 
 # advisor
 
-The main session writes the code. The advisor reviews it. Opus 5.5 plans, decides, and
-ships. Fable 5.1 reads the whole session and speaks at three checkpoints only. The advisor
-never edits a file; the main session applies each point or rebuts it with evidence.
+The owning role writes the code; the main session plans, dispatches, and verifies; the
+advisor reviews. Opus 5.5 runs the main session. Fable 5.1 reads the whole session and
+speaks at three checkpoints only. The advisor never edits a file. The main session acts on
+each point, through the owning role when it needs a write, or rebuts it with evidence.
 
 ## The three checkpoints
 
@@ -29,15 +30,21 @@ They never reach the advisor.
 
 ## How to consult
 
-1. **Claude Code with the advisor tool on.** Name the checkpoint and ask its question. The
-   advisor already reads the full transcript, every tool call included. Do not paste it.
+Run `skills/prompt-enhancer/SKILL.md` before each consultation. It shapes what you send, not
+what the advisor reads: the transcript is never rewritten.
+
+1. **Claude Code with the advisor tool on.** Name the checkpoint and ask its question over
+   the enhanced request, with the original beside it. The advisor already reads the full
+   transcript, every tool call included. Do not paste it.
 2. **Advisor tool off** — `CLAUDE_CODE_DISABLE_ADVISOR_TOOL`, a non-Anthropic provider, a
    rejected pairing, or no Fable access. Dispatch the `advisor` agent with a dossier: the
    checkpoint, the finish predicate, the plan or the error with its attempt log, the diff
    summary, and the evidence paths. A `done` dossier also carries the run report path when
-   one exists. The agent sees only the dossier, so a missing part is a blind spot.
-3. **Codex.** Mark the checkpoint `step-skipped` with the host reason. Adopting the advisor
-   role in the same thread is not an independent review.
+   one exists. Enhance the dossier and keep every evidence path in it. The agent sees only
+   the dossier, so a missing part is a blind spot.
+3. **Codex.** Mark the checkpoint `step-skipped` with the host reason; the enhancer pass
+   before it is skipped in the same row. Adopting the advisor role in the same thread is not
+   an independent review.
 4. **Neither available.** Record `advisor-unavailable` and continue. A missing advisor is
    never a fence.
 

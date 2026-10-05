@@ -134,6 +134,20 @@ describe("qa-video CLI without a browser", () => {
     assert.match(missingPlaywright.stderr, /npm i -D playwright && npx playwright install chromium/);
   });
 
+  test("record refuses an --out that holds another head's evidence and keeps its video", async () => {
+    const out = join(scratch, "heads", "abc1234");
+    const video = write("heads/abc1234/demo.webm", Buffer.from([...webmMagic, 0, 0, 0, 0]));
+    write("heads/abc1234/demo.manifest.json", JSON.stringify({ version: 1, scenario: "demo", head: "abc1234", steps: [] }));
+    const scenario = write("heads/demo.mjs", "export default async () => {};\n");
+    const nowhere = { QA_VIDEO_PLAYWRIGHT: join(scratch, "nowhere") };
+    const refused = await runCli(["record", "--scenario", scenario, "--out", out, "--head", "def5678"], nowhere);
+    assert.equal(refused.status, 2);
+    assert.match(JSON.parse(refused.stdout).error, /is evidence for head abc1234; record head def5678 into its own directory/);
+    assert.ok(startsWith(video, webmMagic), "the earlier head's video was deleted");
+    const sameHead = await runCli(["record", "--scenario", scenario, "--out", out, "--head", "abc1234def0"], nowhere);
+    assert.doesNotMatch(JSON.parse(sameHead.stdout).error, /is evidence for head/);
+  });
+
   test("finish writes captions and skips mp4 without ffmpeg; check passes it and fails a corrupted copy", async () => {
     const { directory, manifestPath } = syntheticEvidence("synthetic");
     const finished = await runCli(["finish", "--manifest", manifestPath, "--mp4", "--gif", "--sheet"], { PATH: dirname(process.execPath), FFMPEG_PATH: "" });

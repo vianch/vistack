@@ -14,10 +14,10 @@ product. A broken skill can silently disable the process it describes.
    `docs/guide/writing-contracts.md`.
 4. Preserve the existing state and ledger keys unless a migration is explicitly planned.
    Add optional fields without deleting unknown fields during reconciliation.
-5. Write or update the skill and its playbook. Use sentence-case headings, concrete
-   instructions, and links to existing skills instead of pasted copies. Put recorded failure
-   points in a Gotchas section, templates in `assets/`, detail read on demand in
-   `references/`, and repeatable work in `scripts/`.
+5. Dispatch the tier owner to write or update the skill and its playbook. Use sentence-case
+   headings, concrete instructions, and links to existing skills instead of pasted copies.
+   Put recorded failure points in a Gotchas section, templates in `assets/`, detail read on
+   demand in `references/`, and repeatable work in `scripts/`.
 6. Validate frontmatter, name and path agreement, referenced files, route coverage, host
    adapters, numbered steps, and no silent skip rules.
 7. Run `scripts/check-playbooks.mjs`. Fix every structural error. Run the repository's

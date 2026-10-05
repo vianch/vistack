@@ -34,6 +34,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("scenario_file", nargs="?", default="examples/laya/scenarios.jsonl")
     parser.add_argument("--backend", choices=BACKENDS, default="deterministic")
     parser.add_argument("--jev", action=argparse.BooleanOptionalAction, default=None)
+    parser.add_argument("--cloudflare", action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument("--ollama-model", type=ollama_model_argument, help=OLLAMA_MODEL_HELP)
     parser.add_argument("--ollama-url")
     parser.add_argument("--ollama-timeout-ms", type=int, help="Ollama budget; defaults to the larger of --timeout-ms and 8000")
@@ -50,6 +51,7 @@ def main(argv: list[str] | None = None) -> None:
     assisted = DecisionEngine(
         backend=args.backend,
         jev=args.jev,
+        cloudflare=args.cloudflare,
         ollama_model=args.ollama_model,
         ollama_url=args.ollama_url,
         ollama_timeout_ms=args.ollama_timeout_ms,

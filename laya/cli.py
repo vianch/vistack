@@ -16,6 +16,10 @@ from .schema import DECISION_TYPES
 from .server import serve
 
 
+CLOUDFLARE_HELP = (
+    "opt into Cloudflare Workers AI clef-flash (CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID), "
+    "held under the free daily Neurons by VISTACK_LAYA_CLOUDFLARE_DAILY_NEURONS, default 9000"
+)
 OLLAMA_MODEL_HELP = (
     "local Ollama decision model, or none to turn the tier off. Supported: "
     + "; ".join(describe(model) for model in OLLAMA_MODELS.values())
@@ -41,6 +45,7 @@ def _engine(args: argparse.Namespace) -> DecisionEngine:
         backend=args.backend if enabled else "deterministic",
         jev=settings.jev if args.jev is None else args.jev,
         jev_model=args.jev_model or settings.jev_model,
+        cloudflare=settings.cloudflare if args.cloudflare is None else args.cloudflare,
         ollama_model=args.ollama_model or settings.ollama_model,
         ollama_url=args.ollama_url or settings.ollama_url,
         ollama_keep_alive=args.ollama_keep_alive or settings.ollama_keep_alive,
@@ -67,6 +72,7 @@ def _add_runtime_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--fallback", choices=FALLBACKS, help="tiers after the primary; none keeps the primary only")
     parser.add_argument("--jev", action=argparse.BooleanOptionalAction, default=None, help="opt into hosted TypeSafe Jev")
     parser.add_argument("--jev-model", help="Jev model, default jev-latest")
+    parser.add_argument("--cloudflare", action=argparse.BooleanOptionalAction, default=None, help=CLOUDFLARE_HELP)
     parser.add_argument("--ollama-model", type=ollama_model_argument, help=OLLAMA_MODEL_HELP)
     parser.add_argument("--ollama-url", help="Ollama server; defaults to OLLAMA_HOST, then http://127.0.0.1:11434")
     parser.add_argument("--ollama-keep-alive", help="how long Ollama keeps the model loaded, default 30m")
@@ -123,12 +129,16 @@ def build_parser() -> argparse.ArgumentParser:
     toggle.add_argument("action", choices=("on", "off", "status"))
     toggle.add_argument("--config", help="switch file; defaults to the host's state root")
     toggle.add_argument("--jev", action=argparse.BooleanOptionalAction, default=None, help="on: opt this project into Jev")
+    toggle.add_argument("--cloudflare", action=argparse.BooleanOptionalAction, default=None, help="on: " + CLOUDFLARE_HELP)
     toggle.add_argument("--ollama-model", type=ollama_model_argument, help="on: " + OLLAMA_MODEL_HELP)
     toggle.add_argument("--ollama-url", help="on: the Ollama server URL")
     toggle.add_argument(
         "--probe",
         action="store_true",
-        help="status: one tiny Jev call to prove key and credits (billed), and one local Ollama decision (free)",
+        help=(
+            "status: one tiny Jev call to prove key and credits (billed), one Cloudflare call inside the free daily Neurons, "
+            "and one local Ollama decision (free)"
+        ),
     )
     return parser
 
@@ -138,6 +148,7 @@ def _configured_engine(settings: Settings) -> DecisionEngine:
         backend="auto" if settings.enabled else "deterministic",
         jev=settings.jev,
         jev_model=settings.jev_model,
+        cloudflare=settings.cloudflare,
         ollama_model=settings.ollama_model,
         ollama_url=settings.ollama_url,
         ollama_keep_alive=settings.ollama_keep_alive,
@@ -174,6 +185,36 @@ def _ollama_status(engine: DecisionEngine) -> dict:
     return report
 
 
+def _cloudflare_status(engine: DecisionEngine) -> dict:
+    """The local ledger and which credentials are set, never their values; sends nothing."""
+
+    from .cloudflare import MIN_CONFIDENCE, MODEL_ID, NeuronBudget, cloudflare_credentials, daily_cap, missing_credentials
+
+    token, account = cloudflare_credentials()
+    report = {
+        "enabled": engine.cloudflare,
+        "token": bool(token),
+        "account": bool(account),
+        "model": MODEL_ID,
+        "min_confidence": MIN_CONFIDENCE,
+        "budget": None,
+    }
+    hints = []
+    try:
+        cap: int | None = daily_cap()
+    except ValueError as exc:
+        cap = None
+        hints.append(str(exc))
+    if account and cap is not None:
+        report["budget"] = NeuronBudget(account, cap=cap).snapshot()
+    missing = missing_credentials(token, account)
+    if engine.cloudflare and missing:
+        hints.append(f"export {missing}")
+    if hints:
+        report["hint"] = "; ".join(hints)
+    return report
+
+
 def _preload_ollama(engine: DecisionEngine) -> dict:
     """Load the configured model now so the first fork does not pay for it. A failed load is
     reported, never raised."""
@@ -199,7 +240,7 @@ def _obsolete_hint(settings: Settings) -> str | None:
 
 
 def _status(args: argparse.Namespace) -> dict:
-    from .system_one import default_status_path, jev_api_key, probe_jev, probe_ollama, read_status
+    from .system_one import default_status_path, jev_api_key, probe_cloudflare, probe_jev, probe_ollama, read_status
 
     settings = read_settings(args.config)
     engine = _configured_engine(settings)
@@ -212,6 +253,7 @@ def _status(args: argparse.Namespace) -> dict:
         "consult": engine.consult,
         "python": sys.executable,
         "jev": {"enabled": engine.jev, "key": bool(jev_api_key()), "refused": refused or None},
+        "cloudflare": _cloudflare_status(engine),
         "fallback": settings.fallback,
         "ollama": _ollama_status(engine),
         "obsolete": {"fields": list(settings.obsolete_fields), "env": list(settings.obsolete_env)},
@@ -230,6 +272,10 @@ def _status(args: argparse.Namespace) -> dict:
         # A key alone is not consent to a billed call that sends state off the machine.
         if engine.jev:
             report["jev"]["probe"] = probe_jev()
+        if engine.cloudflare:
+            probe = probe_cloudflare()
+            # Rebuilt after the call, so the budget shows what the probe spent.
+            report["cloudflare"] = {**_cloudflare_status(engine), "probe": probe}
         if engine.ollama_model:
             report["ollama"]["probe"] = probe_ollama(engine.ollama_model, engine.ollama_url)
     return report
@@ -251,7 +297,12 @@ def main(argv: list[str] | None = None) -> None:
     if args.command in {"decisions", "laya"}:
         if args.action in {"on", "off"}:
             path = write_enabled(
-                args.config, args.action == "on", jev=args.jev, ollama_model=args.ollama_model, ollama_url=args.ollama_url
+                args.config,
+                args.action == "on",
+                jev=args.jev,
+                cloudflare=args.cloudflare,
+                ollama_model=args.ollama_model,
+                ollama_url=args.ollama_url,
             )
             preload = _preload_ollama(_configured_engine(read_settings(path))) if args.action == "on" else {}
             report = {**_status(argparse.Namespace(config=str(path), probe=False)), "config": str(path)}

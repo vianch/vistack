@@ -30,7 +30,8 @@ export VISTACK_ROOT=/path/to/vistack
 Alternatively, copy `scripts/vistack-decision.py`, the `laya/` directory, and
 `skills/qa-video/` into the project. The QA video tool also needs Playwright in the
 project's `node_modules`.
-The bridge stores the toggle at `.codex/vistack/laya.json` in the consuming project.
+The bridge stores the toggle at `.codex/vistack/decisions.json` in the consuming project; a
+`laya.json` written there before 0.23.0 is read once and replaced.
 
 OpenCode will load the file at startup. The bridge uses Node/Bun built-ins and the official
 `@opencode-ai/plugin` helper. It starts the Python helper per tool call, so the deterministic

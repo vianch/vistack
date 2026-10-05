@@ -45,7 +45,7 @@ It exposes `vistack_decision`, `vistack_decisions_toggle`, and `vistack_qa_video
 calls the typed decision API. The second runs the same `decisions on`, `decisions off`, and
 `decisions status` commands used by the other hosts, and passes `ollama_model` to
 `decisions on` as `--ollama-model`. The default is on, but the bridge still falls back to
-deterministic policy when Jev or the Ollama model is unavailable.
+deterministic policy when Jev, Cloudflare, or the Ollama model is unavailable.
 
 `vistack_qa_video` runs `skills/qa-video/scripts/qa-video.mjs` with `command` set to `doctor`,
 `record`, `finish`, or `check`, and `args_json` holding the CLI arguments as a JSON array.
@@ -59,4 +59,4 @@ without recording its owner and stop condition.
 
 The bridge needs the helper, the `laya/` package, and `skills/qa-video/`. When the bridge is
 copied into a different project, set `VISTACK_ROOT=/path/to/vistack` or copy those three paths
-into the consuming project. Its toggle file remains project-local at `.codex/vistack/laya.json`.
+into the consuming project. Its toggle file remains project-local at `.codex/vistack/decisions.json`.

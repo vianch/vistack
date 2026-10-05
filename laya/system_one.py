@@ -1,8 +1,9 @@
-"""HTTP adapters for the System One protocol: a local Ollama server and hosted TypeSafe Jev.
+"""HTTP adapters for the System One protocol: a local Ollama server, hosted TypeSafe Jev, and
+Cloudflare Workers AI.
 
-Both speak ``POST /v1/systemone`` with ``{state, model, questions}`` and return typed
-``answers``. Keeping the adapters HTTP-only means the viStack plugin installs neither Ollama
-nor the TypeSafe SDK into a consuming repository.
+Each takes ``{state, model, questions}`` and returns typed ``answers``: Ollama and Jev at
+``POST /v1/systemone``, Workers AI at its model's run URL. Keeping the adapters HTTP-only means
+the viStack plugin installs neither Ollama nor an SDK into a consuming repository.
 """
 
 from __future__ import annotations
@@ -17,6 +18,25 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
+from .cloudflare import (
+    BODY_MODEL,
+    DAILY_ALLOCATION_EXCEEDED,
+    DEFAULT_TIMEOUT_MS,
+    MAX_STATE_CHARS,
+    MIN_CONFIDENCE,
+    PAID_PLAN_REQUIRED,
+    REFUSAL_CODES,
+    REFUSAL_COOLDOWN_S,
+    REFUSAL_HTTP_STATUSES,
+    NeuronBudget,
+    Reservation,
+    cloudflare_credentials,
+    daily_cap,
+    estimate_neurons,
+    missing_credentials,
+    neurons,
+    run_url,
+)
 from .config import cache_dir
 from .errors import ContextOverflow, LayaUnavailable
 from .ollama_models import OLLAMA_MODELS, supported_ollama_model, unsupported_reason
@@ -106,13 +126,17 @@ def _answerable(questions: Mapping[str, Mapping[str, Any]]) -> dict[str, Mapping
     }
 
 
-def _error_text(exc: HTTPError) -> str:
+def _error_body(exc: HTTPError) -> str:
     try:
-        raw = exc.read().decode("utf-8", "replace") if exc.fp is not None else ""
+        return exc.read().decode("utf-8", "replace") if exc.fp is not None else ""
     except OSError:
-        raw = ""
+        return ""
     finally:
         exc.close()
+
+
+def _error_text(exc: HTTPError) -> str:
+    raw = _error_body(exc)
     try:
         value = json.loads(raw)
     except ValueError:
@@ -130,6 +154,7 @@ def _fetch_json(url: str, payload: Mapping[str, Any] | None = None, *, timeout_s
 
 class SystemOneBackend:
     name = "system-one"
+    endpoint = "/v1/systemone"
 
     def __init__(
         self,
@@ -195,7 +220,7 @@ class SystemOneBackend:
         answerable = _answerable(questions)
         if not answerable:
             raise LayaUnavailable("no question has two or more options")
-        result = self._send("/v1/systemone", self._body(state, answerable), timeout_s=max(self.timeout_ms, 1) / 1000.0)
+        result = self._send(self.endpoint, self._body(state, answerable), timeout_s=max(self.timeout_ms, 1) / 1000.0)
         if not isinstance(result, dict) or not isinstance(result.get("answers"), dict):
             raise LayaUnavailable(f"{self.name} returned a result without an answers object")
         return result
@@ -291,6 +316,106 @@ class JevBackend(SystemOneBackend):
         )
 
 
+def _cloudflare_error(value: Any) -> tuple[int | None, str]:
+    """The first ``errors[]`` entry of a Workers AI envelope: its code and message."""
+
+    errors = value.get("errors") if isinstance(value, dict) else None
+    first = next((item for item in errors if isinstance(item, dict)), {}) if isinstance(errors, list) else {}
+    code = first.get("code")
+    message = first.get("message")
+    return (
+        code if isinstance(code, int) and not isinstance(code, bool) else None,
+        " ".join(message.split())[:MAX_ERROR_CHARS] if isinstance(message, str) else "",
+    )
+
+
+class CloudflareBackend(SystemOneBackend):
+    """Workers AI ``@cf/cloudflare/clef-flash``. Sends the bounded, redacted state to Cloudflare,
+    so it is opt-in only, and every request first reserves its Neurons in the daily ledger: a
+    request that could cross the cap, or that follows a refusal, is never sent."""
+
+    name = "cloudflare"
+    endpoint = ""
+    max_state_chars = MAX_STATE_CHARS
+
+    def __init__(
+        self,
+        *,
+        api_token: str,
+        account_id: str,
+        cap: int | None = None,
+        timeout_ms: int = DEFAULT_TIMEOUT_MS,
+        min_confidence: float = MIN_CONFIDENCE,
+    ) -> None:
+        super().__init__(run_url(account_id), model=BODY_MODEL, timeout_ms=timeout_ms, api_key=api_token)
+        self.min_confidence = min_confidence
+        self.budget = NeuronBudget(account_id, cap=daily_cap() if cap is None else cap)
+        self._secrets = (api_token, account_id)
+
+    def _redact(self, text: str) -> str:
+        for secret in self._secrets:
+            if secret:
+                text = text.replace(secret, "<redacted>")
+        return text
+
+    def _settle(self, reservation: Reservation, status: int, code: int | None) -> bool:
+        """Release what Cloudflare refused without running; ``True`` when the refusal will hold."""
+
+        if code == DAILY_ALLOCATION_EXCEEDED:
+            self.budget.release(reservation)
+            self.budget.mark_exhausted()
+            return True
+        if status in REFUSAL_HTTP_STATUSES or code in REFUSAL_CODES:
+            self.budget.release(reservation)
+            self.budget.mark_refused(status, code)
+            return True
+        # A rate limit or capacity 429 passes, and the engine's breaker absorbs a burst. A 5xx
+        # or a 200 that reports failure may have run, so its reservation stays charged.
+        if 400 <= status < 500:
+            self.budget.release(reservation)
+        return False
+
+    def _failure(self, status: int, code: int | None, message: str, held: bool) -> LayaUnavailable:
+        text = f"Cloudflare returned HTTP {status}" + (f", code {code}" if code is not None else "") + (f": {message}" if message else "")
+        if code == DAILY_ALLOCATION_EXCEEDED:
+            text += "; no request until 00:00 UTC"
+        elif code == PAID_PLAN_REQUIRED:
+            text += "; the model needs Workers Paid, which costs money"
+        if held and code != DAILY_ALLOCATION_EXCEEDED:
+            text += f"; skipped for {REFUSAL_COOLDOWN_S / 60:.0f} min"
+        return LayaUnavailable(self._redact(text))
+
+    def _send(self, path: str, payload: Mapping[str, Any] | None, *, timeout_s: float) -> Any:
+        body = json.dumps(dict(payload or {}), ensure_ascii=False).encode("utf-8")
+        reservation = self.budget.reserve(estimate_neurons(body))
+        # An InferenceTimeout from the engine's alarm passes through: the request may have run,
+        # so its reservation stays charged.
+        try:
+            reply = _fetch_json(f"{self.url}{path}", payload, timeout_s=timeout_s, headers={"authorization": f"Bearer {self.api_key}"})
+        except HTTPError as exc:
+            raw = _error_body(exc)
+            try:
+                code, message = _cloudflare_error(json.loads(raw))
+            except ValueError:
+                code, message = None, ""
+            message = message or " ".join(raw.split())[:MAX_ERROR_CHARS]
+            raise self._failure(exc.code, code, message, self._settle(reservation, exc.code, code)) from exc
+        except (OSError, URLError, TimeoutError, ValueError) as exc:
+            raise LayaUnavailable(self._redact(f"Cloudflare Workers AI is unreachable: {getattr(exc, 'reason', None) or exc}")) from exc
+        envelope = reply if isinstance(reply, dict) else {}
+        result = envelope.get("result")
+        answered = result if isinstance(result, dict) and isinstance(result.get("answers"), dict) else envelope
+        if envelope.get("success") is False or not isinstance(answered.get("answers"), dict):
+            code, message = _cloudflare_error(envelope)
+            raise self._failure(200, code, message or "no answers object", self._settle(reservation, 200, code))
+        usage = answered.get("usage") if isinstance(answered.get("usage"), dict) else envelope.get("usage")
+        if isinstance(usage, dict):
+            tokens = [value for value in (usage.get("input_tokens"), usage.get("output_tokens")) if isinstance(value, int)]
+            if tokens:
+                self.budget.reconcile(reservation, neurons(sum(tokens)))
+        return answered
+
+
 def _version(text: Any) -> tuple[int, ...] | None:
     match = re.match(r"(\d+)\.(\d+)\.(\d+)", text) if isinstance(text, str) else None
     return tuple(int(part) for part in match.groups()) if match else None
@@ -356,6 +481,21 @@ def probe_jev() -> dict[str, Any]:
     try:
         JevBackend(api_key=key, timeout_ms=5000).predict(PROBE_STATE, PROBE_QUESTIONS)
     except LayaUnavailable as exc:
+        return {"ok": False, "reason": str(exc)}
+    return {"ok": True, "latency_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+
+def probe_cloudflare() -> dict[str, Any]:
+    """One single-question call through the Neuron ledger: proves the token, the account, and
+    the plan for a fraction of a Neuron, and is refused unsent once the cap is reached."""
+
+    token, account = cloudflare_credentials()
+    if not token or not account:
+        return {"ok": False, "reason": missing_credentials(token, account)}
+    started = time.perf_counter()
+    try:
+        CloudflareBackend(api_token=token, account_id=account).predict(PROBE_STATE, PROBE_QUESTIONS)
+    except (LayaUnavailable, ValueError) as exc:
         return {"ok": False, "reason": str(exc)}
     return {"ok": True, "latency_ms": round((time.perf_counter() - started) * 1000, 1)}
 

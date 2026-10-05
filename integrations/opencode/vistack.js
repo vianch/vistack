@@ -84,7 +84,7 @@ export const ViStackPlugin = async ({ directory }) => {
   // bridge can point at the viStack checkout through VISTACK_ROOT.
   const root = process.env.VISTACK_ROOT || directory
   const helper = join(root, "scripts", "vistack-decision.py")
-  const config = join(directory, ".codex", "vistack", "laya.json")
+  const config = join(directory, ".codex", "vistack", "decisions.json")
   const qaVideo = join(root, "skills", "qa-video", "scripts", "qa-video.mjs")
   return {
     tool: {

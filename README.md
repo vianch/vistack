@@ -10,6 +10,8 @@ playbook, one role phase per slice, stopping at merge-ready.
 `vistack` is the identifier you install and invoke. **viStack** is what it is called in
 prose. Same thing. It runs on Claude Code, Codex, Grok Build, and OpenCode.
 
+**Version:** `0.23.0`
+
 **Contents:** [install](#install) · [usage](#usage) ·
 [QA evidence: screenshots and video](#qa-evidence-screenshots-and-video) ·
 [what it gives you](#what-it-gives-you) ·
@@ -26,7 +28,8 @@ manifest per host and keeps the same playbooks, principles, and skill names on a
 
 ### Host manifests
 
-Each host manifest carries the version; the README does not repeat it.
+Each host manifest carries the version, and the version line at the top of this README
+repeats it. `scripts/check-playbooks.mjs` fails when any of them disagree.
 
 | Host | Manifest |
 |---|---|
@@ -329,7 +332,7 @@ The data flow is deliberately one-way:
 task and viStack state
         -> DecisionContext
         -> deterministic policy          sharp -> runs in code
-        -> split forks only: Jev (opt-in) -> Ollama clef-flash (local, opt-in)
+        -> split forks only: Jev (opt-in) -> Cloudflare clef-flash (opt-in, free daily Neurons) -> Ollama clef-flash (local, opt-in)
         -> safety validation             sharp -> runs in code
         -> advisory Decision             split -> the main session decides
         -> existing viStack rule and coordinator
@@ -356,7 +359,7 @@ Turn it back on:
 python3 scripts/vistack-decision.py decisions on
 ```
 
-For Claude-hosted state, use `--config .claude/vistack/laya.json`. For a single request,
+For Claude-hosted state, use `--config .claude/vistack/decisions.json`. For a single request,
 pass `--disable-laya`. For an environment-wide emergency switch, set
 `VISTACK_LAYA_ENABLED=0`. All of these switches leave the deterministic viStack policy
 active. They only disable optional model refinement.
@@ -404,7 +407,16 @@ required for the decision layer.
 Hosted [Jev](https://docs.typesafe.ai/models) settled 7 of 10 labelled split forks, none
 wrong, in about 350 ms. It is opt-in because it sends the redacted decision state to TypeSafe: `decisions on --jev` for a project or
 `VISTACK_LAYA_JEV=1` for a shell, with the key in `TYPESAFE_API_KEY` or `TYPESAFE_KEY`. An
-opted-in Jev leads the ladder, and the local tier answers when Jev is refused or offline.
+opted-in Jev leads the ladder, and the next tier answers when Jev is refused or offline.
+
+Cloudflare Workers AI serves the same model as `@cf/cloudflare/clef-flash`. It is opt-in
+because it sends the redacted decision state to Cloudflare: `decisions on --cloudflare` for a
+project or `VISTACK_LAYA_CLOUDFLARE=1` for a shell, with `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID` in the environment. Credentials alone do not opt in. It stays inside
+the 10,000 free Neurons a day (default cap 9,000), and at the cap split forks go to the local
+tier. One live decision cost about 1.8 Neurons. Its 0.85 floor is inherited from the Ollama
+measurements and not yet measured on Workers AI:
+[`docs/guide/decision-engine.md`](docs/guide/decision-engine.md#hosted-fork-tier-cloudflare-workers-ai).
 
 [Ollama](https://ollama.com) runs the local tier with no key, and the state never leaves the
 machine. The one supported model is [`clef-flash`](https://ollama.com/library/clef-flash),
@@ -416,13 +428,13 @@ python3 scripts/vistack-decision.py decisions on --ollama-model clef-flash
 ```
 
 `/vistack:decisions-on` asks whether to use it and pulls it when you pick it. It answers the
-split forks Jev left unsettled, and it accepts an answer only at 0.85 confidence or higher,
+split forks the cloud tiers left unsettled, and it accepts an answer only at 0.85 confidence or higher,
 its own measured threshold. Measured end to end on the 108 labelled scenarios, on an Apple M3
 Pro with 36 GB, it settled 7 of 10 split forks with none wrong, at about 1 s per fork it
 handles. It holds 14.2 GB of memory while loaded and takes about 7 s to load, which
 `decisions on` pays up front. The guide has the table, the threshold evidence, and the
 confidence-scale caveat:
-[`docs/guide/laya-decision-engine.md`](docs/guide/laya-decision-engine.md#local-fork-tier-ollama).
+[`docs/guide/decision-engine.md`](docs/guide/decision-engine.md#local-fork-tier-ollama).
 
 Each decision can be recorded in local JSONL history. Use `override` when a human changes a
 recommendation, `outcome` when the lane finishes, and `feedback` to find repeated overrides:
@@ -436,7 +448,7 @@ python3 scripts/vistack-decision.py feedback
 ```
 
 Feedback produces review proposals; it never edits `skills/vistack/SKILL.md` automatically.
-Use [`docs/guide/laya-decision-engine.md`](docs/guide/laya-decision-engine.md) for the full
+Use [`docs/guide/decision-engine.md`](docs/guide/decision-engine.md) for the full
 schema, protocol references, measurements, failure behavior, and extension procedure.
 
 ### Host integrations
@@ -723,7 +735,7 @@ Semver in [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json):
 
 The Codex manifest at [`.codex-plugin/plugin.json`](.codex-plugin/plugin.json) and the Grok
 manifest at [`.grok-plugin/plugin.json`](.grok-plugin/plugin.json) carry the same release
-version. Keep all three aligned. Codex cachebusters are added only to the Codex manifest
+version. Keep all three and the README version line aligned. Codex cachebusters are added only to the Codex manifest
 during local iteration and do not replace the release semver.
 
 | Bump | For |

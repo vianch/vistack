@@ -43,9 +43,9 @@ function runPython(directory, arguments_, input, timeoutMs = 3000) {
   })
 }
 
-const TOGGLE_ACTIONS = ["on", "off", "status", "clef-start", "clef-stop"]
-// clef-stop waits up to 10 s for the server to exit after SIGTERM.
-const TOGGLE_TIMEOUT_MS = { "clef-stop": 15000 }
+const TOGGLE_ACTIONS = ["on", "off", "status"]
+// `on` preloads the Ollama model: about 7 s cold for clef-flash, within a 60 s load budget.
+const TOGGLE_TIMEOUT_MS = { on: 65000 }
 
 const QA_VIDEO_COMMANDS = ["doctor", "record", "finish", "check"]
 
@@ -106,17 +106,13 @@ export const ViStackPlugin = async ({ directory }) => {
         },
       }),
       vistack_decisions_toggle: tool({
-        description: "Turn the default-on fork-layer decision models on, off, inspect their status, or start and stop the local Clef server.",
+        description: "Turn the default-on fork-layer decision models on or off, or inspect their status.",
         args: {
           action: tool.schema.string().describe(`One of: ${TOGGLE_ACTIONS.join(", ")}`),
           ollama_model: tool.schema
             .string()
             .optional()
-            .describe("Ollama decision model tag, or none; used only when action is on"),
-          clef_model: tool.schema
-            .string()
-            .optional()
-            .describe("Clef model, Cloudflare/clef-flash or a local directory, or none; used only when action is on"),
+            .describe("Ollama decision model: clef-flash, or none; used only when action is on"),
         },
         async execute(args) {
           if (!TOGGLE_ACTIONS.includes(args.action)) {
@@ -125,9 +121,6 @@ export const ViStackPlugin = async ({ directory }) => {
           const command = [helper, "decisions", args.action, "--config", config]
           if (args.action === "on" && args.ollama_model) {
             command.push("--ollama-model", args.ollama_model)
-          }
-          if (args.action === "on" && args.clef_model) {
-            command.push("--clef-model", args.clef_model)
           }
           return await runPython(directory, command, "", TOGGLE_TIMEOUT_MS[args.action])
         },

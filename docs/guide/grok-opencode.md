@@ -42,11 +42,10 @@ loads an npm package named in `opencode.json`. The native bridge is at
 `integrations/opencode/README.md`.
 
 It exposes `vistack_decision`, `vistack_decisions_toggle`, and `vistack_qa_video`. The first
-calls the typed decision API. The second runs the same `decisions on`, `decisions off`,
-`decisions status`, `decisions clef-start`, and `decisions clef-stop` commands used by the other
-hosts, and passes `ollama_model` and `clef_model` to `decisions on` as `--ollama-model` and
-`--clef-model`. The default is on, but the bridge still falls back to deterministic policy when
-a model, its server, or the MLX runtime is unavailable.
+calls the typed decision API. The second runs the same `decisions on`, `decisions off`, and
+`decisions status` commands used by the other hosts, and passes `ollama_model` to
+`decisions on` as `--ollama-model`. The default is on, but the bridge still falls back to
+deterministic policy when Jev or the Ollama model is unavailable.
 
 `vistack_qa_video` runs `skills/qa-video/scripts/qa-video.mjs` with `command` set to `doctor`,
 `record`, `finish`, or `check`, and `args_json` holding the CLI arguments as a JSON array.

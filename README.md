@@ -24,14 +24,16 @@ prose. Same thing. It runs on Claude Code, Codex, Grok Build, and OpenCode.
 viStack supports Claude Code, Codex, Grok Build, and OpenCode. The repository carries a
 manifest per host and keeps the same playbooks, principles, and skill names on all of them.
 
-### Current versions
+### Host manifests
 
-| Host | Version | Manifest |
-|---|---:|---|
-| Claude Code | `0.21.0` | `.claude-plugin/plugin.json` |
-| Codex | `0.21.0` | `.codex-plugin/plugin.json` |
-| Grok Build | `0.21.0` | `.grok-plugin/plugin.json` |
-| OpenCode | follows the checkout | `integrations/opencode/vistack.js` |
+Each host manifest carries the version; the README does not repeat it.
+
+| Host | Manifest |
+|---|---|
+| Claude Code | `.claude-plugin/plugin.json` |
+| Codex | `.codex-plugin/plugin.json` |
+| Grok Build | `.grok-plugin/plugin.json` |
+| OpenCode | `integrations/opencode/vistack.js` (follows the checkout) |
 
 ### Claude Code
 
@@ -327,7 +329,7 @@ The data flow is deliberately one-way:
 task and viStack state
         -> DecisionContext
         -> deterministic policy          sharp -> runs in code
-        -> split forks only: Jev (opt-in) -> Clef (local) -> Ollama (local) -> Laya-MLX -> Kev -> host CLI
+        -> split forks only: Jev (opt-in) -> Ollama clef-flash (local, opt-in)
         -> safety validation             sharp -> runs in code
         -> advisory Decision             split -> the main session decides
         -> existing viStack rule and coordinator
@@ -339,8 +341,7 @@ forks reach the main session.
 
 The engine is enabled by default. Default-on means the decision hook is allowed to run; it
 does not mean a model download or cloud request happens automatically. With no configured
-model, `auto` returns the deterministic policy. With `laya-mlx` and a local checkpoint
-configured, the MLX agent is loaded lazily and reused by the long-lived JSONL server.
+model, `auto` returns the deterministic policy.
 
 Turn refinement off for the current consuming project:
 
@@ -396,72 +397,32 @@ To reduce latency for repeated decisions, run one resident process:
 python3 scripts/vistack-decision.py serve
 ```
 
-The optional MLX runtime is installed into its own venv on Apple Silicon:
+A missing model, an unreachable server, a malformed result, a timeout, a low-confidence
+result, or a failed safety gate all return the deterministic fallback. No cloud LLM is
+required for the decision layer.
 
-```bash
-python3 scripts/vistack-decision.py decisions setup      # or /vistack:laya-setup
-export VISTACK_LAYA_MODEL=convaiinnovations/laya
-```
-
-The setup downloads the weights once; subsequent inference is local, and the entry scripts
-switch to that venv on their own. A missing runtime, bad checkpoint, malformed result,
-timeout, low-confidence result, or failed safety gate all return the deterministic fallback.
-No cloud LLM is required for the decision layer.
-
-Hosted [Jev](https://docs.typesafe.ai/models) is the strongest split-fork reader measured so
-far — 7 of 10 labelled split forks settled, none wrong, in about 350 ms — and it is opt-in
-because it sends the redacted decision state to TypeSafe: `decisions on --jev` for a project or
+Hosted [Jev](https://docs.typesafe.ai/models) settled 7 of 10 labelled split forks, none
+wrong, in about 350 ms. It is opt-in because it sends the redacted decision state to TypeSafe: `decisions on --jev` for a project or
 `VISTACK_LAYA_JEV=1` for a shell, with the key in `TYPESAFE_API_KEY` or `TYPESAFE_KEY`. An
-opted-in Jev leads the ladder, and the local tiers answer when Jev is refused or
-offline. See the guide for the checkpoint comparison.
+opted-in Jev leads the ladder, and the local tier answers when Jev is refused or offline.
 
-[Clef-flash](https://huggingface.co/Cloudflare/clef-flash) is Cloudflare's 9B decision model
-(Apache-2.0). It speaks the same System One protocol and runs on this machine, with no key.
-Its 19 GB of weights load once into a resident loopback server:
+[Ollama](https://ollama.com) runs the local tier with no key, and the state never leaves the
+machine. The one supported model is [`clef-flash`](https://ollama.com/library/clef-flash),
+Cloudflare's 9B System One decision model, which needs Ollama 0.35.1 or newer:
 
 ```bash
-python3 scripts/vistack-decision.py decisions setup --clef        # venv + 19 GB download, pinned revision
-python3 scripts/vistack-decision.py decisions on --clef-model Cloudflare/clef-flash
-python3 scripts/vistack-decision.py decisions clef-start --wait 180
+ollama pull clef-flash                                              # about 11 GB
+python3 scripts/vistack-decision.py decisions on --ollama-model clef-flash
 ```
 
-`/vistack:decisions-on` asks about Clef along with the Ollama model. Clef answers the split
-forks Jev left unsettled, and it accepts an answer only at 0.85 confidence or higher, its own
-measured threshold. On the 108 labelled scenarios, measured end to end:
-
-- Clef alone settled 8 of 10 split forks with none wrong; `nimble` alone settled 8 with one
-  wrong.
-- Jev, then Clef settled 8 of 10 with none wrong.
-
-On an Apple M3 Pro, Clef takes 1 to 2 s per fork it handles and holds about 20 GB of GPU
-memory. On a machine under 48 GB, run Clef or `nimble`, not both: with both resident, the
-calls time out. The guide has the measurements, the pinned-revision
-rule, and the memory note:
-[`docs/guide/laya-decision-engine.md`](docs/guide/laya-decision-engine.md#local-fork-tier-clef).
-
-[Ollama](https://ollama.com/library/nimble) serves the same System One protocol locally, with
-no key, and the state never leaves the machine. Opt in with
-`decisions on --ollama-model nimble` (or `tev1:0.8b`, or `none` to turn it off). It answers
-any split fork Jev and Clef left unsettled. Measured on the 108 labelled scenarios, Jev then
-`nimble` settled 8 of 10 split forks with none wrong, at 1 to 4 s per fork `nimble` handles. The guide
-has the table, the load and memory costs, and the confidence-scale caveat:
+`/vistack:decisions-on` asks whether to use it and pulls it when you pick it. It answers the
+split forks Jev left unsettled, and it accepts an answer only at 0.85 confidence or higher,
+its own measured threshold. Measured end to end on the 108 labelled scenarios, on an Apple M3
+Pro with 36 GB, it settled 7 of 10 split forks with none wrong, at about 1 s per fork it
+handles. It holds 14.2 GB of memory while loaded and takes about 7 s to load, which
+`decisions on` pays up front. The guide has the table, the threshold evidence, and the
+confidence-scale caveat:
 [`docs/guide/laya-decision-engine.md`](docs/guide/laya-decision-engine.md#local-fork-tier-ollama).
-
-If MLX is not available, [Kev](https://github.com/jaredpalmer/kev) is the recommended local
-fallback. Kev uses the same typed decision primitives and serves on localhost. Start its
-server separately, then configure `--kev-url http://127.0.0.1:8009`; with `--fallback kev`,
-the order is Laya-MLX, Kev, and deterministic policy, after Jev when it is opted in. Kev is
-a separate PyTorch service, so it remains optional and does not enlarge the normal viStack install. Its 0.8B checkpoint is
-the sensible latency-first starting point on Apple Silicon; benchmark the exact checkpoint
-and machine before making it a resident service.
-
-If both local backends are unavailable, a cost-aware host fallback is available but must be
-explicitly configured. Claude uses the current active Haiku model; Codex defaults to a configurable
-low-effort `gpt-5.4-mini` profile. The adapter uses read-only/plan execution, one turn, typed
-JSON validation, and a budget/timeout; it never becomes the executor. Set
-`VISTACK_LAYA_FALLBACK=host-llm`, `VISTACK_LAYA_HOST=claude|codex`, and optionally
-`VISTACK_LAYA_HOST_MODEL=...` for a long-lived server. `decisions on` alone never creates a cloud
-request.
 
 Each decision can be recorded in local JSONL history. Use `override` when a human changes a
 recommendation, `outcome` when the lane finishes, and `feedback` to find repeated overrides:
@@ -476,12 +437,12 @@ python3 scripts/vistack-decision.py feedback
 
 Feedback produces review proposals; it never edits `skills/vistack/SKILL.md` automatically.
 Use [`docs/guide/laya-decision-engine.md`](docs/guide/laya-decision-engine.md) for the full
-schema, runtime research, benchmarks, failure behavior, and extension procedure.
+schema, protocol references, measurements, failure behavior, and extension procedure.
 
 ### Host integrations
 
-- Claude Code and Codex use the shared Python CLI and `decisions-on`, `decisions-off`,
-  `decisions-status`, and `laya-setup` commands. The Claude commands run the plugin's script
+- Claude Code and Codex use the shared Python CLI and the `decisions-on`, `decisions-off`,
+  and `decisions-status` commands. The Claude commands run the plugin's script
   through `${CLAUDE_PLUGIN_ROOT}`, so they work from any consuming project.
 - Grok Build support is declared in `.grok-plugin/plugin.json` and uses the same skills,
   agents, commands, and local decision switch. The xAI marketplace entry must be pinned to
@@ -593,6 +554,7 @@ files are the source of truth, so they are not restated here.
 | [`authoring-skill`](skills/vistack/playbooks/authoring-skill.md) | creating or modifying a workflow contract |
 | [`automate-me`](skills/vistack/playbooks/automate-me.md) | capturing working preferences in a reusable mode skill |
 | [`agent-design`](skills/vistack/playbooks/agent-design.md) | a new agent, bot, or subagent for Claude Code, Codex, or OpenCode |
+| [`correct`](skills/vistack/playbooks/correct.md) | agents keep repeating a mistake; make it impossible with a structure, type, lint, or test |
 | [`worktree-cleanup`](skills/vistack/playbooks/worktree-cleanup.md) | an evidence-based audit of stale worktrees |
 | [`html-report`](skills/vistack/playbooks/html-report.md) | the deliverable is a page: report, chart, diagram, timeline, board, toggle editor, design tokens |
 | [`session-pickup`](skills/vistack/playbooks/session-pickup.md) | resuming work whose session is gone; state file and ledger exist |
@@ -680,8 +642,9 @@ invokes a principle must name the decision the principle changed.
 
 Direct entries include [`overnight`](skills/overnight/SKILL.md),
 [`automate-me`](skills/automate-me/SKILL.md), [`design-agent`](skills/design-agent/SKILL.md),
-[`transcript-healthcheck`](skills/transcript-healthcheck/SKILL.md), and
-[`routine-healthcheck`](skills/routine-healthcheck/SKILL.md). How much design a change deserves:
+[`transcript-healthcheck`](skills/transcript-healthcheck/SKILL.md),
+[`routine-healthcheck`](skills/routine-healthcheck/SKILL.md), and [`correct`](skills/correct/SKILL.md)
+(`/vistack:correct`, operator-invoked). How much design a change deserves:
 [`docs/guide/design.md`](docs/guide/design.md). Editing a contract:
 [`docs/guide/writing-contracts.md`](docs/guide/writing-contracts.md).
 
@@ -824,7 +787,7 @@ codex plugin marketplace upgrade vistack
 codex plugin add vistack@vistack
 ```
 
-3. Confirm `vistack` reports version `0.21.0` and is enabled:
+3. Confirm `vistack` reports the version in `.claude-plugin/plugin.json` and is enabled:
 
 ```bash
 codex plugin list

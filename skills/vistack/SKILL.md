@@ -93,6 +93,7 @@ Once this skill starts, every later turn stays inside the open playbook.
 |---|---|
 | `babysit <slug>` or a monitor wake | Run one babysit pass, then return to the open playbook. Do not re-match. |
 | A request for a report, chart, diagram, flow, architecture view, or other page about the open run | Run `skills/html-report/SKILL.md` against the run's state and ledger, then return to the open playbook. Do not re-match. |
+| The operator corrects how an agent works, not what the work is | Fix the mistake in scope, add a `correction-recorded` ledger row, and propose `/vistack:correct` for that class in the next phase report. Do not re-match. |
 | Any other mid-run input | Continue the next unchecked playbook step. |
 | `new task` | Close the current run if safe, then return to the principles index and match again. |
 | A second unrelated request | Finish or run `pause-safely`, then wait for `new task`. |
@@ -152,6 +153,7 @@ the task list with `skip: <reason>`, and the reason gets a `step-skipped` ledger
 | `authoring-skill` | A SKILL.md or a workflow contract is being created or changed. |
 | `automate-me` | The user wants working preferences captured in a reusable mode skill. |
 | `agent-design` | A new agent, bot, or subagent is being designed for Claude Code, Codex, or OpenCode. |
+| `correct` | The operator wants a repeated agent mistake made impossible, or runs `/correct`. |
 
 Ties break toward the most specific route. A groomed ticket with no other signal is
 `autopilot-stack`. A large run the user will review later is `overnight` when the request

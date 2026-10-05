@@ -46,9 +46,9 @@ plugin root once, then for each of the two routines:
 2. Print the exact entry and its removal command.
 3. Write the entry.
 
-The entry runs `scripts/run-healthcheck.sh <routine> <host>` from the plugin root, which runs
-the host's headless CLI read-only and writes `~/.vistack/healthchecks/<routine>-<date>.md`
-only when the run printed something.
+The entry runs `scripts/run-healthcheck.sh <routine> <host>`, its path resolved from the plugin
+root. The script runs the host's headless CLI read-only and writes
+`~/.vistack/healthchecks/<routine>-<date>.md` only when the run printed something.
 
 | Routine | Cron | launchd `StartCalendarInterval` |
 |---|---|---|

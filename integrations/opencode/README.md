@@ -4,11 +4,10 @@ OpenCode loads JavaScript or TypeScript plugins from `.opencode/plugins/` or fro
 package. The bridge in `integrations/opencode/vistack.js` exposes three tools:
 
 - `vistack_decision` calls the local typed decision API.
-- `vistack_decisions_toggle` runs `decisions on`, `decisions off`, `decisions status`,
-  `decisions clef-start`, or `decisions clef-stop` for the current project. With `action` set
-  to `on`, the optional `ollama_model` and `clef_model` arguments are passed as
-  `--ollama-model` and `--clef-model`. `clef-start` returns at once while the 19 GB model
-  loads; call `status` until `clef.server.health.status` is `ready`.
+- `vistack_decisions_toggle` runs `decisions on`, `decisions off`, or `decisions status` for
+  the current project. With `action` set to `on`, the optional `ollama_model` argument
+  (`clef-flash` or `none`) is passed as `--ollama-model`. `on` also loads the Ollama model,
+  about 7 s cold, so its call may take that long.
 - `vistack_qa_video` runs the QA video script (`skills/qa-video/scripts/qa-video.mjs`) with
   `command` (`doctor`, `record`, `finish`, or `check`) and `args_json`, a JSON array of CLI
   arguments. Pass credentials through the environment, never in `args_json`. A step failure
@@ -35,8 +34,8 @@ The bridge stores the toggle at `.codex/vistack/laya.json` in the consuming proj
 
 OpenCode will load the file at startup. The bridge uses Node/Bun built-ins and the official
 `@opencode-ai/plugin` helper. It starts the Python helper per tool call, so the deterministic
-fallback remains available even when MLX is not installed. Use the Python JSONL server
-separately when repeated decisions need a resident MLX model.
+fallback remains available even when Ollama is not running. Use the Python JSONL server
+separately when repeated decisions should reuse one engine.
 
 The bridge is advisory. It does not grant permission to dispatch, merge, deploy, change
 secrets, delete data, or bypass viStack fences.

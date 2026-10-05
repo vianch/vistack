@@ -10,9 +10,8 @@ from unittest.mock import patch
 from urllib.error import HTTPError
 
 from laya.engine import DecisionEngine
-from laya.host_llm import HostLLMBackend, _extract_answers, _validate_answers
-from laya.mlx_backend import LayaUnavailable, split_model
-from laya.system_one import JevBackend, KevBackend, jev_api_key
+from laya.errors import LayaUnavailable
+from laya.system_one import JevBackend, jev_api_key
 
 
 def response(payload):
@@ -27,44 +26,12 @@ def response(payload):
     )()
 
 
-class OptionalBackendTests(unittest.TestCase):
-    def test_kev_adapter_accepts_system_one_response(self):
-        with patch("laya.system_one.urlopen", return_value=response({"answers": {"next": {"choice": "continue"}}})) as call:
-            result = KevBackend().predict({"phase": "implementing"}, {"next": {"type": "choice", "criteria": {"continue": "go", "block": "stop"}}})
-        self.assertIn("answers", result)
-        self.assertNotIn("authorization", call.call_args.args[0].headers)
-
-    def test_host_parser_accepts_claude_json_and_codex_jsonl(self):
-        answers = {"next": {"type": "choice", "choice": "continue", "confidence": 0.9}}
-        self.assertEqual(_extract_answers(json.dumps({"answers": answers}))["answers"], answers)
-        codex = json.dumps({"type": "item.completed", "item": {"text": json.dumps({"answers": answers})}})
-        self.assertEqual(_extract_answers(codex)["answers"], answers)
-
-    def test_host_parser_rejects_unavailable_choice(self):
-        questions = {"next": {"type": "choice", "criteria": {"continue": "keep going"}}}
-        with self.assertRaises(RuntimeError):
-            _validate_answers(
-                {"answers": {"next": {"type": "choice", "choice": "merge", "confidence": 1.0}}},
-                questions,
-            )
-
-    def test_host_profiles_choose_low_cost_defaults(self):
-        self.assertEqual(HostLLMBackend("claude").model, "claude-haiku-4-5-20251001")
-        self.assertEqual(HostLLMBackend("codex").model, "gpt-5.4-mini")
-        self.assertIn('model_reasoning_effort="low"', HostLLMBackend("codex")._command("prompt"))
-
-    def test_model_spec_selects_a_bundled_checkpoint(self):
-        self.assertEqual(split_model("convaiinnovations/laya"), ("convaiinnovations/laya", None))
-        self.assertEqual(split_model("convaiinnovations/laya/multilingual"), ("convaiinnovations/laya", "multilingual"))
-        self.assertEqual(split_model("/models/laya/english"), ("/models/laya/english", None))
-
-
 class JevTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.status = Path(self.directory.name) / "jev-status.json"
-        # The developer's shell may export a model, a Kev URL, or a key; none may leak in here.
-        cleared = ("TYPESAFE_API_KEY", "TYPESAFE_KEY", "VISTACK_LAYA_MODEL", "VISTACK_LAYA_KEV_URL", "VISTACK_LAYA_JEV", "VISTACK_LAYA_FALLBACK")
+        # The developer's shell may export an Ollama model or a key; none may leak in here.
+        cleared = ("TYPESAFE_API_KEY", "TYPESAFE_KEY", "VISTACK_LAYA_OLLAMA_MODEL", "VISTACK_LAYA_JEV", "VISTACK_LAYA_FALLBACK")
         self.environment = patch.dict(os.environ, {name: "" for name in cleared})
         self.environment.start()
 
@@ -121,12 +88,12 @@ class JevTests(unittest.TestCase):
         self.assertEqual((result.backend, result.fork), ("deterministic-fallback", "split"))
         self.assertIn("TYPESAFE", result.fallback_reason)
 
-    def test_opted_in_jev_leads_and_local_tiers_follow(self):
-        engine = DecisionEngine(backend="auto", model="configured", kev_url="http://127.0.0.1:8009", jev=True)
-        self.assertEqual([name for name, _ in engine.ladder()], ["jev", "laya-mlx", "kev"])
-        local = DecisionEngine(backend="auto", model="configured", kev_url="http://127.0.0.1:8009")
-        self.assertEqual([name for name, _ in local.ladder()], ["laya-mlx", "kev"])
-        self.assertEqual(DecisionEngine(backend="auto", model="configured", jev=True, fallback="none").ladder()[1:], [])
+    def test_opted_in_jev_leads_and_the_local_tier_follows(self):
+        engine = DecisionEngine(backend="auto", ollama_model="clef-flash", jev=True)
+        self.assertEqual([name for name, _ in engine.ladder()], ["jev", "ollama:clef-flash"])
+        local = DecisionEngine(backend="auto", ollama_model="clef-flash")
+        self.assertEqual([name for name, _ in local.ladder()], ["ollama:clef-flash"])
+        self.assertEqual(DecisionEngine(backend="auto", ollama_model="clef-flash", jev=True, fallback="none").ladder()[1:], [])
 
 
 class TypedAnswerTests(unittest.TestCase):
@@ -136,9 +103,9 @@ class TypedAnswerTests(unittest.TestCase):
                 self.questions = questions
                 return {"answers": answers}
 
-        engine = DecisionEngine(backend="mlx", model="configured")
-        engine._mlx = Backend()
-        return engine.decide(context), engine._mlx
+        engine = DecisionEngine(backend="ollama", ollama_model="clef-flash")
+        engine._backend = Backend()
+        return engine.decide(context), engine._backend
 
     def test_noul_without_confidence_uses_distance_from_even(self):
         context = {
@@ -160,6 +127,7 @@ class TypedAnswerTests(unittest.TestCase):
                 }
             },
             evaluate(ctx),
+            "ollama:clef-flash",
         )
         # 0.95 from the noul; the nine-way task class is reported, not part of the action.
         self.assertEqual((draft.action, draft.confidence), ("clarify", 0.9))
@@ -198,7 +166,7 @@ class OpenForkTests(unittest.TestCase):
     def test_unnamed_tool_is_split_until_a_model_settles_it(self):
         self.assertEqual(DecisionEngine(backend="deterministic").decide(self.context("Find every caller of decide")).fork, "split")
         result, backend = TypedAnswerTests.refined(self, self.context("Find every caller of decide"), {"tool": {"type": "choice", "choice": "grep", "confidence": 0.96}})
-        self.assertEqual((result.action, result.fork, result.backend), ("grep", "sharp", "laya-mlx"))
+        self.assertEqual((result.action, result.fork, result.backend), ("grep", "sharp", "ollama:clef-flash"))
         self.assertEqual(backend.questions["tool"]["criteria"]["grep"], "search file contents")
 
     def test_model_cannot_pick_an_irreversible_tool(self):

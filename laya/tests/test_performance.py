@@ -10,7 +10,7 @@ from pathlib import Path
 
 from laya.engine import DecisionEngine
 from laya.history import HistoryStore
-from laya.mlx_backend import LayaUnavailable, MLXBackend
+from laya.errors import LayaUnavailable
 
 
 MECHANICAL = {"answers": {"tier": {"type": "choice", "choice": "mechanical", "confidence": 0.9}}}
@@ -77,25 +77,11 @@ class BackendLifecycleTests(unittest.TestCase):
                 self.warm()
                 return MECHANICAL
 
-        engine = DecisionEngine(backend="mlx", model="configured", timeout_ms=20)
-        engine._mlx = SlowLoadBackend()
+        engine = DecisionEngine(backend="ollama", ollama_model="clef-flash", timeout_ms=20)
+        engine._backend = SlowLoadBackend()
         result = engine.decide(SPLIT_FORK)
-        self.assertEqual(result.backend, "laya-mlx")
+        self.assertEqual(result.backend, "ollama:clef-flash")
         self.assertFalse(result.fallback_used)
-
-    def test_failed_model_load_is_not_retried(self):
-        backend = MLXBackend("configured")
-        calls = []
-
-        def failing_load():
-            calls.append(1)
-            raise LayaUnavailable("checkpoint missing")
-
-        backend._load_agent = failing_load
-        for _ in range(3):
-            with self.assertRaises(LayaUnavailable):
-                backend.predict({}, {})
-        self.assertEqual(len(calls), 1)
 
     def test_repeatedly_failing_backend_is_skipped_during_cooldown(self):
         class FailingBackend:
@@ -105,9 +91,9 @@ class BackendLifecycleTests(unittest.TestCase):
                 self.calls += 1
                 raise LayaUnavailable("connection refused")
 
-        engine = DecisionEngine(backend="mlx", model="configured", failure_threshold=2, cooldown_s=60)
+        engine = DecisionEngine(backend="ollama", ollama_model="clef-flash", failure_threshold=2, cooldown_s=60)
         failing = FailingBackend()
-        engine._mlx = failing
+        engine._backend = failing
         results = [engine.decide(SPLIT_FORK) for _ in range(4)]
         self.assertEqual(failing.calls, 2)
         self.assertTrue(all(item.action == "complex" and item.fallback_used for item in results))
@@ -123,16 +109,16 @@ class BackendLifecycleTests(unittest.TestCase):
                     raise LayaUnavailable("connection refused")
                 return MECHANICAL
 
-        engine = DecisionEngine(backend="mlx", model="configured", failure_threshold=1, cooldown_s=0)
-        engine._mlx = FlakyBackend()
+        engine = DecisionEngine(backend="ollama", ollama_model="clef-flash", failure_threshold=1, cooldown_s=0)
+        engine._backend = FlakyBackend()
         self.assertTrue(engine.decide(SPLIT_FORK).fallback_used)
-        self.assertEqual(engine.decide(SPLIT_FORK).backend, "laya-mlx")
+        self.assertEqual(engine.decide(SPLIT_FORK).backend, "ollama:clef-flash")
 
-    def test_deterministic_cli_does_not_import_network_or_subprocess_adapters(self):
+    def test_deterministic_cli_does_not_import_network_adapters(self):
         root = Path(__file__).resolve().parents[2]
         code = (
             "import sys; import laya.cli; "
-            "print(','.join(m for m in ('laya.system_one', 'laya.host_llm', 'urllib.request') if m in sys.modules))"
+            "print(','.join(m for m in ('laya.system_one', 'urllib.request') if m in sys.modules))"
         )
         output = subprocess.run([sys.executable, "-c", code], cwd=root, capture_output=True, text=True, check=True)
         self.assertEqual(output.stdout.strip(), "")

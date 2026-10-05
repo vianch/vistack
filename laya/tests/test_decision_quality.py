@@ -29,8 +29,8 @@ WEAK_ROUTE = {"decision_type": "playbook-selection", "task": {"request": "Handle
 
 
 def refined(context, answers, min_confidence=0.65):
-    engine = DecisionEngine(backend="mlx", model="configured", min_confidence=min_confidence)
-    engine._mlx = model(answers)
+    engine = DecisionEngine(backend="ollama", ollama_model="clef-flash", min_confidence=min_confidence)
+    engine._backend = model(answers)
     return engine.decide(context)
 
 
@@ -121,7 +121,7 @@ class RefinementGateTests(unittest.TestCase):
 
     def test_model_route_is_used_when_signals_are_weak(self):
         result = refined(WEAK_ROUTE, choice("playbook", "prototype"))
-        self.assertEqual((result.action, result.backend, result.fork), ("prototype", "laya-mlx", "sharp"))
+        self.assertEqual((result.action, result.backend, result.fork), ("prototype", "ollama:clef-flash", "sharp"))
 
     def test_model_does_not_override_a_confident_route(self):
         result = refined({"decision_type": "playbook-selection", "task": {"request": "Add a CLI flag"}}, choice("playbook", "prototype"))

@@ -94,8 +94,8 @@ class DecisionEngineTests(unittest.TestCase):
     def split_fork(self):
         return self.context("tier-selection", task={"request": "Update the order summary panel"})
 
-    def test_unavailable_mlx_falls_back(self):
-        result = DecisionEngine(backend="mlx", model="/definitely/missing/model").decide(self.split_fork())
+    def test_unavailable_tier_falls_back(self):
+        result = DecisionEngine(backend="jev").decide(self.split_fork())
         self.assertEqual(result.backend, "deterministic-fallback")
         self.assertTrue(result.fallback_used)
         self.assertEqual(result.action, "complex")
@@ -109,28 +109,28 @@ class DecisionEngineTests(unittest.TestCase):
                 self.calls += 1
                 return {"answers": {"next": {"type": "choice", "choice": "pause", "confidence": 0.99}}}
 
-        engine = DecisionEngine(backend="mlx", model="configured")
-        engine._mlx = RecordingBackend()
+        engine = DecisionEngine(backend="ollama", ollama_model="clef-flash")
+        engine._backend = RecordingBackend()
         result = engine.decide(self.context("runtime-progress", current_state={"phase": "implementing"}))
         self.assertEqual((result.action, result.backend, result.fork), ("continue", "deterministic", "sharp"))
-        self.assertEqual(engine._mlx.calls, 0)
+        self.assertEqual(engine._backend.calls, 0)
 
     def test_consult_always_records_a_model_opinion_without_applying_it(self):
         class DisagreeingBackend:
             def predict(self, state, questions):
                 return {"answers": {"next": {"type": "choice", "choice": "pause", "confidence": 0.99}}}
 
-        engine = DecisionEngine(backend="mlx", model="configured", consult="always")
-        engine._mlx = DisagreeingBackend()
+        engine = DecisionEngine(backend="ollama", ollama_model="clef-flash", consult="always")
+        engine._backend = DisagreeingBackend()
         result = engine.decide(self.context("runtime-progress", current_state={"phase": "implementing"}))
         self.assertEqual(result.action, "continue")
-        self.assertEqual(result.outputs["model_opinion"], {"backend": "laya-mlx", "action": "pause", "confidence": 0.99, "agrees": False})
+        self.assertEqual(result.outputs["model_opinion"], {"backend": "ollama:clef-flash", "action": "pause", "confidence": 0.99, "agrees": False})
 
-    def test_environment_disable_cannot_be_bypassed_by_explicit_mlx(self):
+    def test_environment_disable_cannot_be_bypassed_by_an_explicit_model_backend(self):
         previous = os.environ.get("VISTACK_LAYA_ENABLED")
         os.environ["VISTACK_LAYA_ENABLED"] = "0"
         try:
-            result = DecisionEngine(backend="mlx", model="configured").decide(
+            result = DecisionEngine(backend="ollama", ollama_model="clef-flash").decide(
                 self.context("runtime-progress", current_state={"phase": "implementing"})
             )
         finally:
@@ -141,19 +141,19 @@ class DecisionEngineTests(unittest.TestCase):
         self.assertEqual(result.backend, "deterministic")
         self.assertFalse(result.fallback_used)
 
-    def test_slow_mlx_call_falls_back_after_timeout(self):
+    def test_slow_model_call_falls_back_after_timeout(self):
         class SlowBackend:
             def predict(self, state, questions):
                 time.sleep(0.05)
                 return {"answers": {}}
 
-        engine = DecisionEngine(backend="mlx", model="configured", timeout_ms=5)
-        engine._mlx = SlowBackend()
+        engine = DecisionEngine(backend="ollama", ollama_model="clef-flash", timeout_ms=5)
+        engine._backend = SlowBackend()
         result = engine.decide(self.split_fork())
         self.assertTrue(result.fallback_used)
         self.assertIn("exceeded", result.fallback_reason)
 
-    def test_valid_typed_mlx_answer_is_advisory_refinement(self):
+    def test_valid_typed_model_answer_is_advisory_refinement(self):
         class FakeBackend:
             def predict(self, state, questions):
                 return {
@@ -167,20 +167,20 @@ class DecisionEngineTests(unittest.TestCase):
                     }
                 }
 
-        engine = DecisionEngine(backend="mlx", model="configured")
-        engine._mlx = FakeBackend()
+        engine = DecisionEngine(backend="ollama", ollama_model="clef-flash")
+        engine._backend = FakeBackend()
         result = engine.decide(self.split_fork())
-        self.assertEqual(result.backend, "laya-mlx")
+        self.assertEqual(result.backend, "ollama:clef-flash")
         self.assertFalse(result.fallback_used)
         self.assertEqual(result.action, "mechanical")
         self.assertEqual(result.fork, "sharp")
 
-    def test_configured_local_fallback_can_refine_after_primary_failure(self):
+    def test_configured_fallback_can_refine_after_primary_failure(self):
         class FailingBackend:
             def predict(self, state, questions):
                 raise RuntimeError("primary unavailable")
 
-        class KevBackend:
+        class JevStandIn:
             def predict(self, state, questions):
                 return {
                     "answers": {
@@ -193,19 +193,15 @@ class DecisionEngineTests(unittest.TestCase):
                     }
                 }
 
-        engine = DecisionEngine(
-            backend="mlx",
-            model="configured",
-            fallback="kev",
-            kev_url="http://127.0.0.1:8009",
-        )
-        engine._mlx = FailingBackend()
-        engine._fallback_backend = KevBackend()
-        engine._fallbacks = [("kev", engine._fallback_backend)]
+        engine = DecisionEngine(backend="ollama", ollama_model="clef-flash", jev=True)
+        self.assertEqual([name for name, _ in engine.ladder()], ["ollama:clef-flash", "jev"])
+        engine._backend = FailingBackend()
+        engine._fallback_backend = JevStandIn()
+        engine._fallbacks = [("jev", engine._fallback_backend)]
         result = engine.decide(self.split_fork())
-        self.assertEqual(result.backend, "kev")
+        self.assertEqual(result.backend, "jev")
         self.assertTrue(result.fallback_used)
-        self.assertIn("laya-mlx unavailable", result.fallback_reason)
+        self.assertIn("ollama:clef-flash unavailable", result.fallback_reason)
 
     def test_low_confidence_typed_answer_uses_baseline(self):
         class FakeBackend:
@@ -221,8 +217,8 @@ class DecisionEngineTests(unittest.TestCase):
                     }
                 }
 
-        engine = DecisionEngine(backend="mlx", model="configured")
-        engine._mlx = FakeBackend()
+        engine = DecisionEngine(backend="ollama", ollama_model="clef-flash")
+        engine._backend = FakeBackend()
         result = engine.decide(self.split_fork())
         self.assertEqual(result.backend, "deterministic-fallback")
         self.assertIn("below", result.fallback_reason)

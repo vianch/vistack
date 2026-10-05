@@ -86,20 +86,23 @@ The design is a **router → playbook → agent** chain, with all coordination s
    numbered steps into the task list **verbatim** — no paraphrase, no reorder, no merge, no
    silent drop. A step that will not run stays in the list, marked skipped, with the reason
    written to the ledger. The playbook file is the executable contract; the router only
-   chooses between files.
+   chooses between files. Before matching, `skills/prompt-enhancer/SKILL.md` rewrites the
+   request for briefs and the advisor; matching and Laya read the original.
 2. **Router is sticky.** Once entered, later turns continue the open playbook. `new task`
    forces a re-match; `stop`/`pause` runs `pause-safely`.
 3. **`coordinate`** (`skills/coordinate/SKILL.md`) owns dispatch, the state file and the
    ledger from Step 5 onward. It never edits product code.
 4. **Agents** are per-role and carry their model, and effort where the tree sets it, in
-   frontmatter. The main session runs Opus 5.5 at xhigh and plans, decides, and verifies.
+   frontmatter. The main session runs Opus 5.5 at xhigh and plans, decides, dispatches, and
+   verifies; it writes no code and runs no QA itself.
    `analyst` (explorer) and `researcher` run on opus at medium. Code goes by tier: sonnet
    `implementer` for mechanical work — repetitive edits, basic utils, unit tests — and opus
    `senior-implementer` at xhigh for complex work. Haiku runs the adversarial health check. Sonnet `report-writer` renders pages.
    Models and effort are never overridden per-run — change the agent file instead.
 5. **Advisor on call.** Fable 5.1 reads the whole session and speaks at three checkpoints
-   (`skills/advisor/SKILL.md`). It reviews; the main session ships. When the advisor tool is
-   off, the `advisor` agent reviews a dossier instead.
+   (`skills/advisor/SKILL.md`). It reviews; the owning role writes the code and the main
+   session verifies it. When the advisor tool is off, the `advisor` agent reviews a dossier
+   instead.
 6. **Laya is the fork layer.** Forks that need no thinker — which playbook, which file,
    which tool, which tier, retry or stop — go to `laya-decision`: deterministic policy
    first, then, for split forks only, opted-in Jev, then opted-in Cloudflare Workers AI
@@ -133,14 +136,22 @@ everywhere it appears:
 - **Advisor at three checkpoints.** Consult the advisor before a large plan, when an error
   repeats, and before calling a long task done. It never edits, merges, or opens a fence,
   and an unavailable advisor never blocks a run.
+- **The main session runs no work an owning role owns.** Code goes to the tier owner
+  (`implementer` or `senior-implementer`, tier from the planner or `tier-selection`), QA and
+  evidence to a background `qa-verifier` lane. A playbook step that names no owner still goes
+  to one (`skills/coordinate/SKILL.md`, Dispatch rules and QA lanes).
 - **≤500 changed lines per PR**, excluding lockfiles and generated files; over that,
   `stack-split` makes a parent→child chain.
 - **One worktree per slice** at `.claude/worktrees/<slug>`; slices sharing a file are
-  serialized by the conflict matrix from `slice-plan`, never run concurrently.
+  serialized by the conflict matrix from `slice-plan`, never run concurrently. A QA lane is
+  not a slice: it owns no worktree, only its evidence directory
+  `<state-root>/qa/<slug>/<slice-or-pr>/<head7>/`, and one runs per PR head.
 - **Host-specific state.** Codex uses `.codex/vistack/state/` and
   `.codex/vistack/worktrees/`. A run does not switch state roots when it changes hosts.
-- **Codex lanes.** Codex roles run in the thread; only a read-only or scratch-directory lane
-  fans out as its own `codex exec --ephemeral` process.
+- **Codex lanes.** Codex roles are adopted in the thread. The thread writes only after
+  adopting the owning role's contract, recorded as a `dispatched` ledger row naming the role
+  and tier; the coordinator role itself never writes. Only a read-only or scratch-directory
+  lane, a QA lane included, fans out as its own `codex exec --ephemeral` process.
 - **A long or unattended run ends with a run report.** A run with more than one slice, or any
   unattended run, renders one through `skills/html-report/SKILL.md`, published as a private
   artifact on Claude Code.
@@ -195,4 +206,5 @@ dropped. An exception goes on the offending line as
 | A script path resolves from the plugin root; the working directory stays in the consuming repository | `scripts/check-playbooks.mjs` fails "from the plugin root" without "resolves" | 0.21.0 `skills/routine-healthcheck/SKILL.md:49` and this file's layout table |
 | An edit is live only when the installed copy matches this checkout | `scripts/verify.sh` drift step | this change against the installed 0.21.0 copy |
 | Routes, playbooks, skill names, and referenced paths agree | `scripts/check-playbooks.mjs` | 15 recorded FAIL lines while adding `html-report` and `qa-video` |
+| The main session runs no work an owning role owns: code to the tier owner, QA to a background `qa-verifier` lane | `scripts/check-playbooks.mjs` fails a contract line that hands the main session code or QA work (`mainSessionWork`); the deck flags each main-loop Edit, Write, or NotebookEdit outside `.claude/` and `.codex/` (`codeWrites` in `hooks/lib/org.ts`, shown on the Board tab), flag only and fail-open | the 0.24.0 tree: `skills/advisor/SKILL.md:8`, `agents/advisor.md:9`, `CLAUDE.md:101`, `README.md:624`, `skills/vistack/playbooks/html-report.md:21`, `docs/guide/codex.md:73`; run ledgers `.claude/state/qa-video.tsv:5,8,11` and `.claude/state/cloudflare-clef-tier.tsv:7,8` |
 | One version bump per change, in its own commit | nothing for the bump itself: a forgotten bump shows only in git history. `scripts/check-playbooks.mjs` fails when the three manifests or the README version line disagree | a README version line left at 0.22.0 against 0.23.0 manifests |

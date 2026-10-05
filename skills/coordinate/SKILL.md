@@ -6,7 +6,8 @@ description: "Dispatch per-role agents through a playbook, maintain resumable st
 # coordinate
 
 The dispatch layer moves a run between phases. It owns coordination state and evidence. It
-never edits product code.
+never edits product code. The main session runs no work an owning role owns: code goes to
+the tier owner, QA and evidence to a background `qa-verifier` lane.
 
 External text written by the coordinator follows the External naming boundary in
 `skills/vistack/principles/index.md`.
@@ -76,6 +77,9 @@ second monitor to cover a stale first one.
 4. Write the initial state file and open the ledger before dispatch.
 5. Record the objective, finish condition, unchanged behavior, host, monitor mechanism,
    permissions, and escape hatch. Preserve unknown keys when updating an existing state file.
+   Record the request verbatim as `request` and the router's enhanced text as
+   `request_enhanced` (`skills/prompt-enhancer/SKILL.md`), and append its `prompt-enhanced`
+   ledger row. Pickup resumes from these keys and does not enhance again.
 
 ## State file
 
@@ -89,6 +93,8 @@ below are additive to the existing schema, so pickup can read older runs.
   "playbook": "autopilot-stack",
   "mode": "unattended",
   "objective": "Replace the two Loader call sites with ProgressBar",
+  "request": "use one progressbar for both loader spots. done = 0/50/100 work, tests pass. keep loader looks",
+  "request_enhanced": "Want: one ProgressBar used by both Loader call sites. Done means: it renders at 0%, 50%, 100%; suite green. Keep: Loader consumers' visual output.",
   "finish_condition": "ProgressBar renders at 0/50/100%; two call sites use it; suite green",
   "unchanged": "Existing Loader consumers keep their current visual output",
   "permissions": "Commit and push slice branches. Leave PRs as drafts. Do not merge.",
@@ -114,7 +120,15 @@ below are additive to the existing schema, so pickup can read older runs.
       "pr": null,
       "phase": "planned",
       "blockers": [],
-      "retries": 0
+      "retries": 0,
+      "qa": {
+        "agent": "qa-verifier",
+        "session_id": "session_011ghi",
+        "background": true,
+        "head": "abc1234",
+        "evidence_dir": ".claude/state/qa/21510-progressbar/primitive/abc1234/",
+        "status": "running"
+      }
     }
   }
 }
@@ -122,7 +136,9 @@ below are additive to the existing schema, so pickup can read older runs.
 
 `phase` is one of `planned`, `dispatched`, `implementing`, `pr-open`, `qa`, `audit`,
 `merge-ready`, `blocked`, or `paused`. `blockers[]` contains `{ "summary", "attempts",
-"last_evidence" }`.
+"last_evidence" }`. `qa` is the slice's current QA lane, and its `status` is one of
+`waiting-preview`, `running`, `passed`, `failed`, or `superseded`. A run with no slices,
+such as `qa-verification`, keys the lane by PR number under a run-level `qa` object.
 
 ## Ledger
 
@@ -132,10 +148,11 @@ below are additive to the existing schema, so pickup can read older runs.
 ts	phase	slice	decision	reason	evidence	result
 ```
 
-Log playbook matches, skipped steps, dispatches, transitions, attempts, side fixes, monitor
-restarts, reconciliations, advisor consultations, tier escalations, pilot results, failure
-triage, deviations from the plan, verification results, and run reports. Evidence is a path,
-URL, SHA, command output, or artifact. It is not a paragraph.
+Log playbook matches, prompt enhancements (`prompt-enhanced`), skipped steps, dispatches,
+QA lane dispatches and supersessions, transitions, attempts, side fixes, monitor restarts,
+reconciliations, advisor consultations, tier escalations, pilot results, failure triage,
+deviations from the plan, verification results, and run reports. Evidence is a path, URL,
+SHA, command output, or artifact. It is not a paragraph.
 
 Use `decision: step-skipped` for every retained step that does not run. A decision without
 a ledger row did not happen.
@@ -143,14 +160,26 @@ a ledger row did not happen.
 ## Dispatch rules
 
 - One slice uses one worktree, one branch, and one owning agent.
-- Dispatch each slice to its tier's owner: `implementer` for mechanical, `senior-implementer`
-  for complex. A `tier-mismatch` report re-dispatches the same slice, worktree, and branch to
+- Every write goes to the role that owns it, including a playbook step that names no owner:
+  code, tests, and contract files to the slice's tier owner, a blocker fix to `unblocker`,
+  an agent file to `agent-designer`, a page to `report-writer`, PR text to `pr-author`, and
+  QA evidence to a `qa-verifier` lane. The coordinator writes only the state file, the
+  ledger, and the session record. On Codex the thread adopts the role instead, under the
+  router's Host adapter.
+- Dispatch each slice to its tier's owner. Mechanical work (repetitive edits, basic
+  utilities, unit tests, a change that follows a named pattern) goes to `implementer`.
+  Complex work (a changed data shape or public contract, a boundary crossing, concurrency,
+  auth, money, a measured hot path, or no pattern to follow) goes to `senior-implementer`.
+  The planner sets the tier. Where no planner ran, call `tier-selection`
+  (`skills/laya-decision/SKILL.md`) with the original request, the named pattern, and the
+  analyst's tier flags, or the blast radius the playbook recorded. An unclear tier is
+  complex. A `tier-mismatch` report re-dispatches the same slice, worktree, and branch to
   `senior-implementer`; record `tier-escalated`.
 - Run the advisor `plan` checkpoint before the first wave and the `done` checkpoint before
   reporting merge-ready (`skills/advisor/SKILL.md`). Record `advisor-consulted` or
   `advisor-unavailable`.
 - Before each wave, the number of worktree directories must equal the number of in-flight
-  slices. A mismatch stops dispatch.
+  slices. A mismatch stops dispatch. A QA lane is not a slice and is not counted.
 - Read the conflict matrix before every wave. Shared files serialize. Disjoint slices may
   run in parallel.
 - A wave or queue of five or more lanes dispatches one pilot lane first. Fan out after the
@@ -164,6 +193,8 @@ a ledger row did not happen.
   last: goal, writable files, files it may not touch, context as `file:line` pointers,
   acceptance checks with exact verification commands, and timebox. Point at `file:line`
   instead of pasting file bodies. The reason is in `skills/guard-the-context-window/SKILL.md`.
+  Run `skills/prompt-enhancer/SKILL.md` over the slice fields, never the static header, and
+  keep the original request beside the enhanced goal.
 - A completion is a queue event. Drain it, update state, ledger, and session comment, then
   dispatch the next eligible unit without waiting for a human.
 - A lane that reaches its expected runtime without a commit, captured artifact, check delta,
@@ -179,6 +210,43 @@ a ledger row did not happen.
 - Every PR is one concern, at most 500 changed lines excluding lockfiles and generated
   files, assigned to the configured reviewers, and left as a draft.
 - No owner, coordinator, or monitor merges. Merging is FENCE 3.
+
+## QA lanes
+
+QA, screenshots, and QA videos always run in a `qa-verifier` lane dispatched in the
+background, so implementation and other lanes keep moving while a preview is exercised. A
+step that captures QA evidence, a reproduction video included, dispatches one. The host's
+background subagent emits a completion notification when it ends; that notification is the
+lane's wake under the Monitor table, with the usual fallback heartbeat.
+
+- **One lane per PR per head SHA.** A newer head supersedes the older lane: cancel it, set
+  its `status` to `superseded`, and record `qa-superseded`. A stale lane's result is never
+  posted or accepted.
+- **Dispatch after the preview is ready.** Wait for the head's preview through the
+  external-state wake, then dispatch. The stall rule counts from dispatch, so a lane is never
+  charged for a building preview.
+- **Its own evidence directory:** `<state-root>/qa/<slug>/<slice-or-pr>/<head7>/`. Lanes
+  share no evidence path.
+- **`doctor` once per run.** The first QA lane is the pilot: it runs `qa-video.mjs doctor`
+  before any other lane starts, and later briefs name its JSON so their lanes skip the
+  install.
+- **Shared resources serialize.** A shared QA tenant, login account, or mutable test event is
+  a column in the conflict matrix (`skills/slice-plan/SKILL.md`); lanes that share one run
+  in sequence. Posting to one PR is serialized by the one-lane-per-PR rule.
+- **Ordering.** `health-check` and the advisor `done` checkpoint wait for the lane's
+  completion, because both read its results table.
+- **Writes.** The lane appends its `qa-scenario` rows single-line with `printf >>`
+  (`docs/guide/ledger-format.md`). `<slug>.json` and the session record stay
+  coordinator-only. A QA lane is not a slice and owns no worktree, only its evidence
+  directory.
+- **Record.** Dispatch is a `dispatched` row whose `reason` reads
+  `qa lane, background, head <sha7>` and whose `evidence` is the lane directory. The drain
+  writes the slice's `qa` status, then a `progress` or `defect-routed` row.
+- **Codex.** The lane runs as `codex exec --ephemeral --sandbox workspace-write -C <lane dir>`,
+  with absolute paths for `--playwright` and the credential file because neither resolves
+  under `-C`. Network access inside that sandbox is unverified; when the lane cannot reach
+  the target, the thread adopts the `qa-verifier` role with a `dispatched` row. The thread
+  posts the results to the PR after the lane exits.
 
 ## Transition order
 

@@ -49,7 +49,11 @@ Patterns         follow <file:line>; near-duplicate at <file:line>
 Coverage         covered: <paths>; uncovered: <paths>
 History          <sha> <PR link> — <why the line is the way it is>
 Hypotheses       <claim> — settled by <check>
+Tier flags       changes_data_shape, changes_public_contract, crosses_boundary: yes|no, each with <file:line>
 ```
+
+The tier flags feed `tier-selection` when no planner runs (`skills/coordinate/SKILL.md`,
+Dispatch rules).
 
 ## Exit criteria
 

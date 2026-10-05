@@ -47,7 +47,7 @@ its caption states that scale and the source.
    Any other type starts from `skills/html-report/assets/base.html`: keep its doctype and
    meta lines and its `<style>` and `<script>` blocks whole, delete the example sections the
    type does not use, and replace every example value in the ones you keep. `report-writer`
-   does this when the main session delegates.
+   does this; the main session dispatches it and never renders a page itself.
 4. Check, and fix what fails:
    - self-contained: `grep -nE "(src|href)=\"https?:|url\([\"']?(https?:|//)|@import|<link" <page>`
      shows nothing except evidence links written as `<a href>`;

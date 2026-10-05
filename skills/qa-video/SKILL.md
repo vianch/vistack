@@ -30,13 +30,14 @@ API-only scenarios and unit tests get no video. When a non-browser control skill
 
 `skills/qa-video/scripts/qa-video.mjs` is a dependency-free Node CLI with four commands:
 `doctor`, `record`, `finish`, and `check`. Run it from the consuming repository so that
-Playwright resolves from that project's `node_modules`. Run `--help` on any command for its
-flags.
+Playwright resolves from that project's `node_modules`; a lane that runs elsewhere, such as a
+Codex QA lane under `-C <lane dir>`, passes `--playwright <absolute path>` instead. Run
+`--help` on any command for its flags.
 
 | Host | How to run it |
 |---|---|
 | Claude Code | `node "${CLAUDE_PLUGIN_ROOT}/skills/qa-video/scripts/qa-video.mjs" <command> ...` |
-| Codex | the same command with the installed plugin path in place of `${CLAUDE_PLUGIN_ROOT}`, run in the thread |
+| Codex | the same command with the installed plugin path in place of `${CLAUDE_PLUGIN_ROOT}`, in a `codex exec -C <lane dir>` QA lane with absolute `--playwright` and credential paths (`skills/coordinate/SKILL.md`, QA lanes) |
 | Grok Build | the same command with the installed plugin path; `.grok-plugin/plugin.json` loads this skill |
 | OpenCode | the `vistack_qa_video` tool from `integrations/opencode/vistack.js`, with `command` and `args_json` |
 
@@ -48,7 +49,10 @@ each need a tool that `doctor` must find first.
 ## Evidence directory
 
 Everything lives under the run's state root, which is git-ignored (Host adapter in
-`skills/vistack/SKILL.md`): `<state-root>/qa/<slug>/`. Per scenario:
+`skills/vistack/SKILL.md`), in the QA lane's own directory:
+`<state-root>/qa/<slug>/<slice-or-pr>/<head7>/`. One directory per PR head keeps parallel
+lanes and re-runs on a newer head from touching each other's evidence; `record` refuses an
+`--out` whose manifest for the same scenario names a different head. Per scenario:
 
 | File | Made by | Notes |
 |---|---|---|
@@ -64,8 +68,9 @@ Everything lives under the run's state root, which is git-ignored (Host adapter 
 
 ## Steps
 
-1. Run `doctor` once per run and keep its JSON. When Playwright is present but its browser is
-   not, install the browser with the project's own Playwright (`npx playwright install
+1. Run `doctor` once per run, in the pilot QA lane, and keep its JSON; a lane whose brief
+   names that JSON skips this step. When Playwright is present but its browser is not,
+   install the browser with the project's own Playwright (`npx playwright install
    chromium`). When the Playwright package itself is missing, do not add a dependency from
    the QA lane. Record `none: playwright not installed` and continue with screenshots from
    the approved control skill.

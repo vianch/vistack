@@ -59,19 +59,20 @@ names out of the reply.
 
 ## Fix and prove
 
-Then fix the most frequent classes now, one commit each, or one patch each when commits are
-off-limits. Prove each new check fails on a real past mistake: a recorded bad state, a
-snapshot taken before the fix, or a command quoted from a transcript. Record the command and
-its failing output as a `rule-enforced` ledger row. Run the same command locally and in CI;
-when the CI configuration cannot be read, say so. Exceptions go on the offending line with a
-reason, an expiry date, and a human's approval.
+Then dispatch the fix for the most frequent classes to the tier owner now, one commit each,
+or one patch each when commits are off-limits. Prove each new check fails on a real past
+mistake: a recorded bad state, a snapshot taken before the fix, or a command quoted from a
+transcript. Record the command and its failing output as a `rule-enforced` ledger row. Run
+the same command locally and in CI; when the CI configuration cannot be read, say so.
+Exceptions go on the offending line with a reason, an expiry date, and a human's approval.
 
 ## Keep the rule table
 
 Last, keep a table in the agent instruction file (`CLAUDE.md`, `AGENTS.md`) that pairs each
-rule with what enforces it. When the operator corrects you, fix the mistake and add the
-rule. If the rule was already there and nothing enforces it, that's a repeat, so fix it at
-the highest level in the same change. Drop a rule once its mistake can't happen.
+rule with what enforces it. When the operator corrects you, route the fix to the role that
+owns the mistaken work and add the rule. If the rule was already there and nothing enforces
+it, that's a repeat, so fix it at the highest level in the same change. Drop a rule once its
+mistake can't happen.
 
 **Reply:** each class with its evidence, the level you picked, and why a higher level didn't
 work.

@@ -18,8 +18,8 @@ uses `skills/html-report/SKILL.md` directly for its run report and does not rout
    files for a design-system page.
 4. Render. A run report comes from `skills/html-report/scripts/run-report.mjs`; its path
    resolves from the plugin root, and it runs from the consuming repository so relative
-   paths stay in the project. Any other type is written by `report-writer`, or directly by
-   the main session for a short page, from `skills/html-report/assets/base.html`.
+   paths stay in the project. Any other type is written by `report-writer` from
+   `skills/html-report/assets/base.html`.
 5. Check the page against `skills/html-report/SKILL.md`: self-contained with no external
    loads, readable in both themes, no horizontal scroll at phone width, every number traced
    to a source named in the footer, every in-page anchor resolving, and export buttons on any

@@ -93,8 +93,8 @@ export const pending = (input: {
       rows: input.prs.items
         .filter(pr => pr.checks === 'failing' || pr.review === 'CHANGES_REQUESTED')
         .map(pr => ({
-          id: `pr-${pr.number}`,
-          text: `#${pr.number} ${pr.checks === 'failing' ? 'CI failing' : 'changes requested'} · ${pr.title}`,
+          id: `pr-${pr.repo}-${pr.number}`,
+          text: `${pr.repo.split('/').pop() ?? pr.repo}#${pr.number} ${pr.checks === 'failing' ? 'CI failing' : 'changes requested'} · ${pr.title}`,
           tone: 'fail' as const,
         })),
       title: 'PRs need action',

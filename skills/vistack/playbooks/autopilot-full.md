@@ -34,9 +34,10 @@ safe. The terminal state is merge-ready draft PRs because viStack never merges.
    reversible phases.
 10. Open a draft PR as soon as each owner finishes. Keep one concern per PR and at most 500
     changed lines excluding lockfiles and generated files. Assign the configured reviewers.
-11. Run QA on the PR's own environment and capture evidence at every assertion point. Run
-    the health check against the acceptance criteria and diff hunks. A green build without
-    behavioral evidence is not merge-ready.
+11. Dispatch a background `qa-verifier` lane on the PR's own environment to capture
+    evidence at every assertion point (`skills/coordinate/SKILL.md`, QA lanes). Once it
+    completes, run the health check against the acceptance criteria and diff hunks. A green
+    build without behavioral evidence is not merge-ready.
 12. When a PR is merge-ready, record its exact head SHA, evidence, and owner. Do not merge,
     arm auto-merge, retarget a branch, or rewrite history. Those are fences.
 13. On a failed check, failed QA scenario, review finding, stalled owner, or broken tool,

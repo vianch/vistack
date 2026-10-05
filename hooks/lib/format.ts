@@ -1,3 +1,5 @@
+import { cells, clip } from './theme'
+
 export const tokens = (count: number | undefined): string => {
   if (count === undefined) {
     return '-'
@@ -95,15 +97,19 @@ export const bar = (fraction: number, width: number): { full: string; empty: str
   return { full: '█'.repeat(filled), empty: '░'.repeat(size - filled) }
 }
 
+// One line of at most `width` terminal cells, an ellipsis marking a cut.
 export const fit = (text: string, width: number): string => {
   const flat = text.replace(/\s+/g, ' ').trim()
 
   if (width <= 1) {
-    return flat.slice(0, Math.max(0, width))
+    return clip(flat, Math.max(0, width))
   }
 
-  return flat.length <= width ? flat : `${flat.slice(0, width - 1)}…`
+  return cells(flat) <= width ? flat : `${clip(flat, width - 1)}…`
 }
+
+// "HH:MM:SS" in the local time zone.
+export const clockTime = (at: number): string => new Date(at).toTimeString().slice(0, 8)
 
 export const basename = (path: string): string => path.split('/').filter(Boolean).pop() ?? path
 

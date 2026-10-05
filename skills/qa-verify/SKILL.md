@@ -10,6 +10,9 @@ and Playwright when the PR exposes a live Vercel URL. If it does not, use the re
 approved live target and control skill. A green build or a test run alone is not behavioral
 evidence.
 
+This contract runs only in a `qa-verifier` lane dispatched in the background, one lane per PR
+head, under the QA-lane rule in `skills/coordinate/SKILL.md`. The main session never runs it.
+
 ## Inputs
 
 | Input | Requirement |
@@ -19,7 +22,7 @@ evidence.
 | Credentials | `_private/knowledge/key-maker.json` |
 | Surface | Playwright through the repository's approved browser/control skill for a Vercel preview; otherwise the repository's control skill or project command. |
 | PR reporting | The repository's PR skill and [GitHub attachment procedure](../../docs/guide/github-attachments.md). |
-| Video | `skills/qa-video/SKILL.md`, with evidence under `<state-root>/qa/<slug>/`. |
+| Video | `skills/qa-video/SKILL.md`, with evidence in the lane's own directory, `<state-root>/qa/<slug>/<slice-or-pr>/<head7>/`. |
 
 If `_private/knowledge/key-maker.json` does not exist or cannot be read, stop before login
 and ask the user for the correct path or filename. Do not guess, search unrelated locations,

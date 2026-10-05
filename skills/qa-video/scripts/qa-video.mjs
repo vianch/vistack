@@ -176,6 +176,17 @@ const doctor = async (options) => {
   return outputs.webm ? 0 : 1;
 };
 
+const recordedHead = (path) => {
+  try {
+    const head = JSON.parse(readFileSync(path, "utf8"))?.head;
+    return typeof head === "string" && head ? head : null;
+  } catch {
+    return null;
+  }
+};
+
+const sameHead = (left, right) => left.startsWith(right) || right.startsWith(left);
+
 const record = async (options) => {
   const size = parseSize(options.size);
   if (/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*@/i.test(options.url ?? "")) throw new UsageError("--url must not carry credentials; read them from process.env in the scenario");
@@ -192,14 +203,18 @@ const record = async (options) => {
   if (typeof scenario.default !== "function") throw new SetupError("the scenario module has no default export function");
   if (scenario.login !== undefined && typeof scenario.login !== "function") throw new SetupError("the scenario login export is not a function");
   if (scenario.contextOptions !== undefined && !isObject(scenario.contextOptions)) throw new SetupError("the scenario contextOptions export is not an object");
+  const out = resolve(options.out);
+  const files = { video: join(out, `${name}.webm`), manifest: join(out, `${name}.manifest.json`), tmp: join(out, `.video-tmp-${name}`) };
+  const priorHead = recordedHead(files.manifest);
+  if (priorHead && options.head && !sameHead(priorHead, options.head)) {
+    throw new SetupError(`${files.manifest} is evidence for head ${priorHead}; record head ${options.head} into its own directory, <state-root>/qa/<slug>/<slice-or-pr>/<head7>/`);
+  }
   const playwright = await resolvePlaywright(options.playwright);
   if (!playwright.found) throw new SetupError(`Playwright ${playwright.reason}. Install: ${installHint}`);
   const browserType = playwright.api[options.browser];
   if (!browserType) throw new SetupError(`Playwright ${playwright.version} has no ${options.browser} browser type`);
 
-  const out = resolve(options.out);
   mkdirSync(out, { recursive: true });
-  const files = { video: join(out, `${name}.webm`), manifest: join(out, `${name}.manifest.json`), tmp: join(out, `.video-tmp-${name}`) };
   rmSync(files.video, { force: true });
   const baseURL = options.url ?? null;
   const shared = { ...(scenario.contextOptions ?? {}), ...(baseURL ? { baseURL } : {}) };

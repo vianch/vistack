@@ -33,16 +33,18 @@ Free text is allowed, but these carry meaning elsewhere in the plugin:
 | `decision` | Written by | Means |
 |---|---|---|
 | `playbook-matched` | router | which playbook owns the run |
+| `prompt-enhanced` | `coordinator` | `skills/prompt-enhancer/SKILL.md` rewrote the request or a brief; `reason` says what changed and what is missing, `evidence` where the original and enhanced text are kept |
 | `step-skipped` | any | a playbook step stayed in the list and was not run — `reason` is required |
 | `sliced` | `planner` | the slice list exists |
 | `matrix-built` | `planner` | the conflict matrix exists; dispatch may begin |
-| `dispatched` | `coordinator` | an agent is running on a slice |
+| `dispatched` | `coordinator` | an agent is running on a slice; on Codex, the thread adopted the role, and `reason` names the role and tier. A QA lane's `reason` reads `qa lane, background, head <sha7>` and its `evidence` is the lane's evidence directory |
+| `qa-superseded` | `coordinator` | a newer PR head cancelled a running QA lane; `evidence` is the new head SHA |
 | `serialized` | `coordinator` | a slice waited on another because they share a file |
 | `pr-opened` | `pr-author` | draft PR exists, linked, reviewers assigned |
 | `monitor-pass` | `babysit` | recurring pass inspected every agent PR and run invariant |
 | `monitor-started` | `coordinator` | exactly one review monitor was started and verified for the current coordinator session |
 | `stack-split` | `stack-split` | a diff became a chain |
-| `qa-scenario` | `qa-verifier` | one scenario ran; `result` is its pass/fail; `evidence` lists its screenshots and its video, or `no video: <reason>` |
+| `qa-scenario` | `qa-verifier` | one scenario ran; `result` is its pass/fail; `evidence` lists its screenshots and its video, or `no video: <reason>`. Parallel lanes append these single-line (Appending, below) |
 | `attempt` | `unblocker` | one blocker attempt; `reason` is the hypothesis |
 | `root-cause-fixed` | `unblocker` | the cause was found and fixed |
 | `escalated` | any | a fence was hit; `reason` names which of the four |
@@ -66,6 +68,7 @@ Free text is allowed, but these carry meaning elsewhere in the plugin:
 | `failure-triaged` | any execution role | a failing check was classified caused-by-diff, pre-existing, or flaky, with evidence |
 | `correction-recorded` | main session | the operator corrected how an agent works mid-run; `reason` names the mistake and `evidence` the turn |
 | `rule-enforced` | `correct` | a new check failed on a recorded past mistake and passed on the fix; `evidence` is the command and both outputs |
+| `review-posted` | main session (`review-pr`) | one COMMENT review went out on another author's PR inside an open run; `reason` is `N comments on <owner>/<repo>#<n>`, `evidence` the review URL, `result` `skipped` when nothing went out |
 
 ### Worked rows
 
@@ -79,6 +82,7 @@ Free text is allowed, but these carry meaning elsewhere in the plugin:
 2026-09-02T15:03:44Z	implementing	primitive	attempt	hypothesis: aria-valuenow is unset because the value prop is not forwarded	bun test ProgressBar -> 1 failed, same assertion	failed
 2026-09-02T15:07:12Z	implementing	primitive	root-cause-fixed	value was destructured but never applied to the element	ProgressBar.tsx:34, bun test -> 12 passed	ok
 2026-09-02T15:19:55Z	pr-open	primitive	pr-opened	118 lines, one concern, reviewers assigned	https://github.com/ORG/REPO/pull/456	ok
+2026-09-02T15:24:30Z	qa	primitive	dispatched	qa lane, background, head abc1234	.claude/state/qa/21510-progressbar/primitive/abc1234/	ok
 2026-09-02T15:41:09Z	qa	primitive	qa-scenario	progressbar-renders at 0/50/100 on the PR preview	progressbar-renders-02.png	ok
 2026-09-02T15:58:31Z	audit	swap-events	defect-routed	AC 3 has no hunk: the events call site still imports Loader	health-check criteria table, events/List.tsx:12	failed
 2026-09-02T16:04:02Z	blocked	swap-events	escalated	FENCE 1 — 3 consecutive attempts, identical evidence	unblock dossier in ledger rows 14-16	blocked
@@ -104,6 +108,10 @@ printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
 
 `printf` with explicit `\t`, never `echo` with typed tabs — a typed tab is an autocomplete
 away from being spaces, and a ledger with spaces where tabs should be parses as one column.
+
+Background QA lanes append to the same ledger while the coordinator works. One `printf >>`
+per row keeps each row a single short append. The state file is different: it is
+read-modify-write, so only the coordinator writes it.
 
 ## `<state-root>/<slug>.json` - the state file
 

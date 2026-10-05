@@ -12,8 +12,8 @@
    at least twice, and cite every occurrence. List single occurrences separately.
 3. For each class, in order of frequency, try architecture, then types, then a check whose
    error names the fix, then a test. Write down why each higher level did not reach.
-4. Fix the most frequent classes now, one commit per class, or one patch per class when
-   commits are off-limits.
+4. Dispatch the fix for the most frequent classes to the tier owner now, one commit per
+   class, or one patch per class when commits are off-limits.
 5. Prove each new check fails on a recorded past bad state and passes on the fixed tree.
    Record the command and both outputs as a `rule-enforced` ledger row.
 6. Run the check with the same command locally and in CI. When the CI configuration cannot

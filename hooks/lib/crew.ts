@@ -1,8 +1,9 @@
 // Nicknames and animated faces for subagents. ASCII only: wide glyphs and emoji break the
 // column math of a docked pane.
-type Role = 'scout' | 'scholar' | 'builder' | 'wizard' | 'critic' | 'captain' | 'helper'
+export type Role = 'advisor' | 'scout' | 'scholar' | 'builder' | 'wizard' | 'critic' | 'captain' | 'helper'
 
 const ROLE_OF: readonly (readonly [RegExp, Role])[] = [
+  [/advis/, 'advisor'],
   [/explore|analyst|scout|search/, 'scout'],
   [/research|docs|guide/, 'scholar'],
   [/senior|architect|design-runner/, 'wizard'],
@@ -12,6 +13,7 @@ const ROLE_OF: readonly (readonly [RegExp, Role])[] = [
 ]
 
 const NAMES: Readonly<Record<Role, readonly string[]>> = {
+  advisor: ['The Oracle', 'Sage', 'Athena', 'Wise Owl', 'Mentor'],
   builder: ['Bob the Builder', 'Wrench', 'Hammerhead', 'Tinker', 'Sprocket'],
   captain: ['Captain Hook', 'Maestro', 'Air Traffic', 'Tetris', 'Skipper'],
   critic: ['Grumpy Cat', 'Hawkeye', 'Nitpick', 'Judge Dredd', 'Red Pen'],
@@ -23,6 +25,7 @@ const NAMES: Readonly<Record<Role, readonly string[]>> = {
 
 // Every frame of a role has the same width, so a row never jitters.
 const RUNNING: Readonly<Record<Role, readonly string[]>> = {
+  advisor: ['(O,O)  ', '(o,O)  ', '(O,o)  ', '(O,O)~ '],
   builder: ['(o_o)/ ', '(o_o)--', '(o_o)\\ ', '(o_o)--'],
   captain: ['(^_^)> ', '(^_~)> ', '(^_^)> ', '(^o^)> '],
   critic: ['(-_o)  ', '(o_-)  ', '(-_o)  ', '(o_o)  '],

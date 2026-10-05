@@ -1,7 +1,7 @@
-// Copy into the run's evidence directory (for example .claude/state/qa/<slug>/checkout.mjs), then from the project root,
+// Copy into the QA lane's evidence directory (for example .claude/state/qa/<slug>/<slice-or-pr>/<head7>/checkout.mjs), then from the project root,
 // with QA_USER and QA_PASSWORD exported from the approved credential file:
 //   node <plugin>/skills/qa-video/scripts/qa-video.mjs record \
-//     --scenario .claude/state/qa/<slug>/checkout.mjs --out .claude/state/qa/<slug> --url http://localhost:3000 --actions --title-card
+//     --scenario <dir>/checkout.mjs --out <dir> --url http://localhost:3000 --head <sha> --actions --title-card
 // Secrets come from process.env only; never put them in argv, captions, or step names.
 // `sensitive` hides the action overlay, which prints filled values; it does not hide what the page renders.
 

@@ -11,8 +11,9 @@ attempts and aborts early when evidence stops changing.
    `failure-triaged` row and leaves this loop.
 3. Record the baseline command, full output, commit, worktree, and branch. A CI or preview
    result from an older head SHA is stale and cannot be the baseline.
-4. For each attempt, state a distinct hypothesis, change exactly one variable, run the
-   command, capture full output, and append one ledger row.
+4. Dispatch `unblocker` with the baseline. For each attempt, it states a distinct
+   hypothesis, changes exactly one variable, runs the command, captures full output, and
+   appends one ledger row.
 5. On the second consecutive attempt with identical evidence, run the advisor `repeat`
    checkpoint before choosing the next hypothesis (`skills/advisor/SKILL.md`). It shapes the
    next attempt; it does not reset the budget or the abort count.
@@ -20,8 +21,9 @@ attempts and aborts early when evidence stops changing.
    budget on a loop that is not learning.
 7. Never widen scope, skip or delete tests, loosen types, add a blanket catch, force-push,
    reset shared work, or rerun an identical command. Such an attempt is void.
-8. On resolution, state the root cause with `file:line`, apply the cause-level fix, and
-   rerun the original baseline. Record `root-cause-fixed` and return to the prior phase.
+8. On resolution, state the root cause with `file:line`. `unblocker` applies the
+   cause-level fix and reruns the original baseline. Record `root-cause-fixed` and return to
+   the prior phase.
 9. On abort or exhaustion, write the six-part FENCE 1 dossier: blocker, baseline, attempts,
    ruled-out causes, remaining candidates, and the check that would settle each.
 10. Park the slice as `blocked`, update the state and session record, and let independent

@@ -9,7 +9,7 @@ cd "$root"
 
 node scripts/check-playbooks.mjs
 python3 -m unittest discover -t .
-node --test skills/html-report/scripts/*.test.mjs skills/qa-video/scripts/*.test.mjs skills/review-pr/scripts/*.test.mjs
+node --test skills/html-report/scripts/*.test.mjs skills/qa-video/scripts/*.test.mjs skills/review-pr/scripts/*.test.mjs skills/review-watch/scripts/*.test.mjs
 
 # The deck mod: the engine's own manifest and source check, then its tests. CI has no claude CLI.
 if command -v claude >/dev/null 2>&1; then

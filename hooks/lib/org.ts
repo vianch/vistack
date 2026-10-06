@@ -11,7 +11,7 @@ export type Department = { id: Role; label: string; title: string; icon: IconNam
 export const DEPARTMENTS: Readonly<Record<Role, Department>> = {
   advisor: { icon: 'advisor', id: 'advisor', label: 'Advisor', title: 'Board advisor' },
   builder: { icon: 'builder', id: 'builder', label: 'Engineering', title: 'Engineer' },
-  captain: { icon: 'captain', id: 'captain', label: 'Program', title: 'Program manager' },
+  captain: { icon: 'captain', id: 'captain', label: 'Program', title: 'Program lead' },
   critic: { icon: 'critic', id: 'critic', label: 'QA & Review', title: 'Reviewer' },
   helper: { icon: 'helper', id: 'helper', label: 'Operations', title: 'Generalist' },
   scholar: { icon: 'scholar', id: 'scholar', label: 'Library', title: 'Researcher' },
@@ -223,7 +223,8 @@ export const partyOf = (address: string, agents: readonly DeckAgent[]): string =
 
 export const ADVISOR_TOOL = /^advisor$/i
 
-export type ConsultFound = { id: string; advice?: string }
+// What one read learned about a consult; the merge derives `ms`.
+export type ConsultFound = Omit<DeckConsult, 'at' | 'ms'> & { at?: number }
 
 type MessageLike = { role: string; toolUses: readonly { tool_use_id: string; tool: string; text?: string }[] }
 
@@ -235,8 +236,20 @@ export const consultsFrom = (messages: readonly MessageLike[]): ConsultFound[] =
 
 export const CONSULT_CAP = 60
 
-// Consults read back from the transcript joined to the ones seen live; `advised` lists those
-// whose advice arrived with this read.
+// A field the read does not carry keeps its known value and the first source stays. A consult
+// first seen at its result starts there until a read measures the start; `ms` runs from the
+// start to a later result.
+const mergeConsult = (seen: DeckConsult | undefined, one: ConsultFound, at: number): DeckConsult => {
+  const carried = Object.fromEntries(Object.entries(one).filter(([, value]) => value !== undefined)) as Partial<ConsultFound>
+  const merged: DeckConsult = { ...(seen ?? { at: one.endedAt ?? at, id: one.id }), ...carried }
+  const source = seen?.source ?? one.source
+  const ms = merged.endedAt !== undefined && merged.endedAt > merged.at ? merged.endedAt - merged.at : merged.ms
+
+  return { ...merged, ...(source === undefined ? {} : { source }), ...(ms === undefined ? {} : { ms }) }
+}
+
+// Consults from every reader joined by id onto the known ones, kept in start order;
+// `advised` lists those whose advice arrived with this read.
 export const mergeConsults = (
   known: readonly DeckConsult[],
   found: readonly ConsultFound[],
@@ -247,17 +260,15 @@ export const mergeConsults = (
 
   for (const one of found) {
     const seen = consults.find(consult => consult.id === one.id)
-    const merged: DeckConsult = { ...(seen ?? { at, id: one.id }), ...(one.advice === undefined ? {} : { advice: one.advice }) }
+    const merged = mergeConsult(seen, one, at)
 
-    if (seen === undefined || (seen.advice === undefined && merged.advice !== undefined)) {
-      consults = [...consults.filter(consult => consult.id !== one.id), merged]
-      if (merged.advice !== undefined) {
-        advised.push(merged)
-      }
+    consults = seen === undefined ? [...consults, merged] : consults.map(consult => (consult.id === one.id ? merged : consult))
+    if (merged.advice !== undefined && seen?.advice === undefined) {
+      advised.push(merged)
     }
   }
 
-  return { advised, consults: consults.slice(-CONSULT_CAP) }
+  return { advised, consults: consults.sort((left, right) => left.at - right.at).slice(-CONSULT_CAP) }
 }
 
 export type TeamStatus = { running: number; waiting: number; done: number; failed: number }

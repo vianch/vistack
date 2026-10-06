@@ -4,6 +4,7 @@ export type Role = 'advisor' | 'scout' | 'scholar' | 'builder' | 'wizard' | 'cri
 
 const ROLE_OF: readonly (readonly [RegExp, Role])[] = [
   [/advis/, 'advisor'],
+  [/devops|infra|pipeline|deploy/, 'helper'],
   [/explore|analyst|scout|search/, 'scout'],
   [/research|docs|guide/, 'scholar'],
   [/senior|architect|design-runner/, 'wizard'],

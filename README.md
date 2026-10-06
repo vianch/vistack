@@ -10,7 +10,7 @@ playbook, one role phase per slice, stopping at merge-ready.
 `vistack` is the identifier you install and invoke. **viStack** is what it is called in
 prose. Same thing. It runs on Claude Code, Codex, Grok Build, and OpenCode.
 
-**Version:** `0.24.0`
+**Version:** `0.25.0`
 
 **Contents:** [install](#install) · [usage](#usage) ·
 [QA evidence: screenshots and video](#qa-evidence-screenshots-and-video) ·
@@ -485,12 +485,14 @@ The lifecycle skill provides the same controls through `vistack:visualizer on`, 
 
 ### Deck: an in-session pane (Claude Code)
 
-viStack ships a Claude Code mod: a docked pane with eight tabs (Board, Agents, Cost, Session,
-Changes, Timeline, Flow, Recall). It shows what waits on you, each subagent with its model,
+viStack ships a Claude Code mod: a docked pane with nine tabs (Board, Agents, Cost, Session,
+Changes, Timeline, Flow, Recall, Settings). It shows what waits on you, each subagent with its model,
 tokens, and cost, cost per model and per execution, context and rate limits, the files
 edited, where a turn's time went, viStack run state and worktrees, and a search over the
-session's prompts. `/deck` opens it, `/deck <tab>` jumps to a tab, `1` to `8` switch tabs in
-the pane, and `g` opens lazygit beside the session.
+session's prompts. The Board also lists background shells, watches, agents, and `/loop`
+wakeups by state, with Stop, Cancel, and Relaunch buttons and a New loop form. `/deck` opens
+it, `/deck <tab>` jumps to a tab, `1` to `9` switch tabs in the pane, and `g` opens lazygit
+beside the session.
 
 It loads with the plugin: after an install or update, run `/reload-plugins`. PR listing and
 lazygit stay off until you set your realm:
@@ -501,6 +503,19 @@ lazygit stay off until you set your realm:
 
 See [`docs/guide/deck.md`](docs/guide/deck.md) for the tabs, options, model suggestions, and
 what the deck reads and runs.
+
+### Review watch
+
+`/vistack:review-watch on` starts a standing watch. Every 30 minutes until you switch it off, a
+pass reviews each open pull request in your realm that requests your review or your team's, and
+answers each comment that tags you or your team. It posts as you, in your voice: one COMMENT
+review per head commit and one reply per mention. It never approves, requests changes, or
+resolves a thread, and a question only you can answer goes to a needs-you list on the deck's
+Board. Drafts, your own pull requests, archived repositories, bots, and anything outside the
+realm are skipped. `off` and `status` do what they say. Without the deck, or on Codex, run `on`
+in each session, because nothing re-arms the loop. See
+[`docs/guide/review-watch.md`](docs/guide/review-watch.md) for setup, scopes, limits, and the
+first-run checklist.
 
 ---
 
@@ -612,26 +627,34 @@ files are the source of truth, so they are not restated here.
 | [`pr-author`](agents/pr-author.md) | draft PRs, the stacked chain over 500 lines, reviewer assignment | `opus` | session |
 | [`qa-verifier`](agents/qa-verifier.md) | the QA contract: scenarios from the diff, screenshots, scenario videos, results table | `sonnet` | session |
 | [`health-check`](agents/health-check.md) | adversarial audit of the diff against the acceptance criteria | `haiku` | — |
+| [`devops`](agents/devops.md) | CI failures a slice did not cause, pipelines, environments, dependency and project-health audits. Never edits product code | `opus` | `medium` |
 | [`advisor`](agents/advisor.md) | fallback reviewer when the advisor tool is off: plan, repeat, done | `fable` | `xhigh` |
 | [`design-runner`](agents/design-runner.md) | one independent `architect` candidate: usage first, then types and a rationale | `opus` | session |
 | [`reviewer`](agents/reviewer.md) | one independent `interrogate` reviewer, or the `architect` judge. Read-only | `opus` | session |
 | [`pr-reviewer`](agents/pr-reviewer.md) | one senior reviewer in the PR's stack for `review-pr`; drafts findings in the operator's voice, never posts, approves, or edits. Read-only | `opus` | session |
+| [`mention-responder`](agents/mention-responder.md) | one reply to one comment that tags the operator, for the review watch; returns a reply, needs-you, or skip draft, never posts. Read-only | `opus` | session |
 | [`report-writer`](agents/report-writer.md) | renders one self-contained HTML page from state, ledger, diff, or code map; never publishes | `sonnet` | session |
 | [`agent-designer`](agents/agent-designer.md) | designs one new Claude Code, Codex, or OpenCode agent and verifies it loads | `opus` | session |
 
 Models and effort sit in agent frontmatter, not in a run. The rule behind the split: put the
 model where the *uncertainty* is. The main session runs Opus 5.5 at `xhigh` and plans,
 decides, dispatches, and verifies. It runs no work an owning role owns: code goes to the tier
-owner, QA and evidence to a background `qa-verifier` lane. Reading and doc lookups run on Opus
-at `medium`. Mechanical code goes to Sonnet and complex code to Opus at `xhigh`. The
-adversarial audit stays on Haiku. Fable 5.1 advises at three checkpoints and never writes
-code.
+owner, QA and evidence to a background `qa-verifier` lane. Reading, doc lookups, and CI
+triage run on Opus at `medium`. Mechanical code goes to Sonnet and complex code to Opus at
+`xhigh`. The adversarial audit stays on Haiku. Fable 5.1 advises at three checkpoints and
+never writes code. You are the owner above the main session. The levels, what passes between
+them, and which agent owns each job are defined once, in the Agent tree of
+[`skills/vistack/SKILL.md`](skills/vistack/SKILL.md).
 
 ```text
-AGENT TREE · OPUS 5.5 DISPATCHES · FABLE 5.1 ON CALL
+AGENT TREE · YOU OWN THE WORK · OPUS 5.5 DISPATCHES · FABLE 5.1 ON CALL
 
-Fable 5.1 · advisor · on call           Opus 5.5 · main session · xhigh
-reads the whole session                 plans + decides + dispatches
+                                 you · owner · human client
+                                 ▼ requests, corrections, fence answers
+                                 ▲ phase reports, fence questions, merges
+                                              │
+Fable 5.1 · advisor · on call           Opus 5.5 · coordinator (main session) · xhigh
+reads the whole session                 plans + decides + delegates
   ◇ before a plan ───────────────────▶        │
                                               ▼
                                  laya · fork layer
@@ -650,10 +673,12 @@ reads the whole session                 plans + decides + dispatches
                                               ▼
                                  qa-verifier · sonnet · background lane per PR head
                                  screenshots + video while other lanes keep going
+                                 devops · opus · medium · red CI the slice did not cause
                                               │
                                               ▼
-  ◇ before done ─────────────────────▶ back to main session · xhigh
-                                       review + verify
+  ◇ before done ─────────────────────▶ back to the coordinator · xhigh
+                                       reviews worker output + verifies evidence
+                                       ▲ phase report to you
 ```
 
 ### Principles
@@ -670,6 +695,7 @@ invokes a principle must name the decision the principle changed.
 [`architect`](skills/architect/SKILL.md) (design before code) ·
 [`interrogate`](skills/interrogate/SKILL.md) (adversarial multi-reviewer pass) ·
 [`review-pr`](skills/review-pr/SKILL.md) (one comment-only review on another author's PR; never approves) ·
+[`review-watch`](skills/review-watch/SKILL.md) (a 30-minute watch that reviews the PRs requesting you and answers the comments tagging you; never approves) ·
 [`figma-sync`](skills/figma-sync/SKILL.md) (the live Figma line) ·
 [`slice-plan`](skills/slice-plan/SKILL.md) (decomposition, conflict matrix) ·
 [`unblock`](skills/unblock/SKILL.md) (the bounded loop) ·

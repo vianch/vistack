@@ -95,10 +95,12 @@ The design is a **router → playbook → agent** chain, with all coordination s
 4. **Agents** are per-role and carry their model, and effort where the tree sets it, in
    frontmatter. The main session runs Opus 5.5 at xhigh and plans, decides, dispatches, and
    verifies; it writes no code and runs no QA itself.
-   `analyst` (explorer) and `researcher` run on opus at medium. Code goes by tier: sonnet
+   `analyst` (explorer), `researcher`, and `devops` run on opus at medium. Code goes by tier: sonnet
    `implementer` for mechanical work — repetitive edits, basic utils, unit tests — and opus
    `senior-implementer` at xhigh for complex work. Haiku runs the adversarial health check. Sonnet `report-writer` renders pages.
    Models and effort are never overridden per-run — change the agent file instead.
+   The levels (owner, coordinator, workers), what crosses them, and the owner of each job
+   live in the Agent tree of `skills/vistack/SKILL.md`.
 5. **Advisor on call.** Fable 5.1 reads the whole session and speaks at three checkpoints
    (`skills/advisor/SKILL.md`). It reviews; the owning role writes the code and the main
    session verifies it. When the advisor tool is off, the `advisor` agent reviews a dossier
@@ -112,13 +114,18 @@ The design is a **router → playbook → agent** chain, with all coordination s
 
 ### Run state (schema-bearing — see "Versioning")
 
-Two git-ignored files per run in the *consuming* repo, never here. Claude uses:
+Each run keeps two git-ignored files in the *consuming* repo, never here, and the review watch keeps one user-level file listed after them. Claude uses:
 
 - `.claude/state/<slug>.json` — where the run is, keyed by slice; updated on **every**
   transition, because it is the resume point for `session-pickup`.
 - `.claude/state/<slug>.tsv` — append-only decision ledger, seven tab-separated columns
   `ts phase slice decision reason evidence result`, no header. Column semantics and the
   `decision` vocabulary: `docs/guide/ledger-format.md`.
+
+- `~/.vistack/review-watch/state.json` (or `$VISTACK_REVIEW_WATCH_DIR/state.json`) — the review
+  watch's switch, realm, and handled keys. User-level, not per run, and schema-bearing: the
+  deck and every pass read it, and only `skills/review-watch/scripts/watch-state.mjs` writes
+  it. Schema: `skills/review-watch/references/data.md`.
 
 The state file records intent, the ledger records what happened; after a crash they disagree
 and `session-pickup` reconciles them.
@@ -139,7 +146,8 @@ everywhere it appears:
 - **The main session runs no work an owning role owns.** Code goes to the tier owner
   (`implementer` or `senior-implementer`, tier from the planner or `tier-selection`), QA and
   evidence to a background `qa-verifier` lane. A playbook step that names no owner still goes
-  to one (`skills/coordinate/SKILL.md`, Dispatch rules and QA lanes).
+  to one (`skills/coordinate/SKILL.md`, Dispatch rules and QA lanes). The hierarchy around
+  this rule is in `skills/vistack/SKILL.md` (Agent tree).
 - **≤500 changed lines per PR**, excluding lockfiles and generated files; over that,
   `stack-split` makes a parent→child chain.
 - **One worktree per slice** at `.claude/worktrees/<slug>`; slices sharing a file are

@@ -6,8 +6,8 @@ description: "Consult the advisor at the three moments that change a run's outco
 # advisor
 
 The owning role writes the code; the main session plans, dispatches, and verifies; the
-advisor reviews. Opus 5.5 runs the main session. Fable 5.1 reads the whole session and
-speaks at three checkpoints only. The advisor never edits a file. The main session acts on
+advisor reviews. The levels live in `skills/vistack/SKILL.md` (Agent tree). Opus 5.5 runs
+the main session. Fable 5.1 reads the whole session and speaks at three checkpoints only. The advisor never edits a file. The main session acts on
 each point, through the owning role when it needs a write, or rebuts it with evidence.
 
 ## The three checkpoints

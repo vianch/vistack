@@ -1,3 +1,4 @@
+import { adviceHead } from '../lib/advisor'
 import { face, isLive } from '../lib/crew'
 import { ago, basename, duration, fit, tokens, usd } from '../lib/format'
 import { addUp } from '../lib/ledger'
@@ -25,6 +26,7 @@ import type {
   DeckAdvisor,
   DeckAgent,
   DeckComm,
+  DeckConsult,
   DeckPick,
   DeckSkill,
   DeckStep,
@@ -353,13 +355,39 @@ const expanded = (
   )
 }
 
+const consultDetail = (consult: DeckConsult): string =>
+  [
+    consult.model === undefined ? '' : modelLabel(consult.model),
+    consult.input === undefined && consult.output === undefined
+      ? ''
+      : `${tokens((consult.input ?? 0) + (consult.cacheRead ?? 0) + (consult.cacheWrite ?? 0))}/${tokens(consult.output ?? 0)} tok`,
+    consult.usd === undefined ? '' : usd(consult.usd),
+    consult.ms === undefined ? '' : `took ${duration(consult.ms)}`,
+  ]
+    .filter(part => part !== '')
+    .join(' · ')
+
+const consultOutcome = (kit: Kit, consult: DeckConsult, width: number): RenderElement | null => {
+  const { Text, theme } = kit
+  const head = consult.adviceHead ?? (consult.advice === undefined ? '' : adviceHead(consult.advice))
+
+  if (consult.error !== undefined) {
+    return <Text color={theme.warn}>{fit(`${glyph(kit, 'warn')}advisor unavailable (${consult.error})`, width)}</Text>
+  }
+  if (head !== '') {
+    return <Text color={theme.advisor}>{fit(`${glyph(kit, 'idea')}${head}`, width * 2)}</Text>
+  }
+
+  return consult.isRedacted === true ? <Text dimColor>{fit('advice redacted', width)}</Text> : null
+}
+
 const advisorSeat = (kit: Kit, data: AgentsData, actions: AgentsActions, members: readonly OrgNode[], columns: number): RenderElement => {
   const { Box, Button, Text, theme } = kit
   const width = Math.max(12, columns - 2)
   const inner = Math.max(8, width - 4)
   const { consults, isAdvising } = data.advisor
   const last = consults[consults.length - 1]
-  const advice = [...consults].reverse().find(consult => consult.advice !== undefined)?.advice
+  const detail = last === undefined ? '' : consultDetail(last)
   const status = isAdvising ? `${pulse(kit, true, kit.icon.advisor)} advising` : 'on call'
   const isSelected = data.selected === 'advisor'
 
@@ -374,15 +402,9 @@ const advisorSeat = (kit: Kit, data: AgentsData, actions: AgentsActions, members
         />
         {Chip(kit, status, isAdvising ? theme.advisor : theme.muted)}
       </Box>
-      <Text dimColor>
-        {fit(
-          `consults ${consults.length}${last === undefined ? '' : ` · last ${ago(last.at, data.now)}`}${
-            last?.ms === undefined ? '' : ` · took ${duration(last.ms)}`
-          }`,
-          inner,
-        )}
-      </Text>
-      {advice !== undefined && <Text color={theme.advisor}>{fit(`${glyph(kit, 'idea')}${advice}`, inner * 2)}</Text>}
+      <Text dimColor>{fit(`consults ${consults.length}${last === undefined ? '' : ` · last ${ago(last.at, data.now)}`}`, inner)}</Text>
+      {detail !== '' && <Text dimColor>{fit(detail, inner)}</Text>}
+      {last !== undefined && consultOutcome(kit, last, inner)}
       {members.flatMap((node, index) => memberRows(kit, data, actions, node, '', index === members.length - 1, inner))}
       {isSelected && <Box flexDirection="row">{actionButton(kit, actions, 'ask', 'advisor', 'ask', 'Ask')}</Box>}
       {isSelected && data.asking === 'advisor' && askInput(kit, actions, 'advisor', 'drafted as a consult in your prompt')}

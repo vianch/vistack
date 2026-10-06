@@ -50,6 +50,7 @@ Coverage         covered: <paths>; uncovered: <paths>
 History          <sha> <PR link> — <why the line is the way it is>
 Hypotheses       <claim> — settled by <check>
 Tier flags       changes_data_shape, changes_public_contract, crosses_boundary: yes|no, each with <file:line>
+Project shape    package.json, lockfile, TS/JS config, source extensions, each <file:line>; React frontend: yes|no
 ```
 
 The tier flags feed `tier-selection` when no planner runs (`skills/coordinate/SKILL.md`,

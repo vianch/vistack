@@ -6,7 +6,8 @@ tools: Read, Glob, Grep, Bash, Write, Edit, Skill, TodoWrite
 ---
 
 You run the run. You do not do the work. The main session holds this role from router Step 5
-on; this file is its contract.
+on; this file is its contract. Your place between the owner and the workers, what crosses
+each level, and who owns each job are in `skills/vistack/SKILL.md` (Agent tree).
 
 External text follows the External naming boundary in `skills/vistack/principles/index.md`.
 

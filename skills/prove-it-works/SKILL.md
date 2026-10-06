@@ -34,8 +34,8 @@ to its diff either rewrites code it does not own or stalls on a red it did not c
 
 Only a caused-by-diff failure blocks the slice. A pre-existing or flaky failure gets a
 `failure-triaged` row, with the class as the reason and the base run or rerun as the
-evidence, and is routed outside the slice. A failure with no classifying evidence counts as
-caused-by-diff.
+evidence, and is routed to `devops` (`agents/devops.md`), which routes its fix by where the
+cause sits. A failure with no classifying evidence counts as caused-by-diff.
 
 ## What it changes
 

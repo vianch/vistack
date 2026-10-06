@@ -1,25 +1,33 @@
 import { pending } from '../lib/board'
-import { ago, basename, duration, fit, tokens, usd } from '../lib/format'
+import { ago, basename, duration, fit, tokens, until, usd } from '../lib/format'
 import { addUp } from '../lib/ledger'
 import { STATE_LABELS, codeWrites, coordinatorStatus, histogram, isWorking, orgTree, stacked, teamStatus } from '../lib/org'
+import { ARM_RETRY_MS, CLEAN_TEXT, CRON_LIFE_MS, ROTATE_BEFORE_MS } from '../lib/review-watch'
 import { flow } from '../lib/theme'
+import { monitorsSection } from './monitors'
 import { Bars, CommRow, Empty, Line, Section, Spark, Tile, glyph, pulse } from './parts'
 
 import type { RenderElement } from 'claude-code'
 import type { Reply } from '../lib/board'
+import type { IconName } from '../lib/theme'
+import type { MonitorsSectionActions, MonitorsSectionData } from './monitors'
 import type { BarEntry, Kit } from './parts'
 import type {
   DeckActivity,
   DeckAdvisor,
   DeckAgent,
   DeckComm,
+  DeckMonitor,
   DeckPr,
   DeckPrs,
+  DeckReviewWatch,
   DeckStep,
   DeckTodo,
   DeckTool,
   DeckTurn,
   DeckUsage,
+  DeckWatchItem,
+  DeckWatchPost,
   DeckWorkflow,
 } from '../../types'
 
@@ -38,12 +46,126 @@ export type BoardData = {
   usage: DeckUsage | null
   openId: string
   now: number
+  monitors: MonitorsSectionData
+  reviewWatch: DeckReviewWatch | null
+  // The newest open loop row of the review watch in this session.
+  watchLoop?: DeckMonitor
 }
 
-export type BoardActions = { toggle: (id: string) => void; refreshPrs: () => void }
+export type BoardActions = {
+  toggle: (id: string) => void
+  refreshPrs: () => void
+  monitors: MonitorsSectionActions
+  turnWatchOff: () => void
+}
+
+// The shared confirm atom's value while Turn off waits for its second press.
+export const WATCH_OFF_CONFIRM = 'watch-off:review-watch'
 
 const ACTIVITY_BUCKETS = 30
 const MINUTE = 60_000
+const WATCH_POSTS_SHOWN = 5
+const WATCH_ERRORS: Readonly<Record<string, string>> = {
+  realm: 'the state file names no valid realm (host/owner)',
+  unreadable: 'the state file is unreadable; /vistack:review-watch off resets it',
+}
+
+type WatchRow = DeckWatchItem & { kind?: DeckWatchPost['kind'] }
+
+type WatchGroup = { id: string; title: string; icon: IconName; color: string; items: readonly WatchRow[]; label: (item: WatchRow) => string; detail: (item: WatchRow) => string }
+
+const watchLoopText = (watch: DeckReviewWatch, loop: DeckMonitor | undefined, now: number): string => {
+  if (watch.isOffPending === true) {
+    return 'turning off…'
+  }
+  if (loop !== undefined) {
+    return `armed · rotates in ${until(new Date((loop.deadlineAt ?? loop.startedAt + CRON_LIFE_MS) - ROTATE_BEFORE_MS).toISOString(), now)}`
+  }
+
+  return watch.armRequestedAt !== undefined && now - watch.armRequestedAt < ARM_RETRY_MS ? 'arming…' : 'not armed in this session'
+}
+
+// Rows draw only the fields hooks/lib/review-watch.ts sanitized: mention text is someone else's.
+const watchGroup = (kit: Kit, data: BoardData, actions: BoardActions, group: WatchGroup, columns: number): RenderElement[] => {
+  const { Box, Button, Text } = kit
+
+  if (group.items.length === 0) {
+    return []
+  }
+
+  return [
+    <Text key={`watch-${group.id}-title`} dimColor>
+      {fit(group.title, columns)}
+    </Text>,
+    ...group.items.flatMap((item, index) => {
+      const id = `watch:${group.id}:${item.key}`
+      const row = (
+        <Box key={`watch-${group.id}-row-${index}`} width={columns}>
+          <Text color={group.color}>{glyph(kit, group.icon)}</Text>
+          <Button key={`watch-${group.id}-${index}`} plain label={fit(group.label(item), columns - 3)} onPress={() => actions.toggle(id)} />
+        </Box>
+      )
+
+      return data.openId === id
+        ? [
+            row,
+            // Wraps rather than cuts: the line is there to show the whole URL.
+            <Text key={`watch-${group.id}-detail-${index}`} dimColor>
+              {`   ${group.detail(item)}`}
+            </Text>,
+          ]
+        : [row]
+    }),
+  ]
+}
+
+const watchBlock = (kit: Kit, data: BoardData, actions: BoardActions, columns: number): RenderElement[] => {
+  const { Button, Text, theme } = kit
+  const watch = data.reviewWatch
+
+  if (watch === null) {
+    return []
+  }
+
+  const last = watch.lastPassStartedAt ?? watch.lastPassAt
+  const loopLine = `${watchLoopText(watch, data.watchLoop, data.now)} · ${last === undefined ? 'no pass yet' : `last pass ${ago(last, data.now)}`}`
+  const join = (...parts: (string | undefined)[]): string => parts.filter(part => part !== undefined && part !== '').join(' · ')
+  const posts = watch.posted.slice(0, WATCH_POSTS_SHOWN)
+  const groups: WatchGroup[] = [
+    {
+      color: theme.warn,
+      detail: item => join(item.reason, item.url),
+      icon: 'warn',
+      id: 'need',
+      items: watch.needsYou,
+      label: item => `${item.pr} ${item.author === undefined ? '' : `${item.author}: `}${item.text}`,
+      title: `needs you (${watch.needsYou.length})`,
+    },
+    { color: theme.good, detail: item => join(item.text, item.url), icon: 'ok', id: 'clean', items: watch.clean, label: item => `${item.pr} ${item.text}`, title: `${CLEAN_TEXT} (${watch.clean.length})` },
+    {
+      color: theme.muted,
+      detail: item => item.url,
+      icon: 'message',
+      id: 'post',
+      items: posts,
+      label: item => `${item.pr} ${item.kind ?? ''}: ${item.text} · ${ago(item.at, data.now)}`,
+      title: `posted (last ${posts.length})`,
+    },
+  ]
+  const isEmpty = groups.every(group => group.items.length === 0)
+
+  return [
+    Section(kit, `${glyph(kit, 'pr')}Review watch`, columns, watch.enabled ? `on · ${watch.realm}` : 'off'),
+    ...(watch.enabled ? [<Text key="watch-loop" dimColor>{fit(loopLine, columns)}</Text>] : []),
+    ...(watch.error === undefined ? [] : [<Text key="watch-error" color={theme.bad}>{fit(WATCH_ERRORS[watch.error] ?? watch.error, columns)}</Text>]),
+    ...(isEmpty ? [Empty(kit, 'Nothing posted, clean, or waiting on you.')] : []),
+    ...groups.flatMap(group => watchGroup(kit, data, actions, group, columns)),
+    ...(watch.enabled && watch.isOffPending !== true ? [<Button key="watch-off" plain label={`${kit.icon.stop} Turn off`} onPress={() => actions.turnWatchOff()} />] : []),
+    ...(data.monitors.confirm === WATCH_OFF_CONFIRM
+      ? [<Text key="watch-off-confirm" color={theme.warn}>press Turn off again to switch the watch off everywhere</Text>]
+      : []),
+  ]
+}
 
 const replyContext = (kit: Kit, data: BoardData, reply: Reply, columns: number): RenderElement => {
   const { Box, Text, theme } = kit
@@ -282,6 +404,8 @@ export const boardTab = (kit: Kit, data: BoardData, actions: BoardActions, colum
       {tiles(kit, data, columns)}
       {Section(kit, `${glyph(kit, 'org')}Org at a glance`, columns)}
       {glance(kit, data, columns)}
+      {monitorsSection(kit, data.monitors, actions.monitors, columns)}
+      {watchBlock(kit, data, actions, columns)}
       {charts(kit, data, columns)}
       {Section(kit, `${glyph(kit, 'message')}Comms`, columns, String(data.comms.length))}
       {comms.length === 0 && Empty(kit, 'Nobody has said anything yet.')}

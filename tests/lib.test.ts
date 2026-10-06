@@ -206,6 +206,10 @@ describe('crew', () => {
     expect(new Set(widths).size).toBe(1)
     expect(widths[0]).toBe(face('Explore', 'running', 0).length)
   })
+
+  test('devops agents work in Operations, not Engineering', async () => {
+    expect(roleOf('vistack:devops')).toBe('helper')
+  })
 })
 
 describe('theme', () => {

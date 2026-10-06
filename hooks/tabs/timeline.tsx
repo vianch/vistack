@@ -9,6 +9,10 @@ import type { DeckStep, DeckTool, DeckTurn } from '../../types'
 
 export type TimelineData = { turns: DeckTurn[]; steps: DeckStep[]; tools: DeckTool[]; now: number }
 
+// The key prefix of advisorSteps (hooks/lib/advisor.ts). A server consult runs inside the request
+// that made it, whose step already spans its time.
+const ADVISOR_STEP = 'advisor-'
+
 export const timelineTab = (kit: Kit, data: TimelineData, columns: number): RenderElement => {
   const { Box, Text, theme } = kit
   const KIND_COLOR = { failed: theme.bad, model: theme.model, tool: theme.tool } as const
@@ -18,7 +22,8 @@ export const timelineTab = (kit: Kit, data: TimelineData, columns: number): Rend
     return <Box flexDirection="column">{Empty(kit, 'The timeline fills in once a turn runs.')}</Box>
   }
 
-  const view = timeline(turn, data.steps, data.tools, data.now)
+  const requests = data.steps.filter(step => !step.key.startsWith(ADVISOR_STEP))
+  const view = timeline(turn, requests, data.tools, data.now)
   const isRunning = turn.durationMs === undefined
   const width = Math.max(10, columns - 2)
   const scale = view.totalMs <= 0 ? 0 : width / view.totalMs

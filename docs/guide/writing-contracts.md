@@ -26,13 +26,16 @@ home and check that the pointers still describe it.
 |---|---|
 | The four fences | `skills/autonomy-has-fences/SKILL.md` |
 | Merge boundary, run report, script path resolution, Codex role adoption | `skills/vistack/SKILL.md` (Merge boundary, Final report, Host adapter) |
+| Hierarchy (owner → coordinator → workers), what crosses levels, job owners | `skills/vistack/SKILL.md` (Agent tree) |
 | Delegation (the main session runs no work an owning role owns), the tier rule, and QA lanes | `skills/coordinate/SKILL.md` (Dispatch rules, QA lanes) |
 | Enhancing a request, brief, or dossier, and what the original is kept for | `skills/prompt-enhancer/SKILL.md` |
 | Reviewing another author's PR, the COMMENT-only boundary, and the findings shape | `skills/review-pr/SKILL.md` (Permissions), `skills/review-pr/references/findings.md` |
+| The review watch's standing grant, its state file, and replying to mentions | `skills/review-watch/SKILL.md` (Permissions), `skills/review-watch/references/data.md` |
 | External naming | `skills/vistack/principles/index.md` |
 | Monitor wake and loop exit, pilot lanes, flattened lanes and re-cuts, brief order, state file schema | `skills/coordinate/SKILL.md` |
 | Prompt-prefix stability and the reason for brief order | `skills/guard-the-context-window/SKILL.md` |
 | Test run order and failure classes | `skills/prove-it-works/SKILL.md` |
+| Where a failure the slice did not cause goes | `agents/devops.md` (What you do) |
 | Perf measurement, and the metric ratchet | `skills/vistack/playbooks/perf-issue.md`, `skills/build-the-lever/SKILL.md` |
 | Advisor checkpoints and what each asks | `skills/advisor/SKILL.md` |
 | Ledger columns and decision vocabulary | `docs/guide/ledger-format.md` |

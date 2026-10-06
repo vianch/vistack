@@ -1,8 +1,6 @@
 // Keeping the machine awake while the session works: a child process holds the operating system's
 // sleep lock for as long as it lives. register.tsx starts and ends the child; this file decides.
-export type KeepAwake = 'off' | 'while-working' | 'always'
-
-export type DeckAwake = { isHeld: boolean; how?: string; reason?: string }
+import type { DeckAwake, KeepAwake } from '../../types'
 
 export type AwakePlan = { argv: readonly string[]; how: string } | { argv: null; reason: string }
 

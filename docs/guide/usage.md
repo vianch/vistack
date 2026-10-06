@@ -56,7 +56,8 @@ Once `/vistack` has run, the session is in viStack mode.
 3. The finish condition is stated in checkable terms.
 4. Work is sliced, a conflict matrix decides what runs in parallel, and one agent per slice
    runs in its own worktree. The main session never writes code: every write goes to the
-   agent that owns it, mechanical or complex by tier.
+   agent that owns it, mechanical or complex by tier. The levels and the job-to-role map
+   live in `skills/vistack/SKILL.md` (Agent tree).
 5. Each finished slice raises its draft PR immediately.
 6. QA runs in a background lane against each PR's own preview, one lane per PR head, while
    other work continues. A pass needs a screenshot, and every browser scenario is also

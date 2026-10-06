@@ -61,25 +61,47 @@ run state resolve against it.
 
 ## Agent tree
 
-The main session plans, decides, dispatches, and verifies. It runs no work an owning role
-owns: code goes to the tier owner, QA and evidence to a background `qa-verifier` lane. Laya
-takes the forks that need no thinker. Subagents read, edit, and pull docs. The advisor is on
-call for three moments. On Codex the roles are adopted in the thread and the model column
-does not apply.
+The work runs on three levels. The owner is the human client. The coordinator is the main
+session, and it runs no work an owning role owns: code goes to the tier owner, QA and
+evidence to a background `qa-verifier` lane. Workers are independent lanes with one job
+each, and they run in parallel. On Codex the roles are adopted in the thread, writers one
+after another (Host adapter), and the model column does not apply. Laya takes the forks that
+need no thinker. The advisor is on call for three moments.
 
-| Layer | Owner | Model · effort | Job |
+| Layer | Role | Model · effort | Job |
 |---|---|---|---|
-| Main session | router and `coordinator` | Opus 5.5 · xhigh | plans, decides, dispatches, reviews, verifies |
+| Owner | the human client | human | sets requirements, corrects, answers fences, merges |
+| Coordinator (main session) | router and `coordinator` | Opus 5.5 · xhigh | hears every owner requirement, plans, decides, delegates, reviews worker output, verifies evidence; writes only the state file, the ledger, and the session record |
 | Fork layer | `laya-decision` | code | sharp forks run in code; split forks return to the main session |
 | Explorer | `analyst` | opus · medium | reads the code |
 | Researcher | `researcher` | opus · medium | pulls the docs |
 | Worker, mechanical | `implementer`, `design-implementer` | sonnet | repetitive edits, basic utils, unit tests |
 | Worker, complex | `senior-implementer` | opus · xhigh | data shapes, contracts, boundaries, hot paths |
+| DevOps | `devops` | opus · medium | CI failures a slice did not cause, pipelines, environments, dependency and health audits |
 | Judgment roles | `groomer`, `planner`, `pr-author`, `unblocker` | opus · session effort | tickets, slices, PRs, blockers |
 | Verification | `qa-verifier`, `health-check` | sonnet, haiku | QA evidence, adversarial audit |
 | Reporting | `report-writer` | sonnet | renders one HTML page from state, ledger, diff, or a code map; never publishes |
-| Design and review | `design-runner`, `reviewer`, `pr-reviewer` | the host model: opus, or Luna on Codex | `architect` candidates, `interrogate` findings, `review-pr` findings |
+| Design and review | `design-runner`, `reviewer`, `pr-reviewer`, `mention-responder` | the host model: opus, or Luna on Codex | `architect` candidates, `interrogate` findings, `review-pr` findings, `review-watch` replies |
 | Advisor | advisor tool, else `advisor` | Fable 5.1 | before a plan, when an error repeats, before done |
+
+What crosses levels:
+
+- Owner to coordinator: requests, kept verbatim; corrections; fence answers.
+- Coordinator to owner: phase reports (Final report), fence questions
+  (`skills/autonomy-has-fences/SKILL.md`), and merge decisions (Merge boundary).
+- Coordinator and workers: a standalone brief goes down and a report with its evidence comes
+  up (`skills/coordinate/SKILL.md`). A worker's question for the owner travels in that report.
+
+| Job | Owning role |
+|---|---|
+| Analysis | `analyst` |
+| Research | `researcher` |
+| Advice and consult | the advisor at its checkpoints; `reviewer` through `interrogate` or `architect` |
+| Development | `implementer`, `senior-implementer`, `design-implementer`, by tier |
+| Addressing review comments | the slice's tier owner, through the project's `address-ai-reviews` |
+| Answering comments that tag the operator on another author's PR | `mention-responder`, through `skills/review-watch/SKILL.md` |
+| Feedback | the role that owns the mistaken work, with a `correction-recorded` row (Step 0); a repeat goes to `skills/correct/SKILL.md` |
+| DevOps and project health | `devops`; `health-check` audits one diff, not the project |
 
 ## Fork layer
 
@@ -100,6 +122,7 @@ Once this skill starts, every later turn stays inside the open playbook.
 | `babysit <slug>` or a monitor wake | Run one babysit pass, then return to the open playbook. Do not re-match. |
 | A request for a report, chart, diagram, flow, architecture view, or other page about the open run | Run `skills/html-report/SKILL.md` against the run's state and ledger, then return to the open playbook. Do not re-match. |
 | A request to review someone else's PR by URL | Run `skills/review-pr/SKILL.md`, then return to the open playbook, or to idle when none is open. Do not re-match. |
+| `/vistack:review-watch` with `on`, `off`, `status`, or `pass`, or its loop firing | Run `skills/review-watch/SKILL.md` with that argument, then return to the open playbook, or to idle when none is open. Do not re-match. |
 | The operator corrects how an agent works, not what the work is | Route the fix to the role that owns the mistaken work, add a `correction-recorded` ledger row, and propose `/vistack:correct` for that class in the next phase report. Do not re-match. |
 | Any other mid-run input | Continue the next unchecked playbook step. |
 | `new task` | Close the current run if safe, then return to the principles index and match again. |
@@ -125,12 +148,12 @@ On the match path (the first request, or after `new task`), run
 the original; the enhanced text goes only into analysis briefs and the advisor. A part it
 lists as missing stays missing, so a missing `Done means` still stops at Step 3.
 
-Before dispatching implementation, identify the consuming project's shape. Inspect its
-`package.json`, lockfile, TypeScript or JavaScript configuration, and source extensions.
-When the evidence shows React plus a frontend runtime/build surface and `.tsx`/`.jsx` (or
-equivalent React source), read `skills/frontend-code-style/SKILL.md` and add it to the
-implementation contract. Record the identifying evidence as `file:line` references. Do
-not apply that contract to non-React or non-frontend projects.
+Before dispatching implementation, get the consuming project's shape from the `analyst`
+pass that builds the impact map. It cites `package.json`, the lockfile, TypeScript or
+JavaScript configuration, and source extensions, each with `file:line`. When that report
+shows React plus a frontend runtime/build surface and `.tsx`/`.jsx` (or equivalent React
+source), read `skills/frontend-code-style/SKILL.md` and add it to the implementation
+contract. Do not apply that contract to non-React or non-frontend projects.
 
 ## Step 2. Match exactly one playbook
 

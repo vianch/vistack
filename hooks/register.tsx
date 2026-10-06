@@ -1,7 +1,9 @@
 import { atom, read, update } from 'claude-code'
 
+import { adviceHead, advisorSteps, consultsFromApi, consultsFromStep, consultsFromTranscript } from './lib/advisor'
+import { AWAKE_LINGER_MS, DEFAULT_KEEP_AWAKE, awakePlan, readKeepAwake, shouldHoldAwake } from './lib/awake'
 import { needsReply } from './lib/board'
-import { isLive, nickname } from './lib/crew'
+import { isLive, nickname, roleOf } from './lib/crew'
 import { basename, duration, usd } from './lib/format'
 import { DEFAULT_ROSTER, decisionContext, frontmatterModel, mayApply, parseDecision } from './lib/jev'
 import { launchPlan, lazygitMarker, pickLauncher } from './lib/launch'
@@ -31,13 +33,33 @@ import {
   reviewPostOf,
   seatName,
 } from './lib/org'
+import {
+  applyChange,
+  fromAgents,
+  fromCronList,
+  fromRuns,
+  fromStopSnapshot,
+  fromTaskNotifications,
+  fromToolCall,
+  isOpen,
+  isSessionWorking,
+  noteFromTask,
+  resolveAbsent,
+  settle,
+  stopAllCalls,
+  stopCall,
+  stoppedBy,
+  taskNotesFrom,
+} from './lib/monitors'
 import { modelLabel } from './lib/pricing'
 import { effectiveRealm, isInRealm, normalizeRemote, realmParts } from './lib/realm'
 import { pairs, search } from './lib/recall'
+import { relaunchPlan, withLoopArgs } from './lib/relaunch'
+import { carryWatch, isWatchLoop, parseWatchState, planWatch, watchLoopArgs } from './lib/review-watch'
 import { DEFAULT_SETTINGS, iconsOf, paletteOf, readSettings } from './lib/theme'
 import { gitdirOf, headBranch, isPrChange, lastLedgerRow, parsePrSearch, parseRun, prSearchArgs } from './lib/workflow'
 import { agentsTab } from './tabs/agents'
-import { boardTab } from './tabs/board'
+import { WATCH_OFF_CONFIRM, boardTab } from './tabs/board'
 import { changesTab } from './tabs/changes'
 import { costTab } from './tabs/cost'
 import { Header } from './tabs/parts'
@@ -47,24 +69,42 @@ import { settingsTab } from './tabs/settings'
 import { timelineTab } from './tabs/timeline'
 import { workflowTab } from './tabs/workflow'
 
-import type { AgentSpawnResult, EngineInterface, Register, RenderElement, Timer, TurnStepChunk, TurnStepResult } from 'claude-code'
+import type {
+  AgentSpawnResult,
+  EngineInterface,
+  HookStream,
+  ProcessSpawnChunk,
+  ProcessSpawnResult,
+  Register,
+  RenderElement,
+  Timer,
+  TurnStepChunk,
+  TurnStepResult,
+} from 'claude-code'
 import type { Decision, Roster } from './lib/jev'
 import type { Launcher } from './lib/launch'
 import type { ReviewPost } from './lib/org'
 import type { RealmSource } from './lib/realm'
+import type { RelaunchCall } from './lib/relaunch'
 import type { IconName } from './lib/theme'
 import type { AgentAction } from './tabs/agents'
+import type { LoopDraft, MonitorAction } from './tabs/monitors'
 import type { Kit, KitElements } from './tabs/parts'
 import type {
+  CronSummary,
   DeckActivity,
   DeckAdvisor,
   DeckAgent,
+  DeckAwake,
   DeckComm,
+  DeckConsult,
   DeckEdit,
   DeckLazygit,
+  DeckMonitor,
   DeckPick,
   DeckPlacement,
   DeckPrs,
+  DeckReviewWatch,
   DeckRun,
   DeckSettings,
   DeckSkill,
@@ -76,6 +116,11 @@ import type {
   DeckUsage,
   DeckWorkflow,
   DeckWorktree,
+  KeepAwake,
+  MonitorChange,
+  MonitorEndNote,
+  StopCall,
+  TaskSummary,
 } from '../types'
 
 type Dollar = EngineInterface
@@ -101,6 +146,22 @@ type Job =
   | { kind: 'ask-agent'; agentId: string; text: string }
   | { kind: 'draft'; text: string }
   | { kind: 'stop-turn' }
+  | { kind: 'monitor-change'; change: MonitorChange }
+  | { kind: 'monitor-notes'; notes: MonitorEndNote[] }
+  | { kind: 'monitor-scan' }
+  | { kind: 'monitor-crons' }
+  | { kind: 'monitor-snapshot'; tasks: readonly TaskSummary[] | undefined; crons: readonly CronSummary[] | undefined; isComplete: boolean }
+  | { kind: 'monitor-stop'; id: string }
+  | { kind: 'monitor-stop-all' }
+  | { kind: 'monitor-relaunch'; id: string }
+  | { kind: 'loop-create'; args: string }
+  | { kind: 'loop-tie'; args: string; at: number }
+  | { kind: 'review-watch' }
+  | { kind: 'review-watch-off' }
+
+type AwakeHold = { how: string; stream: HookStream<ProcessSpawnChunk, ProcessSpawnResult> }
+
+type ToolRecipe = Extract<RelaunchCall, { via: 'tool' }>
 
 // The plugin's options from pluginConfigs.
 type Config = {
@@ -116,14 +177,29 @@ const PANE = 'vistack-deck'
 const COMMAND = 'deck'
 const PANE_COLUMNS = 64
 const STORE_KEY = 'deckSettings'
-// Kept apart from the look settings so Reset leaves it alone.
+// Kept apart from the look settings so Reset leaves them alone.
 const REALM_KEY = 'deckRealm'
+const KEEP_AWAKE_KEY = 'deckKeepAwake'
 const PR_POLL_MS = 60_000
 const LIVE_TICK_MS = 300
 const IDLE_TICK_MS = 5000
 const PROMPT_CAP = 8000
 const COMM_TEXT_CAP = 200
 const AGENT_CAP = 60
+// The main transcript's advisor rows. `$1` is the session id, the file's name in whichever project
+// directory holds it; grep reads past $.fs.read's 4 MiB cap.
+const ADVISOR_ROWS = [
+  `grep -h -s -F -e '"advisor_tool_result"' -e '"name":"advisor"'`,
+  '-- "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/projects/*/"$1".jsonl',
+].join(' ')
+const SESSION_ID = /^[\w-]+$/
+const WATCH_COMMAND = 'review-watch'
+const WATCH_SCRIPT = 'skills/review-watch/scripts/watch-state.mjs'
+const WATCH_SYNC_MS = 5 * 60_000
+const NO_WATCH_COMMAND = 'command not loaded'
+// `watch-state.mjs off` exits 1 while another writer holds the state file's lock.
+const OFF_ATTEMPTS = 3
+const OFF_RETRY_MS = 2000
 
 const TABS: readonly { id: DeckTab; label: string; hotkey: string; icon: IconName }[] = [
   { hotkey: '1', icon: 'tab-board', id: 'board', label: 'Board' },
@@ -173,6 +249,12 @@ const confirm = atom({ plugin: 'vistack', key: 'confirm' } as const, '')
 const asking = atom({ plugin: 'vistack', key: 'asking' } as const, '')
 const isBandOpen = atom({ plugin: 'vistack', key: 'isBandOpen' } as const, false)
 const model = atom({ plugin: 'vistack', key: 'model' } as const, '')
+const monitors = atom({ plugin: 'vistack', key: 'monitors' } as const, [] as DeckMonitor[])
+const keepAwake = atom({ plugin: 'vistack', key: 'keepAwake' } as const, DEFAULT_KEEP_AWAKE as KeepAwake)
+const awake = atom({ plugin: 'vistack', key: 'awake' } as const, { isHeld: false } as DeckAwake)
+const loopPrompt = atom({ plugin: 'vistack', key: 'loopPrompt' } as const, '')
+const loopInterval = atom({ plugin: 'vistack', key: 'loopInterval' } as const, '')
+const reviewWatch = atom({ plugin: 'vistack', key: 'reviewWatch' } as const, null as DeckReviewWatch | null)
 
 // Module state: rebuilt by register and session.start on every load.
 let config: Config = { isAutoOpen: true, jevMode: 'suggest', launcher: 'auto', realm: '', vistackRoot: '' }
@@ -189,6 +271,24 @@ let sessionId = ''
 let deckVersion = ''
 let deckRealm = ''
 let isDraining = false
+// Set once an end report reaches the deck through prompt.submit or a notification row. The
+// transcript scan never sets it: reports delivered into a running turn are missing there.
+let isFeedLive = false
+// The sleep-lock child; returning its stream kills it.
+let awakeHold: AwakeHold | null = null
+// Why the lock cannot be held; no child starts again until the setting changes.
+let awakeFailure: string | null = null
+let awakePlatform: string | null = null
+let isSyncingAwake = false
+let lastWorkAt = Number.NEGATIVE_INFINITY
+// A /loop the deck ran or the person typed, claimed by the next turn; when that turn ends, its
+// args become the recipe of the row the loop made.
+let pendingLoop: { args: string; at: number; turnId?: string } | null = null
+// `e.isInteractive` at session.start: a headless session never arms the review watch.
+let isInteractive = false
+let watchScript: string | null = null
+// The first arm of a session lists the crons first, in case the loop exists but no row shows it.
+let isWatchCronListed = false
 let timers: Timer[] = []
 let jobs: Job[] = []
 
@@ -234,6 +334,18 @@ const listDir = async ($: Dollar, path: string) => {
     return await $.fs.list(path)
   } catch {
     return []
+  }
+}
+
+const isSameList = (before: readonly DeckMonitor[], after: readonly DeckMonitor[]): boolean =>
+  before.length === after.length && after.every((monitor, index) => monitor === before[index])
+
+// Writes the monitors only when `revise` changed a row, so a quiet tick redraws nothing.
+const reviseMonitors = async ($: Dollar, revise: (list: readonly DeckMonitor[]) => DeckMonitor[]): Promise<void> => {
+  const list = await read($, monitors)
+
+  if (!isSameList(list, revise(list))) {
+    await update($, monitors, revise)
   }
 }
 
@@ -362,16 +474,14 @@ const refreshWorkflow = async ($: Dollar): Promise<void> => {
     ...(branch === undefined ? {} : { branch }),
     ...(remote === null ? {} : { remote }),
   }))
+  await reviseMonitors($, list => fromRuns(list, runs, at))
 }
 
-const loadDecisionScript = async ($: Dollar): Promise<void> => {
-  const roots = [
-    config.vistackRoot,
-    $.plugin.root,
-    home === undefined ? '' : `${home}/.claude/plugins/marketplaces/vistack`,
-  ]
+const pluginRoots = ($: Dollar): string[] =>
+  [config.vistackRoot, $.plugin.root, home === undefined ? '' : `${home}/.claude/plugins/marketplaces/vistack`].filter(one => one !== '')
 
-  for (const root of roots.filter(one => one !== '')) {
+const loadDecisionScript = async ($: Dollar): Promise<void> => {
+  for (const root of pluginRoots($)) {
     const path = `${root}/scripts/vistack-decision.py`
 
     if (await exists($, path)) {
@@ -572,6 +682,14 @@ const syncAgents = async ($: Dollar): Promise<void> => {
 
     return next.slice(-AGENT_CAP)
   })
+
+  // A fallback advisor that ended with no turn.complete would leave the seat advising.
+  const ended = new Set(listed.filter(info => !isLive(info.status) && info.status !== 'waiting').map(info => info.id))
+  const open = (await read($, advisor)).consults.filter(consult => isAgentAdvising(consult) && ended.has(consult.id))
+
+  for (const consult of open) {
+    await endConsult($, consult.id, at, agentConsult((await read($, steps)).filter(step => step.agentId === consult.id), ''))
+  }
 }
 
 const checkLazygit = async ($: Dollar): Promise<void> => {
@@ -638,45 +756,103 @@ const setActivity = async ($: Dollar, key: string, value: DeckActivity | null): 
   )
 }
 
-const startConsult = async ($: Dollar, id: string, at: number, turnId: string | undefined): Promise<void> => {
+// A fallback advisor agent still at work: its consult ends with the agent's turn. A consult read
+// back from the session may never have been seen to start, so only these keep the seat advising.
+const isAgentAdvising = (consult: DeckConsult): boolean => consult.source === 'agent' && consult.endedAt === undefined
+
+const startConsult = async ($: Dollar, consult: DeckConsult): Promise<void> => {
   await update($, advisor, value => ({
-    consults: [...value.consults.filter(consult => consult.id !== id), { at, id, ...(turnId === undefined ? {} : { turnId }) }].slice(
-      -CONSULT_CAP,
-    ),
+    consults: [...value.consults.filter(one => one.id !== consult.id), consult].slice(-CONSULT_CAP),
     isAdvising: true,
-    since: at,
+    since: consult.at,
   }))
 }
 
-const endConsult = async ($: Dollar, id: string, at: number, advice: string): Promise<void> => {
+// Posts new advice to the comms, except a fallback agent's: its report already carries it.
+const endConsult = async ($: Dollar, id: string, at: number, found: Partial<DeckConsult> = {}): Promise<void> => {
   const known = (await read($, advisor)).consults.find(consult => consult.id === id)
 
-  await update($, advisor, value => ({
-    ...value,
-    consults: value.consults.map(consult =>
-      consult.id === id
-        ? { ...consult, ms: Math.max(0, at - consult.at), ...(advice === '' ? {} : { advice }) }
-        : consult,
-    ),
-    isAdvising: false,
-  }))
-  if (advice !== '' && known?.advice === undefined) {
-    await addComm($, { at, from: 'advisor', kind: 'advice', text: tail(advice), to: 'coordinator' })
+  await update($, advisor, value => {
+    const consults = value.consults.map(consult =>
+      consult.id === id ? { ...consult, ...found, endedAt: at, ms: Math.max(0, at - consult.at) } : consult,
+    )
+
+    return { ...value, consults, isAdvising: consults.some(isAgentAdvising) }
+  })
+  if (found.advice !== undefined && known !== undefined && known.advice === undefined && known.source !== 'agent') {
+    await addComm($, { at, from: 'advisor', kind: 'advice', text: tail(found.advice), to: 'coordinator' })
   }
 }
 
-// Consults read back from the transcript fill in advice the stream could not see.
+const agentConsult = (own: readonly DeckStep[], answer: string): Partial<DeckConsult> => {
+  const totals = addUp(own)
+  const model = own[own.length - 1]?.model
+  const advice = answer.trim()
+
+  return {
+    ...(model === undefined
+      ? {}
+      : {
+          cacheRead: totals.cacheRead,
+          cacheWrite: totals.cacheWrite,
+          input: totals.input,
+          model,
+          output: totals.output,
+          usd: totals.isPartial ? null : totals.usd,
+        }),
+    ...(advice === '' ? {} : { advice, adviceHead: adviceHead(advice) }),
+  }
+}
+
+// '' when the file or grep is missing, which leaves the consults unpriced.
+const readAdvisorRows = async ($: Dollar): Promise<string> => {
+  const id = sessionId === '' ? await $.session.id().catch(() => '') : sessionId
+
+  if (!SESSION_ID.test(id)) {
+    return ''
+  }
+
+  const ran = await $.process.run(['sh', '-c', ADVISOR_ROWS, 'sh', id], { timeoutMs: 10_000 }).catch(() => null)
+
+  return ran?.stdout ?? ''
+}
+
+const isSameStep = (known: DeckStep | undefined, step: DeckStep): boolean =>
+  known !== undefined && (Object.keys(step) as (keyof DeckStep)[]).every(key => known[key] === step[key])
+
+// One priced step per server consult, so the per-model table counts the advisor. A fallback
+// agent's own steps already price it.
+const recordAdvisorSteps = async ($: Dollar, consults: readonly DeckConsult[]): Promise<void> => {
+  const found = advisorSteps(consults.filter(consult => consult.source !== 'agent'))
+
+  await update($, steps, list =>
+    found.reduce((next, step) => (isSameStep(next.find(one => one.key === step.key), step) ? next : recordStep(next, step)), list),
+  )
+}
+
+// A server consult whose model and tokens the transcript has not given yet; an error has none.
+const isUnpriced = (consult: DeckConsult): boolean =>
+  consult.source !== undefined && consult.source !== 'agent' && consult.model === undefined && consult.error === undefined
+
+// Server consults read back from the session: the api form gives each result, the transcript the
+// advisor's model and tokens. The rows give a client advisor tool's advice.
 const scanAdvisor = async ($: Dollar): Promise<void> => {
-  const found = consultsFrom(await $.session.messages())
+  const at = await $.clock.now()
+  const session = [
+    ...consultsFromApi(await $.session.messages({ as: 'api' }).catch(() => [])),
+    ...consultsFrom(await $.session.messages().catch(() => [])),
+  ]
+  const isPricing = mergeConsults((await read($, advisor)).consults, session, at).consults.some(isUnpriced)
+  const found = isPricing ? [...session, ...consultsFromTranscript(await readAdvisorRows($))] : session
 
   if (found.length === 0) {
     return
   }
 
-  const at = await $.clock.now()
   const { advised } = mergeConsults((await read($, advisor)).consults, found, at)
 
   await update($, advisor, value => ({ ...value, consults: mergeConsults(value.consults, found, at).consults }))
+  await recordAdvisorSteps($, (await read($, advisor)).consults)
   for (const consult of advised) {
     await addComm($, { at, from: 'advisor', kind: 'advice', text: tail(consult.advice ?? ''), to: 'coordinator' })
   }
@@ -861,6 +1037,492 @@ const noteReview = async ($: Dollar, post: ReviewPost, from: string): Promise<vo
   enqueue({ kind: 'prs' })
 }
 
+const takeNotes = (notes: MonitorEndNote[]): void => {
+  if (notes.length === 0) {
+    return
+  }
+  isFeedLive = true
+  enqueue({ kind: 'monitor-notes', notes })
+}
+
+const applyNotes = async ($: Dollar, notes: readonly MonitorEndNote[]): Promise<void> => {
+  const at = await $.clock.now()
+
+  await reviseMonitors($, list => fromTaskNotifications(list, notes, at))
+}
+
+const scanMonitorNotes = async ($: Dollar): Promise<void> => {
+  const notes = taskNotesFrom(await $.session.messages())
+
+  if (notes.length > 0) {
+    await applyNotes($, notes)
+  }
+}
+
+const syncCrons = async ($: Dollar): Promise<void> => {
+  const ran = await $.tool.call({ tool: 'CronList' })
+  const listed = ran.deny === undefined && ran.isError !== true ? ran.result.jobs : undefined
+
+  if (!Array.isArray(listed)) {
+    $.ui.log(`vistack-deck CronList: ${ran.deny ?? ran.text ?? 'no jobs listed'}`, { to: 'debug' })
+
+    return
+  }
+
+  const at = await $.clock.now()
+
+  await reviseMonitors($, list => fromCronList(list, listed, at))
+}
+
+const syncAgentMonitors = async ($: Dollar): Promise<void> => {
+  const agentList = await read($, agents)
+  const at = await $.clock.now()
+
+  await reviseMonitors($, list => fromAgents(list, agentList, at))
+}
+
+const takeSnapshot = async ($: Dollar, job: Extract<Job, { kind: 'monitor-snapshot' }>): Promise<void> => {
+  const at = await $.clock.now()
+
+  await reviseMonitors($, list => fromStopSnapshot(list, { crons: job.crons, tasks: job.tasks }, at, job.isComplete))
+}
+
+// Applies the end itself, as the deck's own tool calls skip its tool.call hook. The reason the
+// call refused, or null once it ran.
+const runStopCall = async ($: Dollar, call: StopCall): Promise<string | null> => {
+  try {
+    const ran = await $.tool.call(call)
+
+    if (ran.deny !== undefined) {
+      return ran.deny
+    }
+    if (ran.isError === true) {
+      return ran.text ?? `${call.tool} failed`
+    }
+  } catch (error) {
+    return String(error)
+  }
+
+  const change = stoppedBy(call, await $.clock.now())
+
+  await reviseMonitors($, list => applyChange(list, change))
+
+  return null
+}
+
+const stopMonitor = async ($: Dollar, id: string): Promise<void> => {
+  const monitor = (await read($, monitors)).find(one => one.id === id)
+
+  if (monitor === undefined) {
+    return
+  }
+
+  const plan = stopCall(monitor)
+
+  if (!plan.isAllowed) {
+    $.ui.toast(`Cannot stop ${monitor.label}: ${plan.reason}.`)
+
+    return
+  }
+
+  const reason = await runStopCall($, plan.call)
+
+  $.ui.toast(
+    reason === null
+      ? `${plan.verb === 'stop' ? 'Stopped' : 'Canceled'} ${monitor.label}.`
+      : `Could not ${plan.verb} ${monitor.label}: ${reason}`,
+  )
+}
+
+const stopAllMonitors = async ($: Dollar): Promise<void> => {
+  const calls = stopAllCalls(await read($, monitors))
+  const refusals: string[] = []
+
+  for (const call of calls) {
+    const reason = await runStopCall($, call)
+
+    if (reason !== null) {
+      refusals.push(`${call.tool}: ${reason}`)
+    }
+  }
+  $.ui.toast(
+    refusals.length === 0
+      ? `Stopped or canceled ${calls.length}.`
+      : `${refusals.length} of ${calls.length} refused. ${refusals.join('; ')}`,
+  )
+}
+
+const startLoop = async ($: Dollar, args: string): Promise<void> => {
+  pendingLoop = { args, at: await $.clock.now() }
+  $.ui.toast(`Queued /loop ${args}.`)
+  try {
+    await $.command.run({ args, command: 'loop' })
+  } catch (error) {
+    if (pendingLoop?.args === args && pendingLoop.turnId === undefined) {
+      pendingLoop = null
+    }
+    $.ui.toast(`Could not start /loop ${args}: ${String(error)}`)
+  }
+}
+
+const callRecipe = ($: Dollar, call: ToolRecipe) => {
+  switch (call.tool) {
+    case 'Bash':
+      return $.tool.call({ ...call.input, tool: 'Bash' })
+    case 'Monitor':
+      return $.tool.call({ ...call.input, tool: 'Monitor' })
+    case 'CronCreate':
+      return $.tool.call({ ...call.input, tool: 'CronCreate' })
+  }
+}
+
+// Queues the new row itself, as runStopCall applies its end. The reason the call refused, or null
+// once it ran.
+const runRecipe = async ($: Dollar, call: ToolRecipe): Promise<string | null> => {
+  try {
+    const ran = await callRecipe($, call)
+
+    if (ran.deny !== undefined) {
+      return ran.deny
+    }
+    if (ran.isError === true) {
+      return ran.text ?? `${call.tool} failed`
+    }
+
+    const change = fromToolCall(call.tool, call.input, ran.result, await $.clock.now())
+
+    if (change !== null) {
+      enqueue({ change, kind: 'monitor-change' })
+    }
+
+    return null
+  } catch (error) {
+    return String(error)
+  }
+}
+
+const relaunchMonitor = async ($: Dollar, id: string): Promise<void> => {
+  const monitor = (await read($, monitors)).find(one => one.id === id)
+
+  if (monitor === undefined) {
+    return
+  }
+
+  const plan = relaunchPlan(monitor)
+
+  if (!plan.isAllowed) {
+    $.ui.toast(`Cannot relaunch ${monitor.label}: ${plan.reason}.`)
+
+    return
+  }
+
+  const { call } = plan
+
+  switch (call.via) {
+    case 'rehire':
+      enqueue({ agentId: call.agentId, isReload: false, kind: 'hire' })
+
+      return
+    case 'command':
+      return startLoop($, call.args)
+    case 'tool': {
+      const reason = await runRecipe($, call)
+
+      $.ui.toast(reason === null ? `Relaunched ${monitor.label}.` : `Could not relaunch ${monitor.label}: ${reason}`)
+    }
+  }
+}
+
+// For work the queue must not wait on: a permission dialog, or a command held until the session is idle.
+const detach = ($: Dollar, kind: string, work: Promise<void>): void => {
+  void work.catch((error: unknown) => $.ui.log(`vistack-deck ${kind}: ${String(error)}`, { to: 'debug' }))
+}
+
+const awakeNow = (): DeckAwake => {
+  if (awakeHold !== null) {
+    return { how: awakeHold.how, isHeld: true }
+  }
+
+  return awakeFailure === null ? { isHeld: false } : { isHeld: false, reason: awakeFailure }
+}
+
+const showAwake = async ($: Dollar): Promise<void> => {
+  const now = awakeNow()
+  const shown = await read($, awake)
+
+  if (shown.isHeld !== now.isHeld || shown.how !== now.how || shown.reason !== now.reason) {
+    await update($, awake, () => now)
+  }
+}
+
+const releaseAwake = async (): Promise<void> => {
+  const held = awakeHold
+
+  awakeHold = null
+  await held?.stream.return({ code: null, signal: null }).catch(() => undefined)
+}
+
+// A child that ends while still held (it exited, or never started) leaves its reason.
+const holdAwake = async ($: Dollar, hold: AwakeHold): Promise<void> => {
+  let end: ProcessSpawnResult | undefined
+  let failure: string | null = null
+
+  try {
+    let piece = await hold.stream.next()
+
+    while (piece.done !== true) {
+      piece = await hold.stream.next()
+    }
+    end = piece.value
+  } catch (error) {
+    failure = `${hold.how} did not start: ${String(error)}`
+  }
+  if (awakeHold !== hold) {
+    return
+  }
+  awakeHold = null
+  awakeFailure = failure ?? `${hold.how} ended (${end?.signal ?? `exit ${end?.code}`})`
+  await showAwake($)
+}
+
+const readPlatform = async ($: Dollar): Promise<string> => {
+  const ran = await $.process.run(['uname', '-s'], { timeoutMs: 5000 }).catch(() => null)
+
+  return ran?.exitCode === 0 ? ran.stdout : ''
+}
+
+const startAwake = async ($: Dollar): Promise<void> => {
+  awakePlatform ??= await readPlatform($)
+
+  const plan = awakePlan(awakePlatform)
+
+  if (plan.argv === null) {
+    awakeFailure = plan.reason
+
+    return
+  }
+
+  const hold = { how: plan.how, stream: $.process.spawn({ argv: plan.argv }) }
+
+  awakeHold = hold
+  void holdAwake($, hold)
+}
+
+const syncAwake = async ($: Dollar, at: number): Promise<void> => {
+  if (isSyncingAwake) {
+    return
+  }
+  isSyncingAwake = true
+  try {
+    const isWorking = isSessionWorking({
+      agents: await read($, agents),
+      isTurnRunning: currentTurnId !== undefined,
+      monitors: await read($, monitors),
+      now: at,
+    })
+
+    if (isWorking) {
+      lastWorkAt = at
+    }
+    if (!shouldHoldAwake(await read($, keepAwake), at - lastWorkAt <= AWAKE_LINGER_MS)) {
+      await releaseAwake()
+    } else if (awakeHold === null && awakeFailure === null) {
+      await startAwake($)
+    }
+    await showAwake($)
+  } finally {
+    isSyncingAwake = false
+  }
+}
+
+const saveKeepAwake = async ($: Dollar, mode: KeepAwake): Promise<void> => {
+  await update($, keepAwake, () => mode)
+  awakeFailure = null
+  await $.store.set(KEEP_AWAKE_KEY, mode).catch((error: unknown) => $.ui.log(`vistack-deck keep-awake: ${String(error)}`, { to: 'debug' }))
+  await syncAwake($, await $.clock.now())
+}
+
+const saveLoopDraft = async ($: Dollar, draft: LoopDraft): Promise<void> => {
+  await update($, loopInterval, () => draft.interval)
+  await update($, loopPrompt, () => draft.prompt)
+}
+
+const createLoop = async ($: Dollar, args: string): Promise<void> => {
+  await update($, loopPrompt, () => '')
+  enqueue({ args, kind: 'loop-create' })
+}
+
+// Writes the watch atom only when `revise` changed it, so a quiet read redraws nothing.
+const reviseWatch = async ($: Dollar, revise: (current: DeckReviewWatch | null) => DeckReviewWatch | null): Promise<void> => {
+  const current = await read($, reviewWatch)
+
+  if (revise(current) !== current) {
+    await update($, reviewWatch, revise)
+  }
+}
+
+const withoutOffPending = (current: DeckReviewWatch | null): DeckReviewWatch | null => {
+  if (current?.isOffPending !== true) {
+    return current
+  }
+
+  const { isOffPending, ...rest } = current
+
+  return rest
+}
+
+// skills/review-watch/references/data.md: the directory the script writes and the deck reads.
+const watchDirOf = async ($: Dollar): Promise<string | null> => {
+  const dir = (await $.env.get('VISTACK_REVIEW_WATCH_DIR')) ?? ''
+
+  if (dir !== '') {
+    return dir
+  }
+
+  return home === undefined ? null : `${home}/.vistack/review-watch`
+}
+
+const findWatchCommand = async ($: Dollar): Promise<string | null> => {
+  const listed = await $.command.list().catch(() => [])
+  const found = listed.find(
+    one => (one.plugin ?? PLUGIN) === PLUGIN && (one.name === WATCH_COMMAND || one.name.endsWith(`:${WATCH_COMMAND}`)),
+  )
+
+  return found?.name ?? null
+}
+
+const findWatchScript = async ($: Dollar): Promise<string | null> => {
+  for (const root of pluginRoots($)) {
+    if (await exists($, `${root}/${WATCH_SCRIPT}`)) {
+      return `${root}/${WATCH_SCRIPT}`
+    }
+  }
+
+  return null
+}
+
+const planReviewWatch = async ($: Dollar, at: number) => {
+  const plan = async () =>
+    planWatch({ isInteractive, monitors: await read($, monitors), now: at, remote, watch: await read($, reviewWatch) })
+  const first = await plan()
+
+  if (!first.arm || isWatchCronListed || (await read($, monitors)).some(isWatchLoop)) {
+    return first
+  }
+  isWatchCronListed = true
+  await syncCrons($).catch(() => undefined)
+
+  return plan()
+}
+
+// Reads the state file, then retires duplicate watch loops and arms one when no pass is firing.
+const syncReviewWatch = async ($: Dollar): Promise<void> => {
+  const at = await $.clock.now()
+  const dir = await watchDirOf($)
+  const parsed = parseWatchState(dir === null ? null : await readText($, `${dir}/state.json`), at)
+  const command = parsed?.enabled === true ? await findWatchCommand($) : null
+  const shown = parsed?.enabled === true && command === null && parsed.error === undefined ? { ...parsed, error: NO_WATCH_COMMAND } : parsed
+
+  await reviseWatch($, current => carryWatch(current, shown))
+
+  const plan = await planReviewWatch($, at)
+
+  for (const id of plan.retire) {
+    const reason = await runStopCall($, { id, tool: 'CronDelete' })
+
+    if (reason !== null) {
+      $.ui.log(`vistack-deck review-watch retire ${id}: ${reason}`, { to: 'debug' })
+    }
+  }
+
+  const watch = await read($, reviewWatch)
+  const args = !plan.arm || command === null || watch === null ? null : watchLoopArgs(command, watch.realm)
+
+  if (args === null) {
+    return
+  }
+  // Set before the queued /loop runs, so a sync in between cannot arm twice.
+  await reviseWatch($, current => (current === null ? current : { ...current, armRequestedAt: at }))
+  await addComm($, { at, from: 'deck', kind: 'action', text: `review watch armed (${plan.reason})`, to: 'coordinator' })
+  detach($, 'review-watch', startLoop($, args))
+}
+
+const requestWatchOff = async ($: Dollar): Promise<void> => {
+  await reviseWatch($, current => (current === null || current.isOffPending === true ? current : { ...current, isOffPending: true }))
+  enqueue({ kind: 'review-watch-off' })
+}
+
+const pressWatchOff = async ($: Dollar): Promise<void> => {
+  if ((await read($, confirm)) !== WATCH_OFF_CONFIRM) {
+    await update($, confirm, () => WATCH_OFF_CONFIRM)
+
+    return
+  }
+  await update($, confirm, () => '')
+  await requestWatchOff($)
+}
+
+// The script's first stderr line, or null once it exited 0.
+const runWatchOff = async ($: Dollar, path: string, dir: string | null): Promise<string | null> => {
+  for (let attempt = 1; ; attempt += 1) {
+    const ran = await $.process
+      .run(['node', path, 'off'], { timeoutMs: 20_000, ...(dir === null ? {} : { env: { VISTACK_REVIEW_WATCH_DIR: dir } }) })
+      .catch((error: unknown) => ({ exitCode: -1, stderr: String(error) }))
+
+    if (ran.exitCode === 0) {
+      return null
+    }
+    if (ran.exitCode !== 1 || attempt === OFF_ATTEMPTS) {
+      return ran.stderr.trim().split('\n')[0] || `exit ${ran.exitCode}`
+    }
+    await $.clock.sleep(OFF_RETRY_MS)
+  }
+}
+
+const giveUpOff = async ($: Dollar, reason: string, command: string): Promise<void> => {
+  await reviseWatch($, withoutOffPending)
+  $.ui.toast(`Could not turn the review watch off: ${reason}. Run /${command} off.`)
+}
+
+const offByCommand = async ($: Dollar, command: string, failure: string): Promise<void> => {
+  $.ui.toast(`The review watch's off script failed (${failure}); queued /${command} off.`)
+  try {
+    await $.command.run({ args: 'off', command })
+  } catch (error) {
+    await giveUpOff($, `${failure}; /${command} off: ${String(error)}`, command)
+  }
+}
+
+// The state file's one writer turns the watch off everywhere; this session's loops are deleted too,
+// as the skill's own off does.
+const turnWatchOff = async ($: Dollar): Promise<void> => {
+  watchScript ??= await findWatchScript($)
+
+  const failure = watchScript === null ? `${WATCH_SCRIPT} not found` : await runWatchOff($, watchScript, await watchDirOf($))
+
+  if (failure === null) {
+    await reviseWatch($, withoutOffPending)
+    for (const monitor of (await read($, monitors)).filter(one => one.kind === 'cron' && isOpen(one) && isWatchLoop(one))) {
+      await runStopCall($, { id: monitor.id, tool: 'CronDelete' })
+    }
+    await addComm($, { from: 'deck', kind: 'action', text: 'review watch off', to: 'coordinator' })
+    $.ui.toast('Review watch is off.')
+    enqueue({ kind: 'review-watch' })
+
+    return
+  }
+
+  const command = await findWatchCommand($)
+
+  if (command === null) {
+    await giveUpOff($, `${failure}; the ${WATCH_COMMAND} command is not loaded`, `${PLUGIN}:${WATCH_COMMAND}`)
+
+    return
+  }
+  // A command waits until the session is idle; the queue does not.
+  detach($, 'review-watch-off', offByCommand($, command, failure))
+}
+
 const runJob = async ($: Dollar, job: Job): Promise<void> => {
   switch (job.kind) {
     case 'usage':
@@ -870,7 +1532,9 @@ const runJob = async ($: Dollar, job: Job): Promise<void> => {
     case 'prs':
       return refreshPrs($)
     case 'agents':
-      return syncAgents($)
+      await syncAgents($)
+
+      return syncAgentMonitors($)
     case 'script':
       return loadDecisionScript($)
     case 'about':
@@ -901,6 +1565,30 @@ const runJob = async ($: Dollar, job: Job): Promise<void> => {
       return draftPrompt($, job.text)
     case 'stop-turn':
       return stopTurn($)
+    case 'monitor-change':
+      return reviseMonitors($, list => applyChange(list, job.change))
+    case 'monitor-notes':
+      return applyNotes($, job.notes)
+    case 'monitor-scan':
+      return scanMonitorNotes($)
+    case 'monitor-crons':
+      return syncCrons($)
+    case 'monitor-snapshot':
+      return takeSnapshot($, job)
+    case 'monitor-stop':
+      return stopMonitor($, job.id)
+    case 'monitor-stop-all':
+      return stopAllMonitors($)
+    case 'monitor-relaunch':
+      return detach($, job.kind, relaunchMonitor($, job.id))
+    case 'loop-create':
+      return detach($, job.kind, startLoop($, job.args))
+    case 'loop-tie':
+      return reviseMonitors($, list => withLoopArgs(list, job.args, job.at))
+    case 'review-watch':
+      return syncReviewWatch($)
+    case 'review-watch-off':
+      return turnWatchOff($)
   }
 }
 
@@ -940,15 +1628,31 @@ const pollPrs = async ($: Dollar): Promise<void> => {
   }
 }
 
+// CronList runs the person's PreToolUse and PostToolUse settings hooks on every call, so it is
+// asked only while the Board shows an open cron, and on Refresh.
+const pollCrons = async ($: Dollar): Promise<void> => {
+  const isBoardShown = (await read($, tab)) === 'board' && (await isDeckVisible($, (await read($, deckSettings)).placement))
+
+  if (isBoardShown && (await read($, monitors)).some(monitor => monitor.kind === 'cron' && isOpen(monitor))) {
+    enqueue({ kind: 'monitor-crons' })
+  }
+}
+
 // Spinners and connectors move every LIVE_TICK_MS while anything works; otherwise the clocks
-// on a visible deck move every IDLE_TICK_MS.
+// on a visible deck move every IDLE_TICK_MS. Monitors that time ends settle here too, and the
+// sleep lock follows the work.
 const tick = async ($: Dollar): Promise<void> => {
   const at = await $.clock.now()
+
+  await reviseMonitors($, list => resolveAbsent(settle(list, at), at, isFeedLive))
+  await syncAwake($, at)
+
   const prefs = await read($, deckSettings)
   const isBusy =
     currentTurnId !== undefined ||
     (await read($, advisor)).isAdvising ||
-    (await read($, agents)).some(agent => isOnStaff(agent) && agent.status === 'running')
+    (await read($, agents)).some(agent => isOnStaff(agent) && agent.status === 'running') ||
+    (await read($, monitors)).some(monitor => monitor.status === 'running')
 
   if (isBusy && prefs.isAnimated) {
     lastSlowTick = at
@@ -1005,13 +1709,20 @@ const switchTab = async ($: Dollar, next: DeckTab): Promise<void> => {
   await update($, tab, () => next)
 }
 
+const refreshMonitors = (): void => {
+  enqueue({ kind: 'monitor-crons' })
+  enqueue({ kind: 'monitor-scan' })
+  enqueue({ kind: 'agents' })
+  enqueue({ kind: 'workflow' })
+}
+
 const refreshAll = (): void => {
   enqueue({ isForced: true, kind: 'usage' })
-  enqueue({ kind: 'workflow' })
-  enqueue({ kind: 'agents' })
   enqueue({ kind: 'prs' })
   enqueue({ kind: 'advisor-scan' })
   enqueue({ kind: 'model' })
+  refreshMonitors()
+  enqueue({ kind: 'review-watch' })
 }
 
 const selectParty = async ($: Dollar, party: string): Promise<void> => {
@@ -1060,6 +1771,33 @@ const actOn = async ($: Dollar, action: AgentAction, party: string): Promise<voi
   }
 }
 
+// Stop, Cancel, Stop all and Relaunch take a second press of the same key, as the agent actions do.
+// Stopping the review watch's loop by hand turns the watch off, so the deck does not arm it again.
+const actOnMonitor = async ($: Dollar, action: MonitorAction, id: string): Promise<void> => {
+  const wanted = `${action}:${id}`
+
+  if ((await read($, confirm)) !== wanted) {
+    await update($, confirm, () => wanted)
+
+    return
+  }
+  await update($, confirm, () => '')
+  if (action === 'relaunch') {
+    enqueue({ id, kind: 'monitor-relaunch' })
+
+    return
+  }
+
+  const isWatchStopped = (await read($, monitors)).some(
+    monitor => isOpen(monitor) && isWatchLoop(monitor) && (action === 'stop-all' || monitor.id === id),
+  )
+
+  enqueue(action === 'stop-all' ? { kind: 'monitor-stop-all' } : { id, kind: 'monitor-stop' })
+  if (isWatchStopped) {
+    await requestWatchOff($)
+  }
+}
+
 const askParty = async ($: Dollar, party: string, text: string): Promise<void> => {
   await update($, asking, () => '')
   if (text.trim() === '') {
@@ -1080,6 +1818,7 @@ const renderTab = async ($: Dollar, kit: Kit, active: DeckTab, columns: number, 
       const toolList = await read($, tools)
       const turnList = await read($, turns)
       const agentList = await read($, agents)
+      const monitorList = await read($, monitors)
 
       return boardTab(
         kit,
@@ -1088,20 +1827,41 @@ const renderTab = async ($: Dollar, kit: Kit, active: DeckTab, columns: number, 
           advisor: await read($, advisor),
           agents: agentList,
           comms: await read($, comms),
+          monitors: {
+            awake: await read($, awake),
+            confirm: await read($, confirm),
+            keepAwake: await read($, keepAwake),
+            loop: { interval: await read($, loopInterval), prompt: await read($, loopPrompt) },
+            monitors: monitorList,
+            now: at,
+            selected: await read($, selected),
+          },
           now: at,
           openId: await read($, openId),
           prs: await read($, prs),
           replies: needsReply(toolList, turnList, agentList),
+          reviewWatch: await read($, reviewWatch),
           steps: await read($, steps),
           todos: await read($, todos),
           tools: toolList,
           turns: turnList,
           usage: await read($, usage),
+          watchLoop: monitorList.filter(monitor => isOpen(monitor) && isWatchLoop(monitor)).sort((left, right) => right.startedAt - left.startedAt)[0],
           workflow: await read($, workflow),
         },
         {
+          monitors: {
+            act: (action, id) => void actOnMonitor($, action, id),
+            createLoop: args => void createLoop($, args),
+            refresh: () => refreshMonitors(),
+            relaunch: id => void actOnMonitor($, 'relaunch', id),
+            select: key => void selectParty($, key),
+            setKeepAwake: mode => void saveKeepAwake($, mode),
+            setLoop: draft => void saveLoopDraft($, draft),
+          },
           refreshPrs: () => enqueue({ kind: 'prs' }),
           toggle: id => void update($, openId, current => (current === id ? '' : id)),
+          turnWatchOff: () => void pressWatchOff($),
         },
         columns,
       )
@@ -1301,11 +2061,22 @@ export const register: Register = (on, options) => {
     vistackRoot: optionText(options.vistackRoot, '').trim(),
   }
   jobs = []
+  isFeedLive = false
+  void releaseAwake()
+  awakeFailure = null
+  awakePlatform = null
+  isSyncingAwake = false
+  lastWorkAt = Number.NEGATIVE_INFINITY
+  pendingLoop = null
+  isInteractive = false
+  watchScript = null
+  isWatchCronListed = false
 
   on('session.start', async ($, e, next) => {
     const started = await next(e)
 
     cwd = e.cwd
+    isInteractive = e.isInteractive
     home = await $.env.get('HOME')
     timers.forEach(timer => timer.cancel())
     timers = [
@@ -1314,12 +2085,13 @@ export const register: Register = (on, options) => {
       $.clock.every(1500, () => enqueue({ kind: 'agents' })),
       $.clock.every(15_000, () => enqueue({ isForced: true, kind: 'usage' })),
       $.clock.every(20_000, () => enqueue({ kind: 'workflow' })),
+      $.clock.every(20_000, () => void pollCrons($)),
       $.clock.every(4000, () => enqueue({ kind: 'lazygit-check' })),
       $.clock.every(PR_POLL_MS, () => void pollPrs($)),
+      $.clock.every(WATCH_SYNC_MS, () => enqueue({ kind: 'review-watch' })),
     ]
     await $.command.register({
-      description:
-        'Open or close the viStack deck: board, org chart, cost, session, changes, flow, recall, settings. /deck <tab> jumps to a tab.',
+      description: `Open or close the viStack deck: ${TABS.map(one => one.label).join(', ')}. /deck <tab> jumps to a tab.`,
       name: COMMAND,
     })
 
@@ -1331,12 +2103,18 @@ export const register: Register = (on, options) => {
 
     deckRealm = prefs.realm
     await update($, deckSettings, () => prefs)
+    const keep = readKeepAwake(await $.store.get(KEEP_AWAKE_KEY).catch(() => undefined))
+
+    await update($, keepAwake, () => keep)
     enqueue({ kind: 'script' })
     enqueue({ kind: 'about' })
     enqueue({ kind: 'model' })
     enqueue({ kind: 'workflow' })
     enqueue({ kind: 'prs' })
     enqueue({ isForced: true, kind: 'usage' })
+    // After the workflow job, which reads the origin the watch's realm gate needs. Queued only: a
+    // command cannot run inside a hook the session waits on.
+    enqueue({ kind: 'review-watch' })
     if (config.isAutoOpen && e.isInteractive) {
       if (prefs.placement === 'right') {
         void openPane($)
@@ -1351,9 +2129,22 @@ export const register: Register = (on, options) => {
   on('session.end', async ($, e, next) => {
     timers.forEach(timer => timer.cancel())
     timers = []
+    await releaseAwake()
+    await showAwake($)
 
     return next(e)
   })
+
+  // A /loop the person typed. The deck's own $.command.run skips this hook; startLoop records those.
+  on('command.run', { command: 'loop' }, async ($, e, next) => {
+    const args = e.args.trim()
+
+    if (args !== '') {
+      pendingLoop = { args, at: await $.clock.now() }
+    }
+
+    return next(e)
+  }).catch(($, e, next) => next(e))
 
   on('command.run', { command: COMMAND }, async ($, e) => {
     const wanted = e.args.trim().toLowerCase()
@@ -1398,6 +2189,9 @@ export const register: Register = (on, options) => {
     const at = await $.clock.now()
 
     currentTurnId = e.turnId
+    if (pendingLoop !== null && pendingLoop.turnId === undefined) {
+      pendingLoop = { ...pendingLoop, turnId: e.turnId }
+    }
     await update($, turns, list => recordTurn(list, { startedAt: at, text: e.text, turnId: e.turnId }))
     await update($, openId, () => '')
     if (e.text.trim() !== '') {
@@ -1416,7 +2210,7 @@ export const register: Register = (on, options) => {
     const key = e.agentId ?? 'main'
     const stream = next(e)
     let kind: DeckActivity['kind'] | null = null
-    let consultId: string | undefined
+    const consultIds: string[] = []
 
     let result: TurnStepResult | undefined
 
@@ -1440,13 +2234,9 @@ export const register: Register = (on, options) => {
 
             kind = seen.kind
             await setActivity($, key, { ...seen, since: at })
-            if (consultId !== undefined) {
-              await endConsult($, consultId, at, '')
-              consultId = undefined
-            }
             if (chunk.kind === 'tool' && ADVISOR_TOOL.test(chunk.name)) {
-              consultId = chunk.id
-              await startConsult($, chunk.id, at, e.turnId)
+              consultIds.push(chunk.id)
+              await startConsult($, { at, id: chunk.id, turnId: e.turnId })
             }
           }
         } catch (error) {
@@ -1455,16 +2245,25 @@ export const register: Register = (on, options) => {
         yield chunk
       }
     } finally {
-      // An aborted stream ends here too: no loop is left showing work it stopped doing.
+      // An aborted stream ends here too: no loop is left showing work it stopped doing. A consult
+      // the stream started ends here, never at a change of chunk kind.
       const stoppedAt = await $.clock.now()
 
-      if (consultId !== undefined) {
-        await endConsult($, consultId, stoppedAt, '').catch(() => undefined)
+      for (const id of consultIds) {
+        await endConsult($, id, stoppedAt).catch(() => undefined)
       }
       await setActivity($, key, null).catch(() => undefined)
     }
 
     const endedAt = await $.clock.now()
+    // The API's own calls, main loop only: a subagent's transcript carries no advisor tokens. One
+    // cut short before its result closes with the step.
+    const served = e.agentId === undefined ? consultsFromStep(result).map(found => ({ endedAt, ...found })) : []
+
+    if (served.length > 0) {
+      await update($, advisor, value => ({ ...value, consults: mergeConsults(value.consults, served, endedAt).consults }))
+      enqueue({ kind: 'advisor-scan' })
+    }
     const step = makeStep({
       endedAt,
       hasStop: result.stopReason !== null,
@@ -1503,6 +2302,10 @@ export const register: Register = (on, options) => {
         patchTurn(list, e.turnId, { answer: e.answer.slice(-4000), durationMs: e.durationMs, reason: e.reason }),
       )
       currentTurnId = undefined
+      if (pendingLoop?.turnId === e.turnId) {
+        enqueue({ args: pendingLoop.args, at: pendingLoop.at, kind: 'loop-tie' })
+        pendingLoop = null
+      }
       if (e.answer.trim() !== '') {
         await addComm($, { at, from: 'coordinator', kind: 'answer', text: tail(e.answer), to: 'user' })
       }
@@ -1510,13 +2313,19 @@ export const register: Register = (on, options) => {
       enqueue({ kind: 'advisor-scan' })
     } else {
       const agentId = e.agentId
-      const cost = addUp(stepList.filter(step => step.agentId === agentId))
+      const own = stepList.filter(step => step.agentId === agentId)
+      const cost = addUp(own)
       const status = e.reason === 'answer' ? 'completed' : e.reason === 'aborted' ? 'killed' : 'failed'
       const parent = (await findAgent($, agentId))?.parentId ?? 'coordinator'
+      const consult = (await read($, advisor)).consults.find(one => one.id === agentId && one.source === 'agent')
 
       await update($, agents, list => patchAgent(list, agentId, { answer: e.answer.slice(-2000), endedAt: at, status }))
       if (e.answer.trim() !== '') {
         await addComm($, { at, from: agentId, kind: 'report', text: tail(e.answer), to: parent })
+      }
+      // The agent list may have closed it first, without the answer.
+      if (consult !== undefined && (isAgentAdvising(consult) || consult.advice === undefined)) {
+        await endConsult($, agentId, at, agentConsult(own, e.answer))
       }
       enqueue({ kind: 'settle', pickId: `agent-${agentId}`, result: e.reason, usd: cost.isPartial ? null : cost.usd })
     }
@@ -1561,6 +2370,13 @@ export const register: Register = (on, options) => {
     if (isOwn) {
       return started
     }
+    // A fallback advisor agent. The deck's own hires step past these hooks, so their end never
+    // arrives to close a consult.
+    if (roleOf(e.subagentType) === 'advisor') {
+      const turnId = e.parentAgentId === undefined ? currentTurnId : undefined
+
+      await startConsult($, { at, id: agentId, source: 'agent', ...(turnId === undefined ? {} : { turnId }) })
+    }
     await addComm($, { at, from: e.parentAgentId ?? 'coordinator', kind: 'dispatch', text: tail(e.description), to: agentId })
     if (decision !== null) {
       await addPick($, agentPick(decision, { agentId, at, model: started.model, subject }, true))
@@ -1598,6 +2414,40 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
+  // A background task's end report, delivered while idle or into a running turn.
+  on('prompt.submit', async ($, e, next) => {
+    if (e.origin.kind === 'task-notification') {
+      takeNotes(taskNotesFrom([{ role: 'user', text: e.text }]))
+    }
+
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
+  // The same report as a notification row draws; the engine's row is drawn unchanged.
+  on('ui.render', { component: 'UserMessage', props: { origin: { kind: 'task-notification' } } }, ($, e, next) => {
+    const note = e.props.task === undefined ? null : noteFromTask(e.props.task)
+
+    if (note !== null) {
+      takeNotes([note])
+    }
+
+    return next(e)
+  })
+
+  // An account may bypass a user-tier plugin's classic hooks, so nothing depends on these snapshots.
+  on('classic.Stop', async ($, e, next) => {
+    enqueue({ crons: e.session_crons, isComplete: true, kind: 'monitor-snapshot', tasks: e.background_tasks })
+    enqueue({ kind: 'monitor-scan' })
+
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
+  on('classic.SubagentStop', async ($, e, next) => {
+    enqueue({ crons: e.session_crons, isComplete: false, kind: 'monitor-snapshot', tasks: e.background_tasks })
+
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
   on('classic.TaskCreated', async ($, e, next) => {
     await update($, todos, list => [
       ...list.filter(todo => todo.id !== e.task_id),
@@ -1614,7 +2464,7 @@ export const register: Register = (on, options) => {
   })
 
   on('tool.call', async ($, e, next) => {
-    // The deck's own TaskStop is not the coordinator's work.
+    // The deck's own calls are not the coordinator's work; the job that made one applies it.
     if (next.origin.plugin === PLUGIN) {
       return next(e)
     }
@@ -1640,7 +2490,7 @@ export const register: Register = (on, options) => {
       }),
     )
     if (isConsult) {
-      await startConsult($, id, startedAt, turnId)
+      await startConsult($, { at: startedAt, id, ...(turnId === undefined ? {} : { turnId }) })
     }
     if (tool === 'AskUserQuestion' && e.agentId === undefined) {
       await addComm($, { at: startedAt, from: 'coordinator', kind: 'question', text: tail(detail || 'a question'), to: 'user' })
@@ -1652,10 +2502,19 @@ export const register: Register = (on, options) => {
 
     await update($, tools, list => finishTool(list, id, endedAt, isError))
     if (isConsult) {
-      await endConsult($, id, endedAt, isError ? '' : (ran.text ?? ''))
+      const advice = isError ? '' : (ran.text ?? '')
+
+      await endConsult($, id, endedAt, advice === '' ? {} : { advice })
     }
     if (isError) {
       return ran
+    }
+
+    const change = fromToolCall(tool, e, ran.result, endedAt, e.agentId)
+
+    // Queued behind any CronList answer still being applied, so that answer cannot retire it.
+    if (change !== null) {
+      enqueue({ change, kind: 'monitor-change' })
     }
     if (delta !== null) {
       await update($, edits, list => mergeEdit(list, delta, endedAt, isNew))

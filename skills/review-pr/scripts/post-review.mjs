@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// The one supported way to post a review on someone else's PR: a single COMMENT review, never
-// APPROVE or REQUEST_CHANGES, refused outside the realm the caller passes in.
-// Input shape: skills/review-pr/references/findings.md. Exit codes: 0 posted, already posted,
-// or dry run; 1 bad input; 2 refused; 3 a GitHub call failed.
+// The one supported way to post on someone else's PR, refused outside the realm the caller passes
+// in. `post` sends a single COMMENT review, never APPROVE or REQUEST_CHANGES. `reply` answers one
+// comment and carries no review event; its body comes only from a file, never an argument.
+// Input shapes: skills/review-pr/references/findings.md and skills/review-watch/references/reply.md.
+// Exit codes: 0 posted, already posted, or dry run; 1 bad input; 2 refused; 3 a GitHub call failed.
 
 import { readFileSync, realpathSync } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -11,7 +12,8 @@ import { fileURLToPath } from "node:url";
 const scriptPath = fileURLToPath(import.meta.url);
 const usage = [
   "usage: node post-review.mjs realm",
-  "       node post-review.mjs post --meta <pr.json> --diff <pr.diff> --findings <findings.json> --realm <host/owner> [--realm ...] [--dry-run]",
+  "       node post-review.mjs post --meta <pr.json> --diff <pr.diff> --findings <findings.json> --realm <host/owner> [--realm ...] [--once-per-head] [--dry-run]",
+  "       node post-review.mjs reply --pr <url> --comment <id> --kind review|issue|review-body --body-file <path> --realm <host/owner> [--realm ...] [--head <sha>] [--dry-run]",
 ].join("\n");
 const defaultHost = "github.com";
 const severities = new Set(["bug", "risk", "nit", "question"]);
@@ -264,7 +266,7 @@ const callGh = (gh, host, args, input) => {
   }
 };
 
-export const postReview = ({ meta, diffText, findings, realms, dryRun, gh }) => {
+export const postReview = ({ meta, diffText, findings, realms, dryRun, oncePerHead = false, gh }) => {
   const pr = parsePrRef(meta?.url);
   checkRealm(pr, realms);
   const { payload, inline, folded } = buildReview({
@@ -292,7 +294,8 @@ export const postReview = ({ meta, diffText, findings, realms, dryRun, gh }) => 
     }
   };
 
-  const existing = findExistingReview(callGh(gh, pr.host, [`${base}/reviews?per_page=100`]), {
+  const reviews = callGh(gh, pr.host, [`${base}/reviews?per_page=100`]);
+  const existing = findExistingReview(reviews, {
     viewer,
     headSha: meta.headRefOid,
     body: payload.body,
@@ -301,6 +304,10 @@ export const postReview = ({ meta, diffText, findings, realms, dryRun, gh }) => 
     const urls = commentUrls(existing.id);
     const note = "already posted on this head; nothing new posted";
     return { posted: false, payload, lines: reportLines({ reviewUrl: existing.html_url, note, inline, folded, urls }) };
+  }
+  const onHead = oncePerHead && reviews.find((review) => sameLogin(review.user?.login, viewer) && review.commit_id === meta.headRefOid);
+  if (onHead) {
+    return { posted: false, payload, lines: [`review: ${onHead.html_url} (already reviewed this head; nothing new posted)`] };
   }
 
   let review;
@@ -314,15 +321,120 @@ export const postReview = ({ meta, diffText, findings, realms, dryRun, gh }) => 
   return { posted: true, payload, lines: reportLines({ reviewUrl: review.html_url, note, inline, folded, urls }) };
 };
 
+const replyKinds = {
+  review: {
+    label: "review comment",
+    read: (number, id) => `pulls/comments/${id}`,
+    parent: ["pull_request_url", "pulls"],
+    time: "created_at",
+    threaded: true,
+  },
+  issue: { label: "comment", read: (number, id) => `issues/comments/${id}`, parent: ["issue_url", "issues"], time: "created_at" },
+  "review-body": {
+    label: "review",
+    read: (number, id) => `pulls/${number}/reviews/${id}`,
+    parent: ["pull_request_url", "pulls"],
+    time: "submitted_at",
+  },
+};
+const replyLimit = 65536;
+
+const sameLogin = (left, right) => String(left).toLowerCase() === String(right).toLowerCase();
+
+const quoteHeader = (url) => `> In reply to ${url}`;
+
+const checkReplyText = (text) => {
+  if (!isText(text)) throw new PostReviewError("the reply body is empty");
+  if (text.length > replyLimit) throw new PostReviewError(`the reply is ${text.length} characters; GitHub takes at most 65,536`);
+  return text;
+};
+
+export const postReply = ({ prUrl, commentId, kind: kindName, body, realms, headSha, dryRun, gh }) => {
+  const pr = parsePrRef(prUrl);
+  checkRealm(pr, realms);
+  const kind = replyKinds[kindName];
+  if (!kind) throw new PostReviewError(`--kind must be one of ${Object.keys(replyKinds).join(", ")}, got ${kindName}`);
+  if (!/^[1-9]\d*$/.test(String(commentId))) throw new PostReviewError(`--comment must be a numeric comment id, got ${commentId}`);
+  if (headSha !== undefined && !shaPattern.test(headSha)) throw new PostReviewError(`--head must be a full 40-character SHA, got ${headSha}`);
+  const answer = checkReplyText(String(body ?? "").trim());
+
+  const repoBase = `repos/${pr.owner}/${pr.repo}`;
+  const prName = `${pr.owner}/${pr.repo}#${pr.number}`;
+  const target = `${kind.label} ${commentId}`;
+  const listPath = kind.threaded ? `${repoBase}/pulls/${pr.number}/comments` : `${repoBase}/issues/${pr.number}/comments`;
+  const draftFor = ({ root, url }) => ({
+    method: "POST",
+    path: kind.threaded ? `${listPath}/${root}/replies` : listPath,
+    body: kind.threaded ? answer : checkReplyText(`${quoteHeader(url)}\n\n${answer}`),
+  });
+  if (dryRun) {
+    const request = draftFor({ root: commentId, url: `<link to ${target}>` });
+    return { posted: false, request, lines: [`reply: dry run for ${target} on ${prName}; the thread root and link are read when posting`] };
+  }
+
+  const viewer = callGh(gh, pr.host, ["user"]).login;
+  const current = callGh(gh, pr.host, [`${repoBase}/pulls/${pr.number}`]);
+  if (sameLogin(current.user?.login, viewer)) throw refuse(`${prName} is the operator's own PR`);
+  if (current.state !== "open") throw refuse(`${prName} is ${current.state}, not open`);
+  if (headSha !== undefined && current.head?.sha !== headSha) {
+    throw refuse(`head moved from ${headSha} to ${current.head?.sha}; draft the reply again against the new head`);
+  }
+
+  let comment;
+  try {
+    comment = callGh(gh, pr.host, [`${repoBase}/${kind.read(pr.number, commentId)}`]);
+  } catch (error) {
+    if (/HTTP 404\b/.test(error.message)) throw refuse(`target not found on this PR: ${target} on ${prName}`);
+    throw error;
+  }
+  const [parentField, parentPath] = kind.parent;
+  if (!String(comment[parentField]).endsWith(`/${parentPath}/${pr.number}`)) throw refuse(`${target} is not on ${prName}`);
+  if (sameLogin(comment.user?.login, viewer)) throw refuse(`${target} is the operator's own`);
+  if (comment.user?.type === "Bot") throw refuse(`${target} is by the bot ${comment.user.login}`);
+
+  // GitHub takes a reply only on a thread's root, and every reply's in_reply_to_id names that root.
+  const root = comment.in_reply_to_id ?? comment.id;
+  const draft = draftFor({ root, url: comment.html_url });
+  const postedAt = new Date(comment[kind.time]);
+  if (Number.isNaN(postedAt.getTime())) throw new PostReviewError(`${target} has no readable ${kind.time}`, { code: 3 });
+  const header = quoteHeader(comment.html_url);
+  const answers = (other) =>
+    kind.threaded ? other.in_reply_to_id === root : String(other.body ?? "").split(/\r?\n/).some((line) => line.trim() === header);
+  const existing = callGh(gh, pr.host, [`${listPath}?since=${postedAt.toISOString()}&per_page=100`]).find(
+    (other) => sameLogin(other.user?.login, viewer) && new Date(other.created_at) > postedAt && answers(other),
+  );
+  if (existing) return { posted: false, request: draft, lines: [`reply: ${existing.html_url} (already replied; nothing new posted)`] };
+
+  let reply;
+  try {
+    reply = callGh(gh, pr.host, ["--method", "POST", draft.path, "--input", "-"], JSON.stringify({ body: draft.body }));
+  } catch (error) {
+    throw new PostReviewError(error.message, { code: 3, payload: draft });
+  }
+  return { posted: true, request: draft, lines: [`reply: ${reply.html_url}`] };
+};
+
 const parseArgs = (argv) => {
   const [command, ...rest] = argv;
   const options = { command, realms: [], dryRun: false, help: command === "--help" || command === "-h" };
-  const valued = { "--meta": "meta", "--diff": "diff", "--findings": "findings", "--event": "event" };
+  const valued = {
+    "--meta": "meta",
+    "--diff": "diff",
+    "--findings": "findings",
+    "--event": "event",
+    "--pr": "pr",
+    "--comment": "comment",
+    "--kind": "kind",
+    "--body-file": "bodyFile",
+    "--head": "head",
+  };
   for (let index = 0; index < rest.length; index += 1) {
     const flag = rest[index];
     const value = rest[index + 1];
     if (flag === "--dry-run") {
       options.dryRun = true;
+    } else if (flag === "--once-per-head") {
+      options.oncePerHead = true;
     } else if (flag === "--help" || flag === "-h") {
       options.help = true;
     } else if ((flag === "--realm" || valued[flag]) && value !== undefined && !value.startsWith("--")) {
@@ -333,13 +445,19 @@ const parseArgs = (argv) => {
       throw new PostReviewError(`unexpected argument ${flag}\n${usage}`);
     }
   }
+  if (command === "reply" && options.event !== undefined) {
+    throw refuse(`event ${options.event}; a reply is a plain comment and carries no review event`);
+  }
   if (options.event !== undefined && options.event.toUpperCase() !== "COMMENT") {
     throw refuse(`event ${options.event}; this script posts COMMENT reviews only`);
   }
   if (!options.help && command === "post" && (!options.meta || !options.diff || !options.findings)) {
     throw new PostReviewError(`--meta, --diff, and --findings are required\n${usage}`);
   }
-  if (!options.help && command !== "post" && command !== "realm") {
+  if (!options.help && command === "reply" && (!options.pr || !options.comment || !options.kind || !options.bodyFile)) {
+    throw new PostReviewError(`--pr, --comment, --kind, and --body-file are required\n${usage}`);
+  }
+  if (!options.help && command !== "post" && command !== "realm" && command !== "reply") {
     throw new PostReviewError(usage);
   }
   return options;
@@ -369,6 +487,7 @@ const runGh = (args, input) => {
 };
 
 const main = () => {
+  const drafted = process.argv[2] === "reply" ? "reply" : "review";
   try {
     const options = parseArgs(process.argv.slice(2));
     if (options.help) {
@@ -382,12 +501,28 @@ const main = () => {
       process.stdout.write(`${host}/${owner}\n`);
       return;
     }
+    if (options.command === "reply") {
+      const result = postReply({
+        prUrl: options.pr,
+        commentId: options.comment,
+        kind: options.kind,
+        body: readText(options.bodyFile, "reply body"),
+        realms: options.realms,
+        headSha: options.head,
+        dryRun: options.dryRun,
+        gh: runGh,
+      });
+      if (options.dryRun) process.stdout.write(`${JSON.stringify(result.request, null, 2)}\n`);
+      process.stdout.write(`${result.lines.join("\n")}\n`);
+      return;
+    }
     const result = postReview({
       meta: readJson(options.meta, "PR metadata"),
       diffText: readText(options.diff, "diff"),
       findings: readJson(options.findings, "findings"),
       realms: options.realms,
       dryRun: options.dryRun,
+      oncePerHead: options.oncePerHead,
       gh: runGh,
     });
     if (options.dryRun) process.stdout.write(`${JSON.stringify(result.payload, null, 2)}\n`);
@@ -395,7 +530,7 @@ const main = () => {
   } catch (error) {
     process.stderr.write(`post-review: ${error?.message ?? error}\n`);
     if (error?.payload) {
-      process.stdout.write(`drafted review, not posted:\n${JSON.stringify(error.payload, null, 2)}\n`);
+      process.stdout.write(`drafted ${drafted}, not posted:\n${JSON.stringify(error.payload, null, 2)}\n`);
     }
     process.exitCode = error instanceof PostReviewError ? error.code : 1;
   }

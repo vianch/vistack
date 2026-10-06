@@ -18,12 +18,16 @@ The operator's request to review a PR grants, for that PR only:
 - posting one review with `event: COMMENT`: a short body plus inline comments, in the
   operator's name.
 
+The review watch (`skills/review-watch/SKILL.md`) holds a standing grant of its own, set by
+switching it on; its Permissions section is that grant's home.
+
 Withheld, always:
 
 - `APPROVE`. Approving is merge authority and belongs to the human (Merge boundary in
   `skills/vistack/SKILL.md`). When asked to approve, say the operator approves it themselves.
 - `REQUEST_CHANGES`.
-- Resolving, replying to, or editing any thread or earlier comment.
+- Resolving, replying to, or editing any thread or earlier comment. A reply to a mention goes
+  only through the review watch, under its grant.
 - Editing, closing, labelling, assigning, requesting reviewers on, pushing to, or merging the
   PR.
 - Reviewing the operator's own PR or a repository outside the realm.

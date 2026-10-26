@@ -1,6 +1,6 @@
 ---
 name: figma-sync
-description: "Keep a live line to Figma while implementing a design: resolve the file key and node id for every frame, ask precisely for any missing URL, node id, breakpoint, or state, pull structure, design context, variables, and Code Connect mappings through the Figma MCP server, map tokens and primitives to the repository, and re-query before every frame and before QA. Use whenever Figma is the source of truth."
+description: "Keep a live line to Figma while implementing a design: resolve the file key and node id per frame, ask precisely for any missing URL, node id, breakpoint, or state, pull structure, variables, and Code Connect mappings through the Figma MCP server, and re-query before every frame and before QA. Use whenever Figma is the source of truth."
 ---
 
 # figma-sync

@@ -1,6 +1,6 @@
 ---
 name: review-watch
-description: "'watch my review requests', 'review every PR I'm asked to review', 'answer comments where I'm tagged', 'review watch on/off/status'. Switches on a standing watch that, every 30 minutes until the operator switches it off, reviews each open PR in the realm that requests the operator's or their team's review, posting one COMMENT review per head in the operator's voice, and answers the comments that tag the operator or their team. Never approves or requests changes; questions only the owner can answer go to a needs-you list. Not for one PR by URL (that is review-pr)."
+description: "'watch my review requests', 'review every PR I'm asked to review', 'answer comments where I'm tagged', 'review watch on/off/status'. A standing watch, every 30 minutes until switched off, that reviews each open PR in the realm requesting the operator's or their team's review and answers the comments that tag them. Never approves or requests changes. Not for one PR by URL (that is review-pr)."
 ---
 
 # review-watch

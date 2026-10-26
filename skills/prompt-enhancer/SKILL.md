@@ -1,6 +1,7 @@
 ---
 name: prompt-enhancer
 description: "Internal pass called by path from the viStack router before analysis, by coordinate when it writes a brief's slice fields, and by advisor before a checkpoint. Rewrites one request, brief, or dossier so it is accurate and readable, keeps the original verbatim, and lists what is missing. Never changes scope or invents a finish condition."
+disable-model-invocation: true
 ---
 
 # prompt-enhancer

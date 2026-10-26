@@ -1,38 +1,29 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## What this repository is
 
-viStack is a **Claude Code and Codex plugin**, not an application. The deliverable is mostly
-Markdown (skills, agents, playbooks, docs) plus host manifests and small dependency-free
-validation scripts. Editing a contract changes agent behavior directly. There is no product
-build.
+viStack is a **Claude Code and Codex plugin**, not an application: Markdown skills, agents,
+playbooks, and docs, plus host manifests and small dependency-free validation scripts. Editing
+a contract changes agent behavior directly.
 
-This checkout is the source; its upstream is `github.com/vianch/viStack`. Claude Code loads
-the installed copy at `~/.claude/plugins/marketplaces/vistack`, so an edit is live only once
-that copy matches this one. `scripts/verify.sh` fails while they differ and prints the sync
-command.
+This checkout is the source (upstream `github.com/vianch/viStack`). Claude Code loads the
+installed copy at `~/.claude/plugins/marketplaces/vistack`; `scripts/verify.sh` fails while they
+differ and prints the sync command.
 
 ## Commands
 
 ```
-/plugin install vistack           # install / pick up a new version
-/plugin                           # confirm viStack is listed as enabled
-claude plugin details vistack     # component inventory — count skills/agents to verify loading
-/vistack:vistack <request>        # canonical plugin entry point
+/plugin install vistack          # install / pick up a new version
+/plugin                          # confirm viStack is listed as enabled
+claude plugin details vistack    # component inventory; count skills/agents to verify loading
+/vistack:vistack <request>       # canonical plugin entry point
 /vistack:run|orchestrator|coordinator <request> # equivalent aliases
-codex plugin add vistack@vistack  # install from the Codex marketplace
-$vistack:vistack <request>        # canonical Codex skill in a new thread
+codex plugin add vistack@vistack # install from the Codex marketplace
+$vistack:vistack <request>       # canonical Codex skill in a new thread
 $vistack:run|orchestrator|coordinator <request> # equivalent aliases
 ```
 
-Verification after any edit is one command, the same locally and in CI: `scripts/verify.sh`.
-It runs the structural checker and its lints (`scripts/check-playbooks.mjs`), the Python tests,
-and the Node script tests, then compares the installed copy when one is on the machine. Set
-`QA_VIDEO_PLAYWRIGHT` to a Playwright package path to run the QA video recording tests instead
-of skipping them, and run `claude plugin details vistack` for the component inventory. A skill
-or agent that fails frontmatter or path rules loads as *nothing*, silently, with no error.
+`scripts/verify.sh` is the one verification command, locally and in CI:
+`scripts/check-playbooks.mjs` and its lints, Python and Node tests, the installed-copy check.
+`QA_VIDEO_PLAYWRIGHT`, a Playwright package path, turns on the otherwise skipped QA video tests.
 
 ## Layout and load rules
 
@@ -42,140 +33,77 @@ or agent that fails frontmatter or path rules loads as *nothing*, silently, with
 | `.claude-plugin/marketplace.json` | marketplace entry |
 | `.codex-plugin/plugin.json` | Codex plugin manifest |
 | `.agents/plugins/marketplace.json` | Codex marketplace entry |
-| `commands/vistack.md` | the canonical `/vistack:vistack` command — thin, delegates to the router skill |
-| `commands/{run,orchestrator,coordinator}.md` | Claude alias commands that delegate to the router |
+| `commands/vistack.md` | the canonical `/vistack:vistack` command, delegating to the router |
+| `commands/{run,orchestrator,coordinator}.md` | Claude alias commands for the router |
 | `skills/<name>/SKILL.md` | a skill |
-| `skills/vistack/SKILL.md` | the router (see below) |
-| `skills/{run,orchestrator,coordinator}/SKILL.md` | Codex alias shims that delegate to the router |
+| `skills/vistack/SKILL.md` | the router |
+| `skills/{run,orchestrator,coordinator}/SKILL.md` | Codex alias shims for the router |
 | `skills/vistack/playbooks/*.md` | data read by the router, **not** skills |
 | `skills/vistack/principles/index.md` | data read first on every run |
 | `agents/<name>.md` | a subagent |
 | `docs/guide/*.md` | reference prose linked from skills |
 | `skills/<name>/references/*.md` | data read by that skill, **not** skills |
-| `skills/<name>/assets/*` | templates a skill copies; data, **not** skills |
+| `skills/<name>/assets/*` | templates a skill copies, **not** skills |
 | `skills/<name>/scripts/*` | scripts bundled with a skill; their paths resolve from the plugin root |
 | `laya/`, `prwatch/` | Python packages behind `scripts/vistack-decision.py` and `scripts/watch-pr.py` |
-| `hooks/hooks.json` | the deck mod: names `hooks/register.tsx`, the Claude Code hooks module |
+| `hooks/hooks.json` | the deck mod; names `hooks/register.tsx`, its hooks module |
 | `hooks/register.tsx`, `hooks/lib/`, `hooks/tabs/` | the deck's wiring, pure logic, and tab views; `docs/guide/deck.md` |
 | `types/index.d.ts` | the deck's session-state contract, named by `"types"` in `.claude-plugin/plugin.json` |
 | `tests/*.test.ts(x)` | the deck's tests, run by `claude plugin test .` |
 
-Codex discovers the same top-level `skills/<name>/SKILL.md` files. It does not execute the
-Claude-only `commands/` or `agents/` directories; `skills/vistack/SKILL.md` contains the host
-adapter and uses `.codex/vistack/` for Codex run state and worktrees.
+Codex discovers the same skills and ignores the Claude-only `commands/` and `agents/`.
 
-The deck mod is Claude Code only. `claude plugin validate .` must pass. It enforces two rules:
+The deck mod is Claude Code only and must pass `claude plugin validate .`, which enforces:
 `$` is passed only to functions declared at the top level of `hooks/register.tsx`, and every
-atom is declared in the file that uses it. Its `$.state` keys name the plugin (`vistack`), so
-a plugin rename renames them in `hooks/register.tsx` and `types/index.d.ts`.
+atom is declared in the file that uses it. `$.state` keys name the plugin (`vistack`); a
+rename changes them in `hooks/register.tsx` and `types/index.d.ts`.
 
-Two hard constraints that break loading silently when violated:
+A skill or agent that fails frontmatter or path rules loads as *nothing*, silently. Two hard
+constraints:
 
 - **Claude Code discovers a skill only at `skills/<name>/SKILL.md`.** One level deeper
-  (`skills/principles/<name>/SKILL.md`) yields zero skills. All principles therefore sit at
-  the top level of `skills/` rather than being nested.
+  yields zero skills, so principles sit at the top level.
 - **Every skill and agent `name` must match `^[a-z0-9]+(-[a-z0-9]+)*$`, and the directory or
-  filename must match the frontmatter `name`.** `viStack` in a `name:` field or a directory
-  name breaks the load. `viStack` is prose only; `vistack` is the identifier.
+  filename must match the frontmatter `name`.** `viStack` is prose only; `vistack` is the
+  identifier.
 
 ## Architecture
 
-The design is a **router → playbook → agent** chain, with all coordination state on disk.
+1. **Router** (`skills/vistack/SKILL.md`, Step 2) copies one playbook's steps verbatim.
+2. **Sticky.** Later turns continue the open playbook until `new task` (router, Step 0).
+3. **Coordinator.** `skills/coordinate/SKILL.md` owns dispatch, state, and ledger.
+4. **Agents** carry model and effort in frontmatter, never overridden per run; change the
+   agent file (router, Agent tree).
+5. **Advisor.** Three checkpoints, `skills/advisor/SKILL.md`.
+6. **Laya.** Forks that need no thinker, `skills/laya-decision/SKILL.md`.
 
-1. **Router** (`skills/vistack/SKILL.md`) picks *exactly one* playbook and copies its
-   numbered steps into the task list **verbatim** — no paraphrase, no reorder, no merge, no
-   silent drop. A step that will not run stays in the list, marked skipped, with the reason
-   written to the ledger. The playbook file is the executable contract; the router only
-   chooses between files. Before matching, `skills/prompt-enhancer/SKILL.md` rewrites the
-   request for briefs and the advisor; matching and Laya read the original.
-2. **Router is sticky.** Once entered, later turns continue the open playbook. `new task`
-   forces a re-match; `stop`/`pause` runs `pause-safely`.
-3. **`coordinate`** (`skills/coordinate/SKILL.md`) owns dispatch, the state file and the
-   ledger from Step 5 onward. It never edits product code.
-4. **Agents** are per-role and carry their model, and effort where the tree sets it, in
-   frontmatter. The main session runs Opus 5.5 at xhigh and plans, decides, dispatches, and
-   verifies; it writes no code and runs no QA itself.
-   `analyst` (explorer), `researcher`, and `devops` run on opus at medium. Code goes by tier: sonnet
-   `implementer` for mechanical work — repetitive edits, basic utils, unit tests — and opus
-   `senior-implementer` at xhigh for complex work. Haiku runs the adversarial health check. Sonnet `report-writer` renders pages.
-   Models and effort are never overridden per-run — change the agent file instead.
-   The levels (owner, coordinator, workers), what crosses them, and the owner of each job
-   live in the Agent tree of `skills/vistack/SKILL.md`.
-5. **Advisor on call.** Fable 5.1 reads the whole session and speaks at three checkpoints
-   (`skills/advisor/SKILL.md`). It reviews; the owning role writes the code and the main
-   session verifies it. When the advisor tool is off, the `advisor` agent reviews a dossier
-   instead.
-6. **Laya is the fork layer.** Forks that need no thinker — which playbook, which file,
-   which tool, which tier, retry or stop — go to `laya-decision`: deterministic policy
-   first, then, for split forks only, opted-in Jev, then opted-in Cloudflare Workers AI
-   `@cf/cloudflare/clef-flash` inside the free daily Neurons, then a local Ollama
-   `clef-flash`. Sharp forks run in code; split forks go to the main session. Forks never
-   reach the advisor.
+### Run state (schema-bearing)
 
-### Run state (schema-bearing — see "Versioning")
-
-Each run keeps two git-ignored files in the *consuming* repo, never here, and the review watch keeps one user-level file listed after them. Claude uses:
-
-- `.claude/state/<slug>.json` — where the run is, keyed by slice; updated on **every**
-  transition, because it is the resume point for `session-pickup`.
-- `.claude/state/<slug>.tsv` — append-only decision ledger, seven tab-separated columns
-  `ts phase slice decision reason evidence result`, no header. Column semantics and the
-  `decision` vocabulary: `docs/guide/ledger-format.md`.
-
-- `~/.vistack/review-watch/state.json` (or `$VISTACK_REVIEW_WATCH_DIR/state.json`) — the review
-  watch's switch, realm, and handled keys. User-level, not per run, and schema-bearing: the
-  deck and every pass read it, and only `skills/review-watch/scripts/watch-state.mjs` writes
-  it. Schema: `skills/review-watch/references/data.md`.
+- `.claude/state/<slug>.json`, consuming repo: resume point, `skills/coordinate/references/state-file.md`.
+- `.claude/state/<slug>.tsv`, consuming repo: ledger, `docs/guide/ledger-format.md`.
+- `~/.vistack/review-watch/state.json`: review watch, `skills/review-watch/references/data.md`.
 
 The state file records intent, the ledger records what happened; after a crash they disagree
 and `session-pickup` reconciles them.
 
-### Invariants the content must keep
+### Invariants
 
-These recur across playbooks, agents and skills — a change in one place must be made
-everywhere it appears:
+A change to an invariant is made in its home, then the pointers are checked.
 
-- **The four fences** (blocker unresolved after `unblock`; ambiguity changing acceptance
-  criteria or a public contract; irreversible action; credentials missing/expired/about to be
-  written to a tracked file). Outside those four, runs are unattended and report at phase
-  boundaries only.
-- **Stops at merge-ready, never merges.** Every PR is left a draft. Merging is FENCE 3.
-- **Advisor at three checkpoints.** Consult the advisor before a large plan, when an error
-  repeats, and before calling a long task done. It never edits, merges, or opens a fence,
-  and an unavailable advisor never blocks a run.
-- **The main session runs no work an owning role owns.** Code goes to the tier owner
-  (`implementer` or `senior-implementer`, tier from the planner or `tier-selection`), QA and
-  evidence to a background `qa-verifier` lane. A playbook step that names no owner still goes
-  to one (`skills/coordinate/SKILL.md`, Dispatch rules and QA lanes). The hierarchy around
-  this rule is in `skills/vistack/SKILL.md` (Agent tree).
-- **≤500 changed lines per PR**, excluding lockfiles and generated files; over that,
-  `stack-split` makes a parent→child chain.
-- **One worktree per slice** at `.claude/worktrees/<slug>`; slices sharing a file are
-  serialized by the conflict matrix from `slice-plan`, never run concurrently. A QA lane is
-  not a slice: it owns no worktree, only its evidence directory
-  `<state-root>/qa/<slug>/<slice-or-pr>/<head7>/`, and one runs per PR head.
-- **Host-specific state.** Codex uses `.codex/vistack/state/` and
-  `.codex/vistack/worktrees/`. A run does not switch state roots when it changes hosts.
-- **Codex lanes.** Codex roles are adopted in the thread. The thread writes only after
-  adopting the owning role's contract, recorded as a `dispatched` ledger row naming the role
-  and tier; the coordinator role itself never writes. Only a read-only or scratch-directory
-  lane, a QA lane included, fans out as its own `codex exec --ephemeral` process.
-- **A long or unattended run ends with a run report.** A run with more than one slice, or any
-  unattended run, renders one through `skills/html-report/SKILL.md`, published as a private
-  artifact on Claude Code.
-- **Repo-agnostic.** Nothing hardcodes a repository, branch, reviewer team, or service. The
-  three per-repo inputs are base branch, reviewer team, and verification target.
-- **Reuse, do not reimplement.** viStack supplies only the coordinator layer, state file,
-  conflict matrix and ledger. Every other step invokes an existing skill (`work-ticket`,
-  `create-pr`, `stacking-prs`, `requesting-reviewers`, `address-ai-reviews`,
-  `qa-verification`, `pruning-comments`, `cleanup-worktrees`, …). Do not write a second
-  version of one here.
+| Invariant | Home |
+|---|---|
+| Four fences | `skills/autonomy-has-fences/SKILL.md` |
+| Stop at merge-ready | router, Merge boundary |
+| Advisor checkpoints | `skills/advisor/SKILL.md` |
+| Main session runs no owning role's work | `skills/coordinate/SKILL.md`, Dispatch rules |
+| 500 changed lines per PR | `skills/one-concern-per-pr/SKILL.md` |
+| One worktree per slice; QA lanes own none | `skills/coordinate/SKILL.md`, QA lanes; `skills/slice-plan/SKILL.md` |
+| Host state roots, Codex lanes | router, Host adapter |
+| Run report, long or unattended runs | router, Final report |
+| Repo-agnostic; per-repo inputs: base branch, reviewer team, verification target | this file |
+| Reuse `work-ticket`, `create-pr`, `stacking-prs`, `requesting-reviewers`, `address-ai-reviews`, `qa-verification`, `pruning-comments`, `cleanup-worktrees` | this file (the names); router, Reuse existing skills (the rule) |
 
-### Writing style for principle invocations
-
-A reply that names a principle must name **the decision the principle changed**. Restating a
-principle's name is a citation with no content and should be deleted. Keep that standard in
-any prose added to the skills.
+Naming a principle means naming **the decision it changed**; a bare citation is deleted.
 
 ## Versioning
 
@@ -191,20 +119,16 @@ Semver lives in `.claude-plugin/plugin.json`; `.codex-plugin/plugin.json` and
 
 ## Paths in content
 
-Every path written inside skills, agents and docs is relative to the plugin root
-(`skills/…`, `agents/…`, `docs/…`). Keep it that way — the plugin is installed at a
-different absolute path on every machine.
-
-Runtime commands resolve from the plugin root (`${CLAUDE_PLUGIN_ROOT}` on Claude Code) while the
-working directory stays in the consuming repository.
+Paths inside skills, agents, and docs are relative to the plugin root (`skills/…`), because
+the plugin installs at a different absolute path on every machine. Runtime commands resolve
+from `${CLAUDE_PLUGIN_ROOT}` on Claude Code (router, Host adapter).
 
 Editing a contract: read `docs/guide/writing-contracts.md` first.
 
 ## Rules and what enforces them
 
 Each rule here was broken at least twice. `/vistack:correct` (`skills/correct/SKILL.md`) adds
-a row when the operator corrects a mistake, and a row whose mistake can no longer happen is
-dropped. An exception goes on the offending line as
+a row per operator correction; a row whose mistake can no longer happen is dropped. An exception goes on the offending line as
 `lint-ok: <rule>; <reason>; expires YYYY-MM-DD; approved-by <name>`.
 
 | Rule | Enforced by | Proved against |
@@ -216,3 +140,4 @@ dropped. An exception goes on the offending line as
 | Routes, playbooks, skill names, and referenced paths agree | `scripts/check-playbooks.mjs` | 15 recorded FAIL lines while adding `html-report` and `qa-video` |
 | The main session runs no work an owning role owns: code to the tier owner, QA to a background `qa-verifier` lane | `scripts/check-playbooks.mjs` fails a contract line that hands the main session code or QA work (`mainSessionWork`); the deck flags each main-loop Edit, Write, or NotebookEdit outside `.claude/` and `.codex/` (`codeWrites` in `hooks/lib/org.ts`, shown on the Board tab), flag only and fail-open | the 0.24.0 tree: `skills/advisor/SKILL.md:8`, `agents/advisor.md:9`, `CLAUDE.md:101`, `README.md:624`, `skills/vistack/playbooks/html-report.md:21`, `docs/guide/codex.md:73`; run ledgers `.claude/state/qa-video.tsv:5,8,11` and `.claude/state/cloudflare-clef-tier.tsv:7,8` |
 | One version bump per change, in its own commit | nothing for the bump itself: a forgotten bump shows only in git history. `scripts/check-playbooks.mjs` fails when the three manifests or the README version line disagree | a README version line left at 0.22.0 against 0.23.0 manifests |
+| A staged file an agent wrote stays at or under 5,000 tokens (bytes / 4) | the `token-guard` pre-commit hook on staged files, installed per consuming repository with `skills/token-guard/scripts/token-guard.mjs install`; reviewers run its `check --files` (`skills/interrogate/references/code-quality-review.md`). Not installed in this checkout, where git is off-limits | `hooks/register.tsx` at 87,610 bytes (21,903 tokens), `tests/pane.test.tsx` at 53,523 bytes, and `hooks/lib/monitors.ts` at 32,299 bytes, each grown past the limit in small edits; `check --files hooks/register.tsx` exits 2 |

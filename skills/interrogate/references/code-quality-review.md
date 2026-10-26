@@ -8,8 +8,12 @@ path to a cleaner shape exists, name it.
 
 1. **Structural simplification.** The reframing that makes a whole branch, helper, mode,
    conditional, or layer disappear. Deleting complexity beats rearranging it.
-2. **The 1,000-line line.** A change that pushes a file from under 1,000 lines to over it
-   needs a strong reason. Extract a module, helper, or subcomponent instead.
+2. **The 5,000-token line.** A file over 5,000 tokens (bytes / 4) no longer fits an agent's
+   working context beside the rest of its slice. Run
+   `node "${CLAUDE_PLUGIN_ROOT}/skills/token-guard/scripts/token-guard.mjs" check --files <changed files>`;
+   a file the change pushes over the limit is a finding that carries the split the command
+   prints (`skills/token-guard/SKILL.md`). The same holds for a file pushed from under 1,000
+   lines to over it: extract a module, helper, or subcomponent instead.
 3. **Spaghetti growth.** A new ad-hoc conditional, special case, or one-off branch inside an
    unrelated flow is a design problem, not a style issue. Move the logic into a dedicated
    helper, module, or state machine (`model-the-domain`).
@@ -37,7 +41,7 @@ then types, boundaries, and file size, then smaller legibility points.
 ## Presumptive blockers
 
 - Incidental complexity that a clear restructuring would remove.
-- A file pushed over 1,000 lines.
+- A file pushed over 5,000 tokens or 1,000 lines.
 - Ad-hoc branching tangled into an existing flow, or feature checks scattered through shared
   code.
 - A needless abstraction, wrapper, cast-heavy contract, or duplicated helper.

@@ -1,6 +1,6 @@
 ---
 name: html-report
-description: "Make a report, summary, status or progress page, chart, graph, diagram, flow, path or architecture view, timeline, incident or bug timeline, kanban or triage board, agent state page, feature-flag or toggle editor, design system or design tokens page, code review, PR write-up, or file comparison as one self-contained HTML page. Use when asked to 'make an HTML file' or 'make an artifact', and to render the run report for a run with more than one slice and for every unattended run. Turns run state, a diff, code evidence, or user data into one page with one job, writes it locally, and publishes it as a Claude artifact where the host allows."
+description: "Make an HTML file, a Claude artifact, a report, status page, chart, graph, diagram, flow or architecture view, timeline, kanban or triage board, toggle editor, design-tokens page, code review or PR write-up, or file comparison as one self-contained HTML page. Also renders the run report for a multi-slice or unattended run."
 ---
 
 # html-report

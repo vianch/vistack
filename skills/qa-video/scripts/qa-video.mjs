@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Records QA screen evidence with Playwright, then derives captions, mp4, gif, a slideshow, and a contact sheet.
-// stdout carries one JSON document (or help text); diagnostics go to stderr. Exit 0 ok, 1 evidence failure, 2 usage or setup error.
+// stdout carries one JSON document (or help text); diagnostics go to stderr. Exit 0 ok, 1 evidence failure, 2 usage or setup error, 3 no OTP before --otp-timeout.
 
 import { execFile } from "node:child_process";
 import { accessSync, closeSync, constants, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -16,11 +16,13 @@ import {
   outputsAvailable, parseArgs, parseFfmpegCapabilities, parseFfmpegDuration, parseFfmpegVersion, parseSize, publicUrl, redact, redactDeep, slideshowArgs,
   slideshowList, slugify,
 } from "./media.mjs";
+import { makeOtpHelper, pathsFor, readStorageState, runLogin, runtimeRedactor } from "./session.mjs";
 
 const program = "qa-video.mjs";
 const installHint = "npm i -D playwright && npx playwright install chromium (or set QA_VIDEO_PLAYWRIGHT)";
 const browsers = ["chromium", "firefox", "webkit"];
-const env = process.env;
+// A copy, so an OTP added to the redaction set never reaches a child process.
+const env = { ...process.env };
 
 class SetupError extends Error {}
 class StepFailed extends Error {}
@@ -187,22 +189,51 @@ const recordedHead = (path) => {
 
 const sameHead = (left, right) => left.startsWith(right) || right.startsWith(left);
 
-const record = async (options) => {
-  const size = parseSize(options.size);
+const loadScenario = async (options) => {
   if (/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*@/i.test(options.url ?? "")) throw new UsageError("--url must not carry credentials; read them from process.env in the scenario");
   const scenarioPath = resolve(options.scenario);
   if (!existsSync(scenarioPath)) throw new SetupError(`scenario not found: ${options.scenario}`);
-  const name = slugify(options.name ?? basename(scenarioPath, extname(scenarioPath)));
-  if (!name) throw new SetupError("the scenario name slugifies to nothing; pass --name");
   let scenario;
   try {
     scenario = await import(pathToFileURL(scenarioPath).href);
   } catch (error) {
     throw new SetupError(`cannot load scenario ${options.scenario}: ${message(error)}`);
   }
-  if (typeof scenario.default !== "function") throw new SetupError("the scenario module has no default export function");
   if (scenario.login !== undefined && typeof scenario.login !== "function") throw new SetupError("the scenario login export is not a function");
   if (scenario.contextOptions !== undefined && !isObject(scenario.contextOptions)) throw new SetupError("the scenario contextOptions export is not an object");
+  return { scenario, scenarioPath, shared: { ...(scenario.contextOptions ?? {}), ...(options.url ? { baseURL: options.url } : {}) } };
+};
+
+const otpFor = (options, dir) => makeOtpHelper({ dir, target: options.url, timeoutSeconds: options.otpTimeout, redact: runtimeRedactor(env) });
+
+const login = async (options) => {
+  const { scenario, shared } = await loadScenario(options);
+  if (!scenario.login) throw new SetupError("the scenario has no login export");
+  const out = resolve(options.out);
+  const savePath = resolve(options.saveStorageState ?? pathsFor(out).storageState);
+  const playwright = await resolvePlaywright(options.playwright);
+  if (!playwright.found) throw new SetupError(`Playwright ${playwright.reason}. Install: ${installHint}`);
+  mkdirSync(out, { recursive: true });
+  let browser;
+  try {
+    browser = await playwright.api.chromium.launch({ headless: true });
+    await runLogin({ browser, contextOptions: shared, login: scenario.login, baseURL: options.url, otp: otpFor(options, out), savePath });
+  } catch (error) {
+    throw error?.exitCode ? error : new SetupError(`cannot start chromium: ${message(error)}`);
+  } finally {
+    await browser?.close().catch(() => {});
+  }
+  emit({ ok: true, path: savePath });
+  return 0;
+};
+
+const record = async (options) => {
+  const size = parseSize(options.size);
+  const { scenario, scenarioPath, shared } = await loadScenario(options);
+  const name = slugify(options.name ?? basename(scenarioPath, extname(scenarioPath)));
+  if (!name) throw new SetupError("the scenario name slugifies to nothing; pass --name");
+  if (typeof scenario.default !== "function") throw new SetupError("the scenario module has no default export function");
+  let storageState = readStorageState(options.storageState && resolve(options.storageState));
   const out = resolve(options.out);
   const files = { video: join(out, `${name}.webm`), manifest: join(out, `${name}.manifest.json`), tmp: join(out, `.video-tmp-${name}`) };
   const priorHead = recordedHead(files.manifest);
@@ -217,8 +248,8 @@ const record = async (options) => {
   mkdirSync(out, { recursive: true });
   rmSync(files.video, { force: true });
   const baseURL = options.url ?? null;
-  const shared = { ...(scenario.contextOptions ?? {}), ...(baseURL ? { baseURL } : {}) };
   const session = { mode: null, t0: 0, startedAt: null, steps: [], warnings: [], stopped: false, scenarioError: false, actions: false, overlays: false };
+  if (options.storageState && !storageState) session.warnings.push(`storage state ${options.storageState} not found${scenario.login ? "; ran login" : ""}`);
   const elapsed = () => Number(((performance.now() - session.t0) / 1000).toFixed(3));
   const attempt = async (label, action) => {
     try {
@@ -232,24 +263,13 @@ const record = async (options) => {
   let browser;
   let context;
   let page;
-  let storageState;
   const openRecorded = async (recordVideo) => {
     context = await browser.newContext({ ...shared, viewport: size, ...(storageState ? { storageState } : {}), ...(recordVideo ? { recordVideo: { dir: files.tmp, size } } : {}) });
     page = await context.newPage();
   };
   try {
     browser = await browserType.launch({ headless: !options.headed });
-    if (scenario.login) {
-      const loginContext = await browser.newContext(shared);
-      try {
-        await scenario.login({ page: await loginContext.newPage(), baseURL, context: loginContext });
-        storageState = await loginContext.storageState();
-      } catch (error) {
-        throw new SetupError(`login failed: ${message(error)}`);
-      } finally {
-        await loginContext.close().catch(() => {});
-      }
-    }
+    if (scenario.login && !storageState) storageState = await runLogin({ browser, contextOptions: shared, login: scenario.login, baseURL, otp: otpFor(options, out) });
     if (options.mode !== "context") {
       await openRecorded(false);
       if (typeof page.screencast?.start === "function") {
@@ -274,7 +294,7 @@ const record = async (options) => {
   } catch (error) {
     await browser?.close().catch(() => {});
     rmSync(files.tmp, { recursive: true, force: true });
-    throw error instanceof SetupError ? error : new SetupError(`cannot start ${options.browser}: ${message(error)}`);
+    throw error instanceof SetupError || error?.exitCode ? error : new SetupError(`cannot start ${options.browser}: ${message(error)}`);
   }
 
   const step = async (stepName, action, { caption, sensitive = false } = {}) => {
@@ -492,15 +512,29 @@ const check = async (options) => {
 };
 
 const path = (describe) => ({ type: "string", placeholder: "path", describe });
+const playwrightFlag = path("Playwright module path or package directory (else QA_VIDEO_PLAYWRIGHT, else the cwd's node_modules)");
+const otpTimeout = { type: "number", default: 300, placeholder: "seconds", describe: "Seconds otp() waits for <out>/otp.txt; exit 3 when no code arrives" };
 const commands = {
   doctor: {
     summary: "Report which recorder, encoders, and outputs work on this machine",
     run: doctor,
     spec: {
-      playwright: path("Playwright module path or package directory (else QA_VIDEO_PLAYWRIGHT, else the cwd's node_modules)"),
+      playwright: playwrightFlag,
       browser: { type: "string", default: "chromium", values: browsers, placeholder: "name", describe: "Browser to check: chromium, firefox, or webkit" },
       ffmpeg: path("ffmpeg binary (else FFMPEG_PATH, else ffmpeg on PATH)"),
       magick: path("ImageMagick magick or montage binary (else magick, then montage, on PATH)"),
+    },
+  },
+  login: {
+    summary: "Run only the scenario's login, take its OTP from <out>/otp.txt, and save the session for record --storage-state",
+    run: login,
+    spec: {
+      scenario: { type: "string", required: true, placeholder: "file.mjs", describe: "Scenario module: login export async ({ page, baseURL, context, otp })" },
+      out: { type: "string", required: true, placeholder: "dir", describe: "Directory for otp-request.json, otp.txt, and auth.json" },
+      url: { type: "string", required: true, placeholder: "baseURL", describe: "Target base URL, passed to login and the context" },
+      "save-storage-state": path("Where the session is written, mode 0600 (default <out>/auth.json)"),
+      "otp-timeout": otpTimeout,
+      playwright: playwrightFlag,
     },
   },
   record: {
@@ -518,7 +552,9 @@ const commands = {
       mode: { type: "string", default: "auto", values: ["auto", "screencast", "context"], placeholder: "mode", describe: "auto (screencast when Playwright has it), screencast, or context (recordVideo)" },
       actions: { type: "boolean", describe: "Annotate actions in the video (screencast mode)" },
       "title-card": { type: "boolean", describe: "Open the video with a title card naming the scenario, head, and URL (screencast mode)" },
-      playwright: path("Playwright module path or package directory (else QA_VIDEO_PLAYWRIGHT, else the cwd's node_modules)"),
+      "storage-state": path("Session saved by login; the scenario's login is skipped (a missing file runs it)"),
+      "otp-timeout": otpTimeout,
+      playwright: playwrightFlag,
     },
   },
   finish: {
@@ -551,7 +587,7 @@ const commands = {
 const main = async () => {
   const [command, ...rest] = process.argv.slice(2);
   if (command === "--help" || command === "-h" || command === "help" || command === undefined) {
-    process.stdout.write(formatCommands(program, commands));
+    process.stdout.write(`${formatCommands(program, commands)}Exit 3: no OTP arrived before --otp-timeout (login, record).\n`);
     return command === undefined ? 2 : 0;
   }
   const entry = commands[command];
@@ -565,9 +601,9 @@ const main = async () => {
     return await entry.run(options);
   } catch (error) {
     const usage = error instanceof UsageError;
-    say(usage || error instanceof SetupError ? message(error) : error?.stack ?? message(error));
+    say(usage || error instanceof SetupError || error?.exitCode ? message(error) : error?.stack ?? message(error));
     emit({ ok: false, error: message(error), ...(usage ? { usage: `node ${program} ${entry ? `${command} ` : ""}--help` } : {}) });
-    return 2;
+    return error?.exitCode ?? 2;
   }
 };
 

@@ -10,7 +10,7 @@ playbook, one role phase per slice, stopping at merge-ready.
 `vistack` is the identifier you install and invoke. **viStack** is what it is called in
 prose. Same thing. It runs on Claude Code, Codex, Grok Build, and OpenCode.
 
-**Version:** `0.25.0`
+**Version:** `0.26.0`
 
 **Contents:** [install](#install) · [usage](#usage) ·
 [QA evidence: screenshots and video](#qa-evidence-screenshots-and-video) ·
@@ -565,7 +565,9 @@ node "$QA" check --manifest "$DIR/checkout.manifest.json"
 | `check` | validates the manifest, file signatures, step times, and the size budget | nothing |
 
 The scenario module logs in through a separate context that is not recorded, so credentials
-are never typed on camera. Credentials come from environment variables, never from
+are never typed on camera. A login that asks for a one-time code pauses until the user types
+the code into the session, once per run per target, and the saved session file stays under
+the git-ignored state root. Credentials come from environment variables, never from
 command-line arguments. Without ffmpeg the `.webm` is still produced, and the outputs that
 need it are marked `skipped`.
 
@@ -702,6 +704,7 @@ invokes a principle must name the decision the principle changed.
 [`qa-verify`](skills/qa-verify/SKILL.md) (the QA contract) ·
 [`qa-video`](skills/qa-video/SKILL.md) (scenario videos and media edits) ·
 [`stack-split`](skills/stack-split/SKILL.md) (the >500-line split) ·
+[`token-guard`](skills/token-guard/SKILL.md) (pre-commit hook and review check: no agent-written file over 5,000 tokens) ·
 [`session-ledger`](skills/session-ledger/SKILL.md) (the issue comment) ·
 [`swarm`](skills/swarm/SKILL.md) (parallel verification) ·
 [`show-me-your-work`](skills/show-me-your-work/SKILL.md) (overnight ledger audit) ·
@@ -932,7 +935,7 @@ run decided what it did. Delete them by hand if you want them gone.
 | **`/vistack` does not resolve** | the plugin is disabled | `/plugin` → find viStack → enable. Then confirm it is listed as enabled, not just installed |
 | **`$vistack` does not activate in Codex** | the plugin is not installed or the current thread predates the install | run `codex plugin list`, reinstall `vistack@vistack`, and start a new thread |
 | **Two agents writing to the same directory** | the conflict matrix was never produced, so dispatch had nothing to serialize against | stop the run, re-run [`slice-plan`](skills/slice-plan/SKILL.md), and dispatch from the matrix. No matrix, no dispatch |
-| **The QA step fails at login** | access ran before the PR target finished building, or the approved credential procedure is unavailable | wait for the target to finish, then check access. Do not substitute another environment or credential path |
+| **The QA step fails at login** | access ran before the PR target finished building, or the approved credential procedure is unavailable, or the one-time code was not entered before the timeout | wait for the target to finish, then check access. Do not substitute another environment or credential path; answer the code prompt, or log in once before an unattended run |
 | **`/plugin install vistack` cannot find it** | more than one registered marketplace carries the name, or the entry is missing from `marketplace.json` | qualify it: `/plugin install vistack`, using the `name` field from `.claude-plugin/marketplace.json` |
 | **A run stops to ask something every few minutes** | the request had no checkable finish condition, so nothing can settle a step | re-state it with `Done means <checkable condition>` and start again |
 | **`qa-video.mjs record` exits 2 with "Playwright not installed in <dir>"** | the script runs from the plugin, so it resolves Playwright from the current directory, not its own | run it from the consuming project, or set `QA_VIDEO_PLAYWRIGHT` to the Playwright package path |

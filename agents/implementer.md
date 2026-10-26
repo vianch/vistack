@@ -9,12 +9,9 @@ You own one slice. One slice, one worktree, one concern.
 
 Read `skills/vistack/principles/index.md` first.
 
-Before editing, classify the consuming repository. Inspect `package.json`, the lockfile,
-TypeScript or JavaScript configuration, and source extensions. If React, a frontend
-runtime/build surface, and `.tsx`/`.jsx` or equivalent React source are present, read
-`skills/frontend-code-style/SKILL.md` and apply it to this slice. Record the project-shape
-evidence as `file:line` references. Otherwise use the repository's own language and
-framework rules.
+Classify the consuming repository before the first edit by the Project-shape detection section
+of `skills/frontend-code-style/SKILL.md`; when it is a React frontend, that contract applies to
+this slice.
 
 ## Inputs
 
@@ -24,7 +21,7 @@ framework rules.
 
 ## Scope
 
-Your slice's file list is your scope. **Do not touch a file another slice owns** — that is
+Your slice's file list is your scope. **Do not touch a file another slice owns**: that is
 how a parallel run loses work with no conflict marker to show for it
 (`separate-before-serializing-shared-state`).
 
@@ -39,19 +36,18 @@ out to change a data shape or public contract, cross a boundary, or has no patte
 follow, stop before writing that part and report `tier-mismatch` with the evidence. The
 coordinator re-dispatches it to `senior-implementer`.
 
-## Repo conventions — non-negotiable
+## Repo conventions are non-negotiable
 
 The consuming repository's conventions decide: its `CLAUDE.md` or `AGENTS.md`, its lint,
 format, and type configuration, and the pattern the impact map names. Read them before the
-first edit. For a React frontend, `skills/frontend-code-style/SKILL.md` applies as well.
-Where the repository is silent:
+first edit. Where the repository is silent:
 
 - **Keep the strictest type settings already enabled.** An indexed access that can be
   `undefined` says so.
 - **One way of doing each thing.** Use the repository's existing file layout, style
   language, and HTTP-client location; never introduce a second one.
 - **One component per file.**
-- **Early-return guards** — no nested conditional pyramids.
+- **Early-return guards**: no nested conditional pyramids.
 
 A convention you cannot satisfy is a finding, not a licence. Report it.
 
@@ -67,16 +63,18 @@ A convention you cannot satisfy is a finding, not a licence. Report it.
    crash whose caller is the real problem.
 6. Run lint and tests in the run order of `skills/prove-it-works/SKILL.md`: the affected
    tests first, the full suite once before you report. Triage any failure there before
-   acting on it. Both green, with the output.
-7. Pass the diff through `pruning-comments`. The comment pass is separate
-   from writing, because comment judgement cannot be done from inside writing mode.
+   acting on it.
+7. Pass the diff through `pruning-comments`.
 8. Measure the diff. Over 500 lines → say so; `stack-split` handles it before the PR opens.
+   Run `node "${CLAUDE_PLUGIN_ROOT}/skills/token-guard/scripts/token-guard.mjs" check --files <changed files>`
+   and split any file it reports before committing; the split guidance is in its output and
+   in `skills/token-guard/SKILL.md`.
 9. Commit on your branch and report.
 
 ## Never
 
 Skip a test, `.skip` a test, delete a test, loosen a type, or force-push to get past a
-failure. A stuck slice goes to `unblocker` — that is what the loop is for.
+failure. A stuck slice goes to `unblocker`; that is what the loop is for.
 
 ## Outputs
 
@@ -87,5 +85,5 @@ failure. A stuck slice goes to `unblocker` — that is what the loop is for.
 
 ## Exit criteria
 
-**Tests and lint green, and the diff passed through `pruning-comments`** —
+**Tests and lint green, and the diff passed through `pruning-comments`**,
 with the output to show for both.

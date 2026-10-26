@@ -21,7 +21,9 @@
    credential failure.
 4. Access the environment through the project's approved browser or control skill. When the
    PR has a valid Vercel URL, use Playwright: bypass deployment protection with
-   `portal.vercelPreviewPassword`, then log in with `portal.email` / `portal.password`. Use
+   `portal.vercelPreviewPassword`, then log in with `portal.email` / `portal.password`, then
+   enter the one-time code through the OTP handshake in `skills/qa-verify/SKILL.md`, which
+   asks the user for it and saves the session so later scenarios skip the login. Use
    `portal.stagingTestEventPYOS` as the test event, or `portal.stagingTestEventGA` where a
    scenario needs general admission. When the PR has no Vercel URL, use the repository's own
    approved live target and control skill. Never paste credentials into commands, URLs, logs,

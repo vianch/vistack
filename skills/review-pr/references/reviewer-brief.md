@@ -35,6 +35,8 @@ reply to threads, or call `gh` with `--method` other than GET. `gh pr review`,
 Nits only when cheap, marked `nit:`. Never restate what the diff does. When context is
 missing, ask a `question` instead of assuming the author is wrong.
 
+Run `node "${CLAUDE_PLUGIN_ROOT}/skills/token-guard/scripts/token-guard.mjs" check --files <the files you own>` once. A file this PR pushes over 5,000 tokens gets a `risk` comment carrying the split the command prints (`skills/token-guard/SKILL.md`).
+
 ### Evidence
 
 Every `bug` and `risk` names its failure path: the input, the caller as `file:line`, the

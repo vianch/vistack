@@ -1,6 +1,6 @@
 ---
 name: design-agent
-description: "Design and create a new agent for Claude Code, Codex, or OpenCode: ask a few preference questions, write a tight persona with one job, one voice, and explicit anti-jobs, create the host's agent file, and verify it against what the host actually loads. Coding agents meet the viStack bar. On first use on a machine, make sure the transcript-healthcheck and routine-healthcheck routines exist."
+description: "Design and create a new agent for Claude Code, Codex, or OpenCode: a few preference questions, a tight persona with one job and explicit anti-jobs, the host's agent file, and verification against what the host loads. Coding agents meet the viStack bar. First use on a machine also installs the healthcheck routines."
 ---
 
 # design-agent

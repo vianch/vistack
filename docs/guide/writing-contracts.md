@@ -32,7 +32,8 @@ home and check that the pointers still describe it.
 | Reviewing another author's PR, the COMMENT-only boundary, and the findings shape | `skills/review-pr/SKILL.md` (Permissions), `skills/review-pr/references/findings.md` |
 | The review watch's standing grant, its state file, and replying to mentions | `skills/review-watch/SKILL.md` (Permissions), `skills/review-watch/references/data.md` |
 | External naming | `skills/vistack/principles/index.md` |
-| Monitor wake and loop exit, pilot lanes, flattened lanes and re-cuts, brief order, state file schema | `skills/coordinate/SKILL.md` |
+| Monitor wake and loop exit, pilot lanes, flattened lanes and re-cuts, brief order | `skills/coordinate/SKILL.md` |
+| State file schema | `skills/coordinate/references/state-file.md` |
 | Prompt-prefix stability and the reason for brief order | `skills/guard-the-context-window/SKILL.md` |
 | Test run order and failure classes | `skills/prove-it-works/SKILL.md` |
 | Where a failure the slice did not cause goes | `agents/devops.md` (What you do) |
@@ -41,6 +42,8 @@ home and check that the pointers still describe it.
 | Ledger columns and decision vocabulary | `docs/guide/ledger-format.md` |
 | Rendering a report page | `skills/html-report/SKILL.md` |
 | Recording QA video, its evidence files, and media edits | `skills/qa-video/SKILL.md` |
+| The OTP login handshake, who asks the user, and the saved session's lifetime | `skills/qa-verify/SKILL.md` (OTP handshake) |
+| The per-file token limit, what it ignores, and the pre-commit hook | `skills/token-guard/SKILL.md` |
 
 ## Enumerate closed sets
 

@@ -1,6 +1,6 @@
 ---
 name: qa-video
-description: "Record a screen video, screen recording, walkthrough, or GIF of a QA scenario as evidence: Playwright records the browser session with one chapter per assertion step, then ffmpeg and ImageMagick turn it into an MP4 under the attachment budget, captions, a GIF preview, a screenshot slideshow, or a contact sheet. Use when a QA pass, a bug reproduction, or a PR needs video evidence beside its screenshots, on Claude Code, Codex, Grok Build, or OpenCode."
+description: "Record a screen video, screen recording, walkthrough, or GIF of a QA scenario as evidence: Playwright records one chapter per assertion step, then ffmpeg and ImageMagick make the MP4, captions, GIF, slideshow, or contact sheet. Use when a QA pass, bug reproduction, or PR needs video beside its screenshots."
 ---
 
 # qa-video
@@ -28,8 +28,17 @@ API-only scenarios and unit tests get no video. When a non-browser control skill
 
 ## Tools and the script
 
-`skills/qa-video/scripts/qa-video.mjs` is a dependency-free Node CLI with four commands:
-`doctor`, `record`, `finish`, and `check`. Run it from the consuming repository so that
+`skills/qa-video/scripts/qa-video.mjs` is a dependency-free Node CLI with five commands:
+
+| Command | Job |
+|---|---|
+| `doctor` | reports which recorder, encoders, and outputs work on this machine |
+| `login` | runs only the scenario's `login`, takes its OTP through `otp.txt`, and saves the session to `auth.json` |
+| `record` | records the scenario: a `.webm`, one PNG per step, and the manifest |
+| `finish` | writes captions and the requested MP4, GIF, slideshow, or contact sheet |
+| `check` | verifies a manifest against the files on disk |
+
+Run it from the consuming repository so that
 Playwright resolves from that project's `node_modules`; a lane that runs elsewhere, such as a
 Codex QA lane under `-C <lane dir>`, passes `--playwright <absolute path>` instead. Run
 `--help` on any command for its flags.
@@ -65,6 +74,35 @@ lanes and re-runs on a newer head from touching each other's evidence; `record` 
 | `<scenario>.gif` | `finish --gif` | short inline preview with a palette drawn from the whole clip |
 | `<scenario>-slideshow.mp4` | `finish --slideshow` | the assertion screenshots, each held `--hold` seconds |
 | `<scenario>-sheet.png` | `finish --sheet` | contact sheet of every assertion screenshot, labeled |
+| `otp-request.json` | `login`, `record` | the latest OTP request with its target, hint, and `answeredAt` or `timedOutAt`; no secret inside |
+| `auth.json` | `login` | the saved session, mode 0600, and a session credential; never attached, never posted, never copied outside the state root, and deleted by the coordinator at run exit |
+
+## Login and OTP
+
+Every login on the QA targets asks for a one-time password (OTP) after the password. The QA
+lane runs in the background and cannot ask the user, so the code passes through two files in
+the lane's `--out` directory:
+
+- The script writes `otp-request.json` when the scenario's `login` calls `otp({ hint })`.
+  It holds `{ "target", "hint", "requestedAt", "timeoutSeconds" }`, with `target` the origin
+  of `--url`. The script prints one line to stderr,
+  `OTP needed for <target>: write the code to <dir>/otp.txt (waiting up to <n> s)`.
+- The asker, which can reach the user, writes only the code to `<dir>/otp.txt`. Trailing
+  whitespace is ignored.
+- The script polls every second, reads `otp.txt`, deletes it at once, adds `answeredAt` to the
+  request, and returns the code to `login`.
+
+When no code arrives within `--otp-timeout` seconds (default 300), the script adds
+`timedOutAt` to the request, leaves no `otp.txt`, and exits 3. The exit codes are 0 ok,
+1 evidence or step failure, 2 usage or setup error (a `login` that throws is one), and 3 no
+OTP before `--otp-timeout`.
+
+Run `login` once per run per target.
+`login --scenario <dir>/<scenario>.mjs --out <dir> --url <target>` saves the session to
+`<dir>/auth.json`, or to `--save-storage-state <path>`. Every `record` after it passes
+`--storage-state <dir>/auth.json` and skips the scenario's `login`, so one code covers every
+scenario. When that file is missing, `record` runs `login` itself, which asks for a new code,
+and writes a warning to the manifest.
 
 ## Steps
 
@@ -82,8 +120,10 @@ lanes and re-runs on a newer head from touching each other's evidence; `record` 
      `<scenario>-<step>.png`.
    - A step ends when its check holds. End it with a wait on the asserted state, not with a
      fixed sleep.
-3. Record against the resolved target and the PR head:
-   `record --scenario <dir>/<scenario>.mjs --out <dir> --url <target> --head <sha> --title-card`.
+3. Record against the resolved target and the PR head, after the once-per-run `login` from
+   Login and OTP:
+   `record --scenario <dir>/<scenario>.mjs --out <dir> --url <target> --head <sha> --title-card --storage-state <dir>/auth.json`.
+   Without `--storage-state`, `record` runs the scenario's login and asks for a new code.
    Add `--actions` when the reviewer needs to see where each click landed. Exit 1 means a
    step failed. The video, screenshot, and manifest are still written, and the row is a fail.
 4. Finish: `finish --manifest <dir>/<scenario>.manifest.json --mp4 --sheet`. Add `--gif` for
@@ -100,7 +140,13 @@ lanes and re-runs on a newer head from touching each other's evidence; `record` 
 ## Secrets
 
 - Credentials are never typed on camera. Protection walls and logins go in `login`, whose
-  storage state passes to the recorded context in memory. Nothing writes it to disk.
+  storage state passes to the recorded context. `record` keeps it in memory. `login` writes it
+  to `auth.json` with mode 0600, a session credential that is never attached, never posted,
+  never copied outside the state root, and deleted by the coordinator at run exit.
+- The OTP comes from `otp.txt`, never from a flag or an environment variable. It never
+  appears in argv, captions, step names, screenshots, logs, the ledger, or a tracked file.
+  Once read, the script adds it to the values it redacts, and the login context is still not
+  recorded.
 - Credentials never appear in argv, which ends up in shell history, process lists, and
   ledger evidence. The scenario module reads them from environment variables that the
   verifier sets from the approved credential file, inside the same shell call, without

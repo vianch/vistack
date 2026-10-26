@@ -45,6 +45,7 @@ Free text is allowed, but these carry meaning elsewhere in the plugin:
 | `monitor-started` | `coordinator` | exactly one review monitor was started and verified for the current coordinator session |
 | `stack-split` | `stack-split` | a diff became a chain |
 | `qa-scenario` | `qa-verifier` | one scenario ran; `result` is its pass/fail; `evidence` lists its screenshots and its video, or `no video: <reason>`. Parallel lanes append these single-line (Appending, below) |
+| `otp-requested` | `qa-verifier` (on Codex, the thread) | a lane's login asked the user for a one-time code; `reason` is the target, `evidence` the `otp-request.json` path, never the code; `result` is `ok` when the code was consumed, `blocked` on timeout |
 | `attempt` | `unblocker` | one blocker attempt; `reason` is the hypothesis |
 | `root-cause-fixed` | `unblocker` | the cause was found and fixed |
 | `escalated` | any | a fence was hit; `reason` names which of the four |
@@ -115,7 +116,7 @@ read-modify-write, so only the coordinator writes it.
 
 ## `<state-root>/<slug>.json` - the state file
 
-Where the run is now. Full schema and an example: `skills/coordinate/SKILL.md`.
+Where the run is now. Full schema and an example: `skills/coordinate/references/state-file.md`.
 
 Written on **every** transition, in this order: state file → ledger row → session comment.
 Any other order loses the run if the session dies between two of them.

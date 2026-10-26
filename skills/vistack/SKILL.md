@@ -9,109 +9,8 @@ The router chooses the contract. The playbook owns the steps. The coordinator ow
 dispatch, and evidence. The owning role does the work.
 
 `vistack` is the identifier. `viStack` is the name used in prose. Every path in this plugin
-is relative to its root.
-
-## Human-facing communication
-
-Write external text as the responsible project participant. Do not mention viStack, a
-skill, an agent, a model, or a host in a user-facing answer or in issue, ticket, PR title,
-PR description, comment, review feedback, or QA result. Do not include the invocation names
-`vistack`, `/vistack`, or `$vistack` either. Describe the work, evidence, decisions, and next
-steps in the project's ordinary voice. This restriction applies to external text only;
-internal frontmatter, commands, paths, state, ledgers, and installation docs retain the
-identifiers required to load and invoke the plugin.
-Internal state may retain role and execution metadata.
-
-## Host adapter
-
-Detect the host from the available plugin surface before running a playbook.
-
-Claude Code uses `commands/vistack.md`, Claude agents, `.claude/state/`, and
-`.claude/worktrees/`. Its monitor is the self-paced `/loop /vistack babysit <slug>`, under the
-wake rules in `skills/coordinate/SKILL.md`.
-
-Codex uses this skill in the current thread and uses `.codex/vistack/state/` and
-`.codex/vistack/worktrees/`. The thread may write only after explicitly adopting the owning
-role's contract (`implementer`, `senior-implementer`, `qa-verifier`, …), recorded as a
-`dispatched` ledger row naming the role and tier; the coordinator role itself never writes.
-Use the host's recurring-task or background equivalent for a monitor when available. If the
-host cannot keep a process alive after the thread ends, record that limitation and leave a
-resumable state file. Never claim that an overnight monitor is active without a live owner
-and wake mechanism.
-
-A read-only or scratch-directory lane — a reviewer, a design runner, a judge — may fan out on
-Codex as its own `codex exec --ephemeral -m <model>` process, so it keeps an independent
-context: `--sandbox read-only` for a reader, `--sandbox workspace-write -C <scratch dir>` for a
-runner. A QA lane is such a runner, with `-C <lane dir>` (`skills/coordinate/SKILL.md`, QA
-lanes). A role that writes to a worktree is adopted sequentially in the thread.
-
-Claude-only steps remain in the task list when running on Codex. Mark them skipped in the
-ledger with the host-specific reason. In particular, do not run `/loop`, `claude attach`,
-Claude issue-comment upserts, or Claude-only agent declarations in Codex. Continue the
-equivalent phase in the current thread unless a real fence is reached.
-
-The state root and worktree root are selected once per run. Never mix Claude and Codex roots.
-A run resumes on the host that created it.
-
-Plugin scripts resolve from the plugin root, not the consuming repository. On Claude Code
-write `scripts/...` as `${CLAUDE_PLUGIN_ROOT}/scripts/...`, and prefix
-`skills/<name>/scripts/...` the same way; on Codex use the installed plugin path. Keep the
-working directory in the consuming repository, because switch files, decision history, and
-run state resolve against it.
-
-## Agent tree
-
-The work runs on three levels. The owner is the human client. The coordinator is the main
-session, and it runs no work an owning role owns: code goes to the tier owner, QA and
-evidence to a background `qa-verifier` lane. Workers are independent lanes with one job
-each, and they run in parallel. On Codex the roles are adopted in the thread, writers one
-after another (Host adapter), and the model column does not apply. Laya takes the forks that
-need no thinker. The advisor is on call for three moments.
-
-| Layer | Role | Model · effort | Job |
-|---|---|---|---|
-| Owner | the human client | human | sets requirements, corrects, answers fences, merges |
-| Coordinator (main session) | router and `coordinator` | Opus 5.5 · xhigh | hears every owner requirement, plans, decides, delegates, reviews worker output, verifies evidence; writes only the state file, the ledger, and the session record |
-| Fork layer | `laya-decision` | code | sharp forks run in code; split forks return to the main session |
-| Explorer | `analyst` | opus · medium | reads the code |
-| Researcher | `researcher` | opus · medium | pulls the docs |
-| Worker, mechanical | `implementer`, `design-implementer` | sonnet | repetitive edits, basic utils, unit tests |
-| Worker, complex | `senior-implementer` | opus · xhigh | data shapes, contracts, boundaries, hot paths |
-| DevOps | `devops` | opus · medium | CI failures a slice did not cause, pipelines, environments, dependency and health audits |
-| Judgment roles | `groomer`, `planner`, `pr-author`, `unblocker` | opus · session effort | tickets, slices, PRs, blockers |
-| Verification | `qa-verifier`, `health-check` | sonnet, haiku | QA evidence, adversarial audit |
-| Reporting | `report-writer` | sonnet | renders one HTML page from state, ledger, diff, or a code map; never publishes |
-| Design and review | `design-runner`, `reviewer`, `pr-reviewer`, `mention-responder` | the host model: opus, or Luna on Codex | `architect` candidates, `interrogate` findings, `review-pr` findings, `review-watch` replies |
-| Advisor | advisor tool, else `advisor` | Fable 5.1 | before a plan, when an error repeats, before done |
-
-What crosses levels:
-
-- Owner to coordinator: requests, kept verbatim; corrections; fence answers.
-- Coordinator to owner: phase reports (Final report), fence questions
-  (`skills/autonomy-has-fences/SKILL.md`), and merge decisions (Merge boundary).
-- Coordinator and workers: a standalone brief goes down and a report with its evidence comes
-  up (`skills/coordinate/SKILL.md`). A worker's question for the owner travels in that report.
-
-| Job | Owning role |
-|---|---|
-| Analysis | `analyst` |
-| Research | `researcher` |
-| Advice and consult | the advisor at its checkpoints; `reviewer` through `interrogate` or `architect` |
-| Development | `implementer`, `senior-implementer`, `design-implementer`, by tier |
-| Addressing review comments | the slice's tier owner, through the project's `address-ai-reviews` |
-| Answering comments that tag the operator on another author's PR | `mention-responder`, through `skills/review-watch/SKILL.md` |
-| Feedback | the role that owns the mistaken work, with a `correction-recorded` row (Step 0); a repeat goes to `skills/correct/SKILL.md` |
-| DevOps and project health | `devops`; `health-check` audits one diff, not the project |
-
-## Fork layer
-
-Laya is the fork layer. It takes the choices that need no thinker, such as which playbook,
-file, tool, or tier, and whether to dispatch or retry. Sharp forks are applied in code; split
-forks return to the main session, which decides and records why. Forks never reach the
-advisor. A recommendation is input to the existing rule, never permission to act. Refinement
-turns off with `decisions off` for a project, `--disable-laya` for one request, or
-`VISTACK_LAYA_ENABLED=0` for the environment; the deterministic policy still runs. When to
-call it, the boundaries table, and the commands are in `skills/laya-decision/SKILL.md`.
+is relative to its root. External text follows the External naming boundary in
+`skills/vistack/principles/index.md`.
 
 ## Step 0. Sticky mode
 
@@ -130,38 +29,26 @@ Once this skill starts, every later turn stays inside the open playbook.
 | `stop` or `pause` | Run `pause-safely`. |
 | `going to bed`, `run until done`, or `don't stop` | Enter `overnight` and keep going through reversible work. |
 
-Leaving the mode is the user's call. A completed playbook leaves the mode idle and waiting
-for `new task`.
+A completed playbook leaves the mode idle until `new task`.
 
 ## Step 1. Read the principles index
 
-Before matching, read `skills/vistack/principles/index.md` in full. Add this literal first
-task-list item:
+Read the index in full before matching, and add this literal first task-list item:
 
 > 1. Read `skills/vistack/principles/index.md`.
 
-Read the leaf skill for every principle that changes a decision. In the final report, name
-the decision it changed. Naming a principle without naming its effect is not a citation.
+Read the leaf skill for every principle that changes a decision.
 
-On the match path (the first request, or after `new task`), run
-`skills/prompt-enhancer/SKILL.md` on the request. Step 2, Step 3, and every Laya fork read
-the original; the enhanced text goes only into analysis briefs and the advisor. A part it
-lists as missing stays missing, so a missing `Done means` still stops at Step 3.
-
-Before dispatching implementation, get the consuming project's shape from the `analyst`
-pass that builds the impact map. It cites `package.json`, the lockfile, TypeScript or
-JavaScript configuration, and source extensions, each with `file:line`. When that report
-shows React plus a frontend runtime/build surface and `.tsx`/`.jsx` (or equivalent React
-source), read `skills/frontend-code-style/SKILL.md` and add it to the implementation
-contract. Do not apply that contract to non-React or non-frontend projects.
+On the match path (first request or `new task`), run `skills/prompt-enhancer/SKILL.md` on
+the request. If the `analyst` project shape is a React frontend
+(`skills/frontend-code-style/SKILL.md`, Project-shape detection), brief implementers with
+that skill.
 
 ## Step 2. Match exactly one playbook
 
 Add a second task-list item for the match, then copy every numbered step from the selected
-playbook into the task list verbatim.
-
-Verbatim means no paraphrase, reorder, merge, or silent omission. A skipped step remains in
-the task list with `skip: <reason>`, and the reason gets a `step-skipped` ledger row.
+playbook into the task list verbatim: no paraphrase, reorder, merge, or silent omission. A
+skipped step stays in the list as `skip: <reason>`.
 
 | Playbook | Match when |
 |---|---|
@@ -216,57 +103,25 @@ An overnight handoff also records:
 
 ## Step 4. Choose the role contract
 
-Roles carry their model and effort in agent frontmatter. Do not override either per run. Use
-the role whose uncertainty matches the work, from the agent tree above.
-
-The main session never writes product code and never starts a role's work itself. Every
-write, including a playbook step that names no owner, goes to its owning role, and code goes
-by tier: `implementer` for mechanical work, `senior-implementer` for complex. The planner
-sets the tier; where no planner ran, `tier-selection` (`skills/laya-decision/SKILL.md`) does,
-from the analyst's tier flags. The tier rule and its escalation are in the Dispatch rules of
-`skills/coordinate/SKILL.md`.
+Agent frontmatter sets each role's model and effort; never override either per run. The
+planner sets the code tier, or `tier-selection` (`skills/laya-decision/SKILL.md`) where none
+ran. Every brief is standalone and written by the brief rule in `skills/coordinate/SKILL.md`.
 
 A change that crosses function boundaries or moves ownership gets `architect` before it is
 sliced; a risky finished change gets `interrogate` before done. `docs/guide/design.md` holds
 the ladder.
 
-Every brief is standalone, complete before dispatch, and written by the brief rule in
-`skills/coordinate/SKILL.md`. A missing field is a scoping defect.
-
 ## Step 5. Dispatch and drain
 
-Enter `skills/coordinate/SKILL.md` and follow it.
+Enter `skills/coordinate/SKILL.md` and follow it. The main session never writes product code
+and runs no work an owning role owns, even for a playbook step that names no owner: code goes
+to its tier owner and QA to a background `qa-verifier` lane, under the Dispatch rules and QA
+lanes of `skills/coordinate/SKILL.md`.
 
-The coordinator owns the state file, ledger, monitor, worktree allocation, and phase
-transitions. It never edits product code. One slice uses one worktree and one owner. Shared
-files serialize according to the conflict matrix. Disjoint slices run in parallel. QA,
-screenshots, and videos run in a background `qa-verifier` lane under the QA-lane rule in
-`skills/coordinate/SKILL.md`; a QA lane is not a slice and owns no worktree.
-
-Treat completions as queue events. Drain the report, verify its evidence, update state then
-ledger then the session comment, and dispatch the next eligible unit. Do not wait for a human
-between reversible phases.
-
-Count commits, pushes, check deltas, captured artifacts, and reports as progress. A lane
-that reaches its expected runtime with no side effect is stalled. Route it to `unblock` or
-replace it according to the playbook. Do not let a polite completion notification become the
-only wake mechanism.
-
-## Advisor checkpoints
-
-The advisor reads the whole session and speaks three times. Follow `skills/advisor/SKILL.md`.
-
-| Moment | Question |
-|---|---|
-| Before a plan with more than one slice, a cross-boundary fix, or an unattended run dispatches | Is this the right approach, and what are we not seeing? |
-| When the same error text comes back after a change meant to fix it | Am I digging in the wrong place? |
-| Before a multi-step or unattended run is reported done or merge-ready | What did I miss? |
-
-The matched playbook names the step where each checkpoint runs, and `skills/advisor/SKILL.md`
-defines the blind-spot pass the plan checkpoint adds. The advisor never edits,
-merges, or opens a fence. The main session acts on each point, through the owning role when
-it needs a write, or rebuts it with evidence. An unavailable advisor is recorded and never
-blocks the run.
+The advisor speaks at three checkpoints: `plan`, `repeat`, and `done`. The matched playbook
+names the step where each runs, and `skills/advisor/SKILL.md` owns the questions, the
+blind-spot pass, and the ledger record; an unavailable advisor is recorded and never blocks
+the run.
 
 ## The four fences
 
@@ -281,12 +136,11 @@ Return control to the user only in these cases.
 4. Credentials are missing, expired, or about to be written to a tracked file.
 
 FENCE 1 returns the full attempt dossier. FENCE 2 returns the competing readings and their
-   consequences. FENCE 3 names the exact action and target. FENCE 4 names the missing
-   credential path without exposing secret contents.
+consequences. FENCE 3 names the exact action and target. FENCE 4 names the missing
+credential path without exposing secret contents.
 
-Outside the fences, do not ask for confirmation or narrate progress. Route reversible drift,
-review noise, broken skills, and tooling failures in scope to the role that owns the fix.
-Unrelated fixes go in a separate PR, and the run returns to the original predicate.
+A fix unrelated to the finish predicate goes in a separate PR, and the run returns to the
+original predicate.
 
 ## Merge boundary
 
@@ -295,11 +149,94 @@ not merge authority. Merging is FENCE 3 and belongs to the human. Approving a PR
 requesting changes on it is a merge decision and belongs to the human too;
 `skills/review-pr/SKILL.md` posts comments only.
 
+## Host adapter
+
+Detect the host from the available plugin surface before running a playbook.
+
+Claude Code uses `commands/vistack.md`, Claude agents, `.claude/state/`, and
+`.claude/worktrees/`.
+
+Codex uses this skill in the current thread and uses `.codex/vistack/state/` and
+`.codex/vistack/worktrees/`. The thread may write only after explicitly adopting the owning
+role's contract, such as `implementer`, `senior-implementer`, or `qa-verifier`, recorded as
+a `dispatched` ledger row naming the role and tier; the coordinator role itself never
+writes. If the host cannot keep a process alive after the thread ends, record that
+limitation and leave a resumable state file. Never claim that an overnight monitor is active
+without a live owner and wake mechanism.
+
+A read-only or scratch-directory lane, such as a reviewer, a design runner, or a judge, may
+fan out on Codex as its own `codex exec --ephemeral -m <model>` process, so it keeps an
+independent context: `--sandbox read-only` for a reader, `--sandbox workspace-write -C
+<scratch dir>` for a runner. A role that writes to a worktree is adopted sequentially in the
+thread.
+
+On Codex a Claude-only step stays in the task list, skipped under Step 2 with the host as
+the reason: do not run `/loop`, `claude attach`, Claude issue-comment upserts, or
+Claude-only agent declarations. Continue the equivalent phase in the current thread unless a
+real fence is reached.
+
+The state root and worktree root are selected once per run. Never mix Claude and Codex roots.
+A run resumes on the host that created it.
+
+Plugin scripts resolve from the plugin root, not the consuming repository. On Claude Code
+write `scripts/...` as `${CLAUDE_PLUGIN_ROOT}/scripts/...`, and prefix
+`skills/<name>/scripts/...` the same way; on Codex use the installed plugin path. Keep the
+working directory in the consuming repository, because switch files, decision history, and
+run state resolve against it.
+
+## Agent tree
+
+The work runs on three levels. The owner is the human client. The coordinator is the main
+session. Workers are independent lanes with one job each, and they run in parallel. On Codex
+the roles are adopted in the thread, writers one after another (Host adapter), and the model
+column does not apply.
+
+| Layer | Role | Model · effort | Job |
+|---|---|---|---|
+| Owner | the human client | human | sets requirements, corrects, answers fences, merges |
+| Coordinator (main session) | router and `coordinator` | Opus 5.5 · xhigh | hears every owner requirement, plans, decides, delegates, reviews worker output, verifies evidence; writes only the state file, the ledger, and the session record |
+| Fork layer | `laya-decision` | code | sharp forks run in code; split forks return to the main session |
+| Explorer | `analyst` | opus · medium | reads the code |
+| Researcher | `researcher` | opus · medium | pulls the docs |
+| Worker, mechanical | `implementer`, `design-implementer` | sonnet | repetitive edits, basic utils, unit tests |
+| Worker, complex | `senior-implementer` | opus · xhigh | data shapes, contracts, boundaries, hot paths |
+| DevOps | `devops` | opus · medium | CI failures a slice did not cause, pipelines, environments, dependency and health audits |
+| Judgment roles | `groomer`, `planner`, `pr-author`, `unblocker` | opus · session effort | tickets, slices, PRs, blockers |
+| Verification | `qa-verifier`, `health-check` | sonnet, haiku | QA evidence, adversarial audit |
+| Reporting | `report-writer` | sonnet | renders one HTML page from state, ledger, diff, or a code map; never publishes |
+| Design and review | `design-runner`, `reviewer`, `pr-reviewer`, `mention-responder` | the host model: opus, or Luna on Codex | `architect` candidates, `interrogate` findings, `review-pr` findings, `review-watch` replies |
+| Advisor | advisor tool, else `advisor` | Fable 5.1 | before a plan, when an error repeats, before done |
+
+What crosses levels:
+
+- Owner to coordinator: requests, kept verbatim; corrections; fence answers.
+- Coordinator to owner: phase reports (Final report), fence questions
+  (`skills/autonomy-has-fences/SKILL.md`), and merge decisions (Merge boundary).
+- Coordinator and workers: a standalone brief goes down and a report with its evidence comes
+  up (`skills/coordinate/SKILL.md`). A worker's question for the owner travels in that report.
+
+| Job | Owning role |
+|---|---|
+| Analysis | `analyst` |
+| Research | `researcher` |
+| Advice and consult | the advisor at its checkpoints; `reviewer` through `interrogate` or `architect` |
+| Development | `implementer`, `senior-implementer`, `design-implementer`, by tier |
+| Addressing review comments | the slice's tier owner, through the project's `address-ai-reviews` |
+| Answering comments that tag the operator on another author's PR | `mention-responder`, through `skills/review-watch/SKILL.md` |
+| Feedback | the role that owns the mistaken work, with a `correction-recorded` row (Step 0); a repeat goes to `skills/correct/SKILL.md` |
+| DevOps and project health | `devops`; `health-check` audits one diff, not the project |
+
+## Fork layer
+
+Laya is the fork layer. It takes the choices that need no thinker, such as which playbook,
+file, tool, or tier, and whether to dispatch or retry. When to call it, its boundaries, its
+off switches, and its commands are in `skills/laya-decision/SKILL.md`.
+
 ## Reuse existing skills
 
 viStack supplies routing, coordination, run state, the conflict matrix, and the ledger.
-Invoke existing project skills for ticket work, PR creation, review assignment, QA, comment
-cleanup, and worktree cleanup. Do not write a second implementation of those capabilities.
+Invoke the project's existing skills for ticket work, PR creation, review assignment, QA,
+comment cleanup, and worktree cleanup instead of writing a second implementation.
 
 ## Final report
 

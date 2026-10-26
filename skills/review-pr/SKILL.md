@@ -1,6 +1,6 @@
 ---
 name: review-pr
-description: "Review someone else's pull request on the operator's behalf: 'review the PR <url>', 'review this PR <url>', 'can you review <owner>/<repo>#<n>', 'leave a review on <url>', 'code review <url>'. Hires a reviewer with senior expertise in the PR's stack, verifies every finding against the code, posts one COMMENT-only review with inline comments in the operator's voice, and reports each comment's URL. Never approves, requests changes, resolves threads, pushes, or merges. Not for the operator's own PR (addressing review comments on it is a different flow) and not for skeptically reviewing the operator's own branch (that is interrogate)."
+description: "'review the PR <url>', 'review this PR', 'can you review <owner>/<repo>#<n>', 'leave a review on <url>', 'code review <url>'. Reviews someone else's PR in the operator's voice: one COMMENT-only review with inline comments, every finding verified; never approves or requests changes. Not for the operator's own PR or branch (that is interrogate)."
 ---
 
 # review-pr

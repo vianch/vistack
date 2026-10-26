@@ -1,8 +1,10 @@
 // Copy into the QA lane's evidence directory (for example .claude/state/qa/<slug>/<slice-or-pr>/<head7>/checkout.mjs), then from the project root,
-// with QA_USER and QA_PASSWORD exported from the approved credential file:
-//   node <plugin>/skills/qa-video/scripts/qa-video.mjs record \
+// with QA_USER and QA_PASSWORD exported from the approved credential file, run login once per run per target:
+//   node <plugin>/skills/qa-video/scripts/qa-video.mjs login --scenario <dir>/checkout.mjs --out <dir> --url http://localhost:3000
+// It waits for the asker to write the code to <dir>/otp.txt and saves the session to <dir>/auth.json. Then record each scenario with it:
+//   node <plugin>/skills/qa-video/scripts/qa-video.mjs record --storage-state <dir>/auth.json \
 //     --scenario <dir>/checkout.mjs --out <dir> --url http://localhost:3000 --head <sha> --actions --title-card
-// Secrets come from process.env only; never put them in argv, captions, or step names.
+// Secrets come from process.env only; never put them in argv, captions, or step names. The OTP comes from otp.txt, never from a flag.
 // `sensitive` hides the action overlay, which prints filled values; it does not hide what the page renders.
 
 export const contextOptions = {
@@ -11,12 +13,16 @@ export const contextOptions = {
 };
 
 // Runs in a separate, unrecorded context; only its cookies and storage carry into the recording.
-export const login = async ({ page }) => {
+// otp() writes <dir>/otp-request.json with the hint and resolves with the code once the asker writes <dir>/otp.txt.
+export const login = async ({ page, otp }) => {
   if (!process.env.QA_PASSWORD) throw new Error("set QA_PASSWORD in the environment");
   await page.goto("/login");
   await page.getByLabel("Email").fill(process.env.QA_USER ?? "qa@example.com");
   await page.getByLabel("Password").fill(process.env.QA_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
+  const code = await otp({ hint: "the code sent to the account's email" });
+  await page.getByLabel("One-time code").fill(code);
+  await page.getByRole("button", { name: "Verify" }).click();
   await page.waitForURL((url) => !url.pathname.startsWith("/login"));
 };
 

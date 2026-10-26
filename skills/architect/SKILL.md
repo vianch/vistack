@@ -1,6 +1,6 @@
 ---
 name: architect
-description: "Design before implementing: ground the change, have independent runners sketch at least two structurally distinct designs (caller usage first, then types, signatures, and a module map), screen them for design red flags, synthesize one, then implement against it and scrap it when it proves wrong. Use when a change crosses function boundaries or moves ownership, or when asked to architect or design something first."
+description: "Design before implementing: independent runners sketch at least two structurally distinct designs (caller usage first, then types, signatures, a module map), screened for design red flags and synthesized into one. Use when a change crosses function boundaries or moves ownership, or when asked to architect or design first."
 ---
 
 # architect

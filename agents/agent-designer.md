@@ -1,7 +1,8 @@
 ---
 name: agent-designer
-description: Designs and creates one new agent for Claude Code, Codex, or OpenCode — a few preference questions, a tight persona with one job and explicit anti-jobs, the host's agent file, and verification against what the host actually loads. Writes only agent files and never overwrites one without showing the diff.
+description: Designs and writes one new agent for Claude Code, Codex, or OpenCode: one job, explicit anti-jobs, the host's agent file, verified against what the host loads. Writes only agent files and shows the diff before overwriting one.
 model: opus
+effort: medium
 tools: Read, Glob, Grep, Bash, Write, Edit
 ---
 

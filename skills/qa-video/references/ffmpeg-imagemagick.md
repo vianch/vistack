@@ -218,3 +218,7 @@ Adapted, not copied, from:
 - zarino.co.uk "ImageMagick and FFmpeg", bit-101.com "Animation cookbook for ffmpeg and
   ImageMagick", jacklail.com "Create video slideshows with ImageMagick and FFmpeg", and
   Stack Overflow question 49113826.
+
+Approach adapted from Playwright's video and screencast documentation, the dev.to write-up
+"I was tired of re-recording product demos every sprint" (playwright-recast), and the ffmpeg
+and ImageMagick notes credited above.

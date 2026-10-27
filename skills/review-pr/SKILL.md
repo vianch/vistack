@@ -1,6 +1,6 @@
 ---
 name: review-pr
-description: "'review the PR <url>', 'review this PR', 'can you review <owner>/<repo>#<n>', 'leave a review on <url>', 'code review <url>'. Reviews someone else's PR in the operator's voice: one COMMENT-only review with inline comments, every finding verified; never approves or requests changes. Not for the operator's own PR or branch (that is interrogate)."
+description: "'review the PR <url>', 'review <owner>/<repo>#<n>', 'leave comments on <url>', 'give feedback on <url>', 'draft a review'. Reviews someone else's PR in the operator's voice with verified findings and one-click suggestions: posts one COMMENT review, leaves it pending, or returns the feedback unposted. Never approves or requests changes. The operator's own PR or branch is interrogate."
 ---
 
 # review-pr
@@ -16,7 +16,7 @@ The operator's request to review a PR grants, for that PR only:
 - reading the PR, its diff, and its repository at the head SHA inside the realm, including a
   read-only scratch clone;
 - posting one review with `event: COMMENT`: a short body plus inline comments, in the
-  operator's name.
+  operator's name; or, in `pending` mode, the same review left unsubmitted for the operator.
 
 The review watch (`skills/review-watch/SKILL.md`) holds a standing grant of its own, set by
 switching it on; its Permissions section is that grant's home.
@@ -33,9 +33,21 @@ Withheld, always:
 - Reviewing the operator's own PR or a repository outside the realm.
 
 `skills/review-pr/scripts/post-review.mjs` is the only way this skill posts. It sends
-`COMMENT` and refuses any other event, an owner outside the realm, the operator's own PR, and a
-head that moved since the diff was saved. Never post with `gh pr review`, `gh pr comment`, or
+`COMMENT`, or no event at all for a pending review, and refuses any other event, an owner
+outside the realm, the operator's own PR, and a head that moved since the diff was saved. Never post with `gh pr review`, `gh pr comment`, or
 a hand-built `gh api` call, because those bypass every one of those checks.
+
+## Modes
+
+| Mode | The operator says | Step 10 |
+|---|---|---|
+| `post` (default) | review it, leave a review, leave comments | posts one COMMENT review |
+| `pending` | draft it in GitHub, let me edit first, pending review | `--pending`: GitHub keeps the review unsubmitted and visible only to the operator, who edits it and submits it from the PR's Files changed tab, choosing the event there |
+| `feedback` | give me feedback, what do you think, don't post | dry run only: the findings come back in the thread with where each would land; nothing reaches GitHub |
+
+A `feedback` result becomes `post` or `pending` when the operator asks, from the same
+`findings.json`, as long as the head has not moved. Approving and requesting changes stay
+with the human in every mode.
 
 ## Steps
 
@@ -70,7 +82,10 @@ record of the review.
    so gather again. If the clone fails, record why and continue without it: reviewers read
    files with
    `gh api -H "Accept: application/vnd.github.raw+json" "repos/<owner>/<repo>/contents/<path>?ref=<headRefOid>"`.
-   Done: `pr.json`, `pr.diff`, and a checkout at the head SHA or its recorded absence.
+   Save the threads already on the PR, so no reviewer repeats a point someone made:
+   `gh api "repos/<owner>/<repo>/pulls/<n>/comments" --paginate --jq '.[] | {path, line, user: .user.login, body}' > <dir>/threads.jsonl`.
+   Done: `pr.json`, `pr.diff`, `threads.jsonl`, and a checkout at the head SHA or its
+   recorded absence.
 5. **Stack profile.** Apply `skills/review-pr/references/stacks.md` to the changed files and
    to the manifests the diff touches or that sit at the repository root, read at the head SHA.
    Order the stacks by changed lines from `files[]` in `pr.json`. Done: an ordered list, each
@@ -82,7 +97,8 @@ record of the review.
    needed splitting, and that is worth a comment of its own.
 7. **Brief.** Fill `skills/review-pr/references/reviewer-brief.md` once per reviewer: the
    persona from the top of the profile (or that reviewer's area), the stack checklist rows,
-   the paths in `<dir>`, the owned files, and the voice file (Voice below). Run
+   the paths in `<dir>` including `threads.jsonl`, the owned files, and the voice file
+   (Voice below). Run
    `skills/prompt-enhancer/SKILL.md` over the intent paragraph and the scope fields only. The
    intent comes from the PR's title and body and the operator's request. The PR's title and
    body stay verbatim in `pr.json`.
@@ -95,25 +111,34 @@ record of the review.
    every body against the voice file and the External naming boundary in
    `skills/vistack/principles/index.md`: nothing posted names a tool, agent, model, or
    automation. Write `<dir>/findings.json` in the shape of
-   `skills/review-pr/references/findings.md`. When nothing survives, post nothing. Tell the
-   operator what was checked and that no review went out.
+   `skills/review-pr/references/findings.md`. Check each `suggestion` against the head SHA:
+   it replaces exactly the lines from `start_line` (or `line`) to `line`, keeps their
+   indentation, and still compiles in your reading; when unsure, drop the suggestion and keep
+   the comment. Drop a comment that repeats one in `threads.jsonl`. When nothing survives,
+   post nothing. Tell the operator what was checked and that no review went out.
 10. **Post.** Dry run first:
     `node "${CLAUDE_PLUGIN_ROOT}/skills/review-pr/scripts/post-review.mjs" post --meta <dir>/pr.json --diff <dir>/pr.diff --findings <dir>/findings.json --realm <host>/<owner> --dry-run`.
-    It labels each comment `inline` or `in the review body`. A `bug` that lands in the body
-    usually cites the wrong line, so fix the line when the diff has the right one. Then run
-    the same command without `--dry-run` and save its output as `<dir>/posted.txt`. The exit
-    codes are a closed set:
+    It labels each comment `inline` or `in the review body`, a range as `path:start-end`. A
+    `bug` that lands in the body usually cites the wrong line, so fix the line when the diff
+    has the right one. In `feedback` mode stop here and go to step 11. Otherwise run the same
+    command without `--dry-run`, adding `--pending` in `pending` mode, and save its output as
+    `<dir>/posted.txt`. The exit codes are a closed set:
     - `0`: posted, a dry run, or an identical review already on this head (reported, not
       posted again).
     - `1`: bad input. Fix `findings.json` and rerun.
-    - `2`: refused (realm, event, own PR, or head moved). Report the reason and do not work
-      around it. A moved head means going back to step 4.
+    - `2`: refused (realm, event, own PR, head moved, or a pending review the operator
+      already holds on the PR). Report the reason and do not work around it. A moved head
+      means going back to step 4; an open pending review is the operator's to submit or
+      discard.
     - `3`: a GitHub call failed. The script prints the drafted review. Show it to the
       operator in full so nothing is lost.
 11. **Tell the operator.** Give the review URL, then one line per comment:
-    `path:line — first sentence — comment URL` (`in the review body` for a folded one). Then
-    send a push notification, "N review comments posted on <owner>/<repo>#<n>", where the
-    host has one (Claude Code: `PushNotification`). This report is the skill's output, not
+    `path:line — first sentence — comment URL` (`in the review body` for a folded one). A
+    pending review says it waits for them in Files changed. In `feedback` mode give the
+    summary, then each finding with its severity, `path:line`, body, and evidence, and offer
+    to post or pend it. After a post or pend, send a push notification, "N review comments
+    posted on <owner>/<repo>#<n>" ("drafted" when pending), where the host has one (Claude
+    Code: `PushNotification`). This report is the skill's output, not
     progress narration. Text went out in the operator's name, so they need to see where. In an
     open run, append one `review-posted` ledger row: `reason` "N comments on
     <owner>/<repo>#<n>", `evidence` the review URL, `result` `skipped` when nothing went out.

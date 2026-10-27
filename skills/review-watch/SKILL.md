@@ -5,11 +5,6 @@ description: "'watch my review requests', 'review every PR I'm asked to review',
 
 # review-watch
 
-Once the operator switches the watch on, a pass runs every 30 minutes until they switch it
-off. Each pass finds the open pull requests in the realm that request the operator's review
-or their team's, and the comments that tag either one. It reviews or answers each in the
-operator's voice and reports what went out.
-
 ## Permissions
 
 Switching the watch on grants, until it is switched off, on every pull request that meets

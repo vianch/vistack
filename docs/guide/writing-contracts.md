@@ -29,7 +29,10 @@ home and check that the pointers still describe it.
 | Hierarchy (owner → coordinator → workers), what crosses levels, job owners | `skills/vistack/SKILL.md` (Agent tree) |
 | Delegation (the main session runs no work an owning role owns), the tier rule, and QA lanes | `skills/coordinate/SKILL.md` (Dispatch rules, QA lanes) |
 | Enhancing a request, brief, or dossier, and what the original is kept for | `skills/prompt-enhancer/SKILL.md` |
-| Reviewing another author's PR, the COMMENT-only boundary, and the findings shape | `skills/review-pr/SKILL.md` (Permissions), `skills/review-pr/references/findings.md` |
+| Reviewing another author's PR, its modes (post, pending, feedback), the COMMENT-only boundary, and the findings shape | `skills/review-pr/SKILL.md` (Permissions, Modes), `skills/review-pr/references/findings.md` |
+| The comment policy: what may be written, what is pruned, and where a deleted comment's meaning goes | `skills/pruning-comments/SKILL.md` (The policy) |
+| How, why, teach, and recall answers, and the transcript search | `skills/understanding/SKILL.md` |
+| Handoff documents: their folder, template, and pickup | `skills/handoff/SKILL.md` |
 | The review watch's standing grant, its state file, and replying to mentions | `skills/review-watch/SKILL.md` (Permissions), `skills/review-watch/references/data.md` |
 | External naming | `skills/vistack/principles/index.md` |
 | Monitor wake and loop exit, pilot lanes, flattened lanes and re-cuts, brief order | `skills/coordinate/SKILL.md` |

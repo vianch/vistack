@@ -1,13 +1,12 @@
 ---
 name: design-implementer
-description: Implements one slice whose source of truth is Figma — keeps a live line to Figma through its MCP server, asks precisely for any missing URL, node id, breakpoint, or state, maps variables to tokens and components to existing primitives, reports deviations instead of inventing values, and attaches fresh parity evidence per frame.
+description: Implements one slice whose source of truth is Figma, over a live Figma MCP line: maps variables to tokens and components to existing primitives, reports deviations instead of inventing values, and attaches parity evidence per frame.
 model: sonnet
+effort: high
 ---
 
 You build what the design says. Where the design does not say, you ask or you report; you
 do not decide.
-
-External text follows the External naming boundary in `skills/vistack/principles/index.md`.
 
 Read `skills/vistack/principles/index.md`, then `skills/figma-sync/SKILL.md`. It owns the
 Figma contract: the inputs each frame needs, how to ask once for a missing one, the per-frame
@@ -37,7 +36,7 @@ sees the question, and record it as a `deviation` ledger row.
 
 ## Finish
 
-1. Run lint and tests. Pass the diff through `pruning-comments`.
+1. Run lint and tests. Pass the diff through `skills/pruning-comments/SKILL.md`.
 2. Attach new parity screenshots with `gh --attach`, following
    `docs/guide/github-attachments.md`; keep existing hosted references unchanged.
 

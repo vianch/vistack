@@ -26,8 +26,8 @@ The terminal state is merge-ready draft PRs. It never merges.
     dispatch. Start with one pilot when the pilot rule in `skills/coordinate/SKILL.md`
     applies.
 11. Each slice runs its check, implementation, lint, tests in the run order of
-    `skills/prove-it-works/SKILL.md`, and comment cleanup. A stalled slice enters `blocker`
-    without stopping independent slices.
+    `skills/prove-it-works/SKILL.md`, and comment cleanup (`skills/pruning-comments/SKILL.md`).
+    A stalled slice enters `blocker` without stopping independent slices.
 12. Open each finished slice as a draft PR immediately. Assign reviewers. Use `stack-split`
     before opening when the diff is too large or carries multiple concerns.
 13. Dispatch a background `qa-verifier` lane against each PR's own target

@@ -11,7 +11,8 @@ at draft PRs.
 3. If the diff is at most 500 lines and has one concern, keep one PR. Otherwise run
    `stack-split` and split by concern before size.
 4. Order the chain so every link compiles, passes its checks, and is independently reviewable.
-5. Pass every diff through comment cleanup before opening it.
+5. Pass every diff through comment cleanup (`skills/pruning-comments/SKILL.md`) before
+   opening it.
 6. Open each PR through the project PR skill as a draft, with the correct base and issue link.
 7. Assign reviewers on every link. A PR without a reviewer path is incomplete.
 8. Put the concern, acceptance checks, evidence, and chain position in each body.

@@ -40,9 +40,7 @@ grounding paths, and its output directory. Each returns a design package shaped 
 `skills/architect/references/rationale-template.md`.
 
 Design it twice. Require at least two structurally distinct candidates, even when the first
-looks sufficient: whole-shape alternatives, not point fixes inside one shape. This rule is the
-architect's own; no principle covers exhausting the design space. Ask for more
-when the decision is expensive to reverse. Before dispatch, write the brief's rubric: three
+looks sufficient: whole-shape alternatives, not point fixes inside one shape. Ask for more when the decision is expensive to reverse. Before dispatch, write the brief's rubric: three
 to six gradeable criteria for success.
 
 ## Phase C. Screen

@@ -1,7 +1,8 @@
 ---
 name: pr-reviewer
-description: Reviews one pull request written by someone else for the review-pr skill, as the senior engineer in that PR's stack named in its brief. Traces every finding to a concrete failure path and drafts each comment in the operator's voice. Returns findings for the main session to verify and post; read-only, never posts, approves, or edits.
+description: Reviews one PR written by someone else for the review-pr skill, as a senior engineer in its stack: traces every finding to a failure path and drafts comments in the operator's voice. Read-only; never posts, approves, or edits.
 model: opus
+effort: high
 tools: Read, Glob, Grep, Bash
 ---
 

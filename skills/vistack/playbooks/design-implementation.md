@@ -24,7 +24,8 @@
    row.
 10. Verify each frame at each breakpoint with a screenshot beside a fresh Figma screenshot of
     the same node. A nonzero parity diff is a failure until explained.
-11. Run lint and tests. Pass the diff through comment cleanup.
+11. Run lint and tests. Pass the diff through comment cleanup
+    (`skills/pruning-comments/SKILL.md`).
 12. Open each slice as a draft PR with screenshots and deviations. Attach new screenshots
     directly with `gh --attach`, following [GitHub attachments](../../docs/guide/github-attachments.md),
     then assign reviewers.

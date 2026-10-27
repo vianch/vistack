@@ -10,7 +10,7 @@ playbook, one role phase per slice, stopping at merge-ready.
 `vistack` is the identifier you install and invoke. **viStack** is what it is called in
 prose. Same thing. It runs on Claude Code, Codex, Grok Build, and OpenCode.
 
-**Version:** `0.26.0`
+**Version:** `0.28.0`
 
 **Contents:** [install](#install) · [usage](#usage) ·
 [QA evidence: screenshots and video](#qa-evidence-screenshots-and-video) ·
@@ -105,7 +105,8 @@ components. Codex state uses `.codex/vistack/state/` and `.codex/vistack/worktre
 Grok Build reads `.grok-plugin/plugin.json`, which points at the same `skills/`, `commands/`,
 and `agents/` directories. Its marketplace entry must pin a published commit SHA. OpenCode
 loads the bridge at `integrations/opencode/vistack.js` from `.opencode/plugins/`, which adds the
-decision and QA video tools. Both are covered step by step in
+decision and QA video tools, and reads viStack skills linked into its skills folder. Both are
+covered step by step in
 [`docs/guide/grok-opencode.md`](docs/guide/grok-opencode.md).
 
 ---
@@ -618,32 +619,34 @@ files are the source of truth, so they are not restated here.
 | Agent | Owns | Model | Effort |
 |---|---|---|---|
 | [`coordinator`](agents/coordinator.md) | phase transitions, dispatch, state file, ledger, session comment. Never edits code or runs QA; every write goes to its owner | `opus` | session |
-| [`groomer`](agents/groomer.md) | raw request → specified ticket, through the readiness gate | `opus` | session |
+| [`groomer`](agents/groomer.md) | raw request → specified ticket, through the readiness gate | `opus` | high |
 | [`analyst`](agents/analyst.md) | explorer: read-only call sites, blast radius, existing patterns, coverage | `opus` | `medium` |
 | [`researcher`](agents/researcher.md) | researcher: external docs pinned to the installed version, cited | `opus` | `medium` |
-| [`planner`](agents/planner.md) | slices ≤500 lines, file-level ownership, tiers, the conflict matrix | `opus` | session |
-| [`implementer`](agents/implementer.md) | worker, mechanical tier: repetitive edits, basic utils, unit tests | `sonnet` | session |
+| [`planner`](agents/planner.md) | slices ≤500 lines, file-level ownership, tiers, the conflict matrix | `opus` | high |
+| [`implementer`](agents/implementer.md) | worker, mechanical tier: repetitive edits, basic utils, unit tests | `sonnet` | high |
 | [`senior-implementer`](agents/senior-implementer.md) | worker, complex tier: data shapes, contracts, boundaries, hot paths | `opus` | `xhigh` |
-| [`design-implementer`](agents/design-implementer.md) | the same, sourced from Figma; reports deviations instead of inventing values | `sonnet` | session |
-| [`unblocker`](agents/unblocker.md) | the bounded blocker loop and its escalation dossier | `opus` | session |
-| [`pr-author`](agents/pr-author.md) | draft PRs, the stacked chain over 500 lines, reviewer assignment | `opus` | session |
-| [`qa-verifier`](agents/qa-verifier.md) | the QA contract: scenarios from the diff, screenshots, scenario videos, results table | `sonnet` | session |
+| [`design-implementer`](agents/design-implementer.md) | the same, sourced from Figma; reports deviations instead of inventing values | `sonnet` | high |
+| [`unblocker`](agents/unblocker.md) | the bounded blocker loop and its escalation dossier | `opus` | high |
+| [`pr-author`](agents/pr-author.md) | draft PRs, the stacked chain over 500 lines, reviewer assignment | `opus` | medium |
+| [`qa-verifier`](agents/qa-verifier.md) | the QA contract: scenarios from the diff, screenshots, scenario videos, results table | `sonnet` | medium |
 | [`health-check`](agents/health-check.md) | adversarial audit of the diff against the acceptance criteria | `haiku` | — |
 | [`devops`](agents/devops.md) | CI failures a slice did not cause, pipelines, environments, dependency and project-health audits. Never edits product code | `opus` | `medium` |
 | [`advisor`](agents/advisor.md) | fallback reviewer when the advisor tool is off: plan, repeat, done | `fable` | `xhigh` |
-| [`design-runner`](agents/design-runner.md) | one independent `architect` candidate: usage first, then types and a rationale | `opus` | session |
-| [`reviewer`](agents/reviewer.md) | one independent `interrogate` reviewer, or the `architect` judge. Read-only | `opus` | session |
-| [`pr-reviewer`](agents/pr-reviewer.md) | one senior reviewer in the PR's stack for `review-pr`; drafts findings in the operator's voice, never posts, approves, or edits. Read-only | `opus` | session |
-| [`mention-responder`](agents/mention-responder.md) | one reply to one comment that tags the operator, for the review watch; returns a reply, needs-you, or skip draft, never posts. Read-only | `opus` | session |
-| [`report-writer`](agents/report-writer.md) | renders one self-contained HTML page from state, ledger, diff, or code map; never publishes | `sonnet` | session |
-| [`agent-designer`](agents/agent-designer.md) | designs one new Claude Code, Codex, or OpenCode agent and verifies it loads | `opus` | session |
+| [`design-runner`](agents/design-runner.md) | one independent `architect` candidate: usage first, then types and a rationale | `opus` | high |
+| [`reviewer`](agents/reviewer.md) | one independent `interrogate` reviewer, or the `architect` judge. Read-only | `opus` | high |
+| [`pr-reviewer`](agents/pr-reviewer.md) | one senior reviewer in the PR's stack for `review-pr`; drafts findings in the operator's voice, never posts, approves, or edits. Read-only | `opus` | high |
+| [`mention-responder`](agents/mention-responder.md) | one reply to one comment that tags the operator, for the review watch; returns a reply, needs-you, or skip draft, never posts. Read-only | `opus` | medium |
+| [`report-writer`](agents/report-writer.md) | renders one self-contained HTML page from state, ledger, diff, or code map; never publishes | `sonnet` | medium |
+| [`agent-designer`](agents/agent-designer.md) | designs one new Claude Code, Codex, or OpenCode agent and verifies it loads | `opus` | medium |
 
 Models and effort sit in agent frontmatter, not in a run. The rule behind the split: put the
 model where the *uncertainty* is. The main session runs Opus 5.5 at `xhigh` and plans,
 decides, dispatches, and verifies. It runs no work an owning role owns: code goes to the tier
 owner, QA and evidence to a background `qa-verifier` lane. Reading, doc lookups, and CI
-triage run on Opus at `medium`. Mechanical code goes to Sonnet and complex code to Opus at
-`xhigh`. The adversarial audit stays on Haiku. Fable 5.1 advises at three checkpoints and
+triage run on Opus at `medium`. Mechanical code goes to Sonnet at `high` and complex code
+to Opus at `xhigh`. Judgment and review roles run at `high`; procedural ones (PR authoring,
+QA, reports, mention replies, agent design) run at `medium`, so no role inherits the session's
+effort. The adversarial audit stays on Haiku. Fable 5.1 advises at three checkpoints and
 never writes code. You are the owner above the main session. The levels, what passes between
 them, and which agent owns each job are defined once, in the Agent tree of
 [`skills/vistack/SKILL.md`](skills/vistack/SKILL.md).
@@ -696,7 +699,10 @@ invokes a principle must name the decision the principle changed.
 [`advisor`](skills/advisor/SKILL.md) (the three checkpoints) ·
 [`architect`](skills/architect/SKILL.md) (design before code) ·
 [`interrogate`](skills/interrogate/SKILL.md) (adversarial multi-reviewer pass) ·
-[`review-pr`](skills/review-pr/SKILL.md) (one comment-only review on another author's PR; never approves) ·
+[`review-pr`](skills/review-pr/SKILL.md) (one review on another author's PR: posted as comments, left pending for you, or returned as feedback, with one-click suggestions; never approves) ·
+[`understanding`](skills/understanding/SKILL.md) (how, why, teach, and recall answers in the thread, with a cross-host transcript search) ·
+[`pruning-comments`](skills/pruning-comments/SKILL.md) (the comment policy and the pass that applies it to a diff) ·
+[`handoff`](skills/handoff/SKILL.md) (write or pick up a handoff document any host can resume) ·
 [`review-watch`](skills/review-watch/SKILL.md) (a 30-minute watch that reviews the PRs requesting you and answers the comments tagging you; never approves) ·
 [`figma-sync`](skills/figma-sync/SKILL.md) (the live Figma line) ·
 [`slice-plan`](skills/slice-plan/SKILL.md) (decomposition, conflict matrix) ·

@@ -1,6 +1,7 @@
 ---
 name: run
 description: "Alias for the canonical vistack engineering-work entry point. Equivalent to vistack, orchestrator, and coordinator."
+disable-model-invocation: true
 ---
 
 # run

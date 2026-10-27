@@ -28,7 +28,8 @@ runtime or test evidence is not complete.
    `senior-implementer` when the fix crosses a boundary or changes a contract. The scope
    names the cause, files, test, and unchanged behavior. No bundled cleanup.
 10. The slice owner runs the regression test, the suite in the run order of
-    `skills/prove-it-works/SKILL.md`, and lint, and passes the diff through comment cleanup.
+    `skills/prove-it-works/SKILL.md`, and lint, and passes the diff through comment cleanup
+    (`skills/pruning-comments/SKILL.md`).
     The original reproduction reruns in a `qa-verifier` lane.
 11. Open the draft PR with failing-then-passing evidence, root cause, fix, and regression
     test. Assign the configured reviewers.

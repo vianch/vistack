@@ -9,29 +9,25 @@ import { readFileSync, realpathSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+import { rightSideLines } from "./diff-lines.mjs";
+import { PostReviewError, refuse } from "./review-error.mjs";
+import { buildReview, commentLocation, isText, shaPattern, validateFindings } from "./review-payload.mjs";
+
+export { PostReviewError } from "./review-error.mjs";
+export { rightSideLines } from "./diff-lines.mjs";
+export { buildReview, validateFindings } from "./review-payload.mjs";
+
 const scriptPath = fileURLToPath(import.meta.url);
 const usage = [
   "usage: node post-review.mjs realm",
-  "       node post-review.mjs post --meta <pr.json> --diff <pr.diff> --findings <findings.json> --realm <host/owner> [--realm ...] [--once-per-head] [--dry-run]",
+  "       node post-review.mjs post --meta <pr.json> --diff <pr.diff> --findings <findings.json> --realm <host/owner> [--realm ...] [--once-per-head] [--pending] [--dry-run]",
   "       node post-review.mjs reply --pr <url> --comment <id> --kind review|issue|review-body --body-file <path> --realm <host/owner> [--realm ...] [--head <sha>] [--dry-run]",
 ].join("\n");
 const defaultHost = "github.com";
-const severities = new Set(["bug", "risk", "nit", "question"]);
 const ownerPattern = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 const repoPattern = /^(?!\.{1,2}$)[A-Za-z0-9._-]{1,100}$/;
 const hostPattern = /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+(?::\d+)?$/;
-const shaPattern = /^[0-9a-f]{40}$/;
 const sentenceLimit = 120;
-
-export class PostReviewError extends Error {
-  constructor(message, { code = 1, payload } = {}) {
-    super(message);
-    this.code = code;
-    this.payload = payload;
-  }
-}
-
-const refuse = (message, payload) => new PostReviewError(`refused: ${message}`, { code: 2, payload });
 
 const checkName = (owner, repo, number, original) => {
   if (!ownerPattern.test(owner) || !repoPattern.test(repo) || !(number > 0)) {
@@ -89,125 +85,6 @@ export const checkRealm = (pr, realms) => {
   return true;
 };
 
-const unquotePath = (text) => {
-  if (!text.startsWith('"') || !text.endsWith('"')) return text;
-  const escapes = { a: 7, b: 8, f: 12, n: 10, r: 13, t: 9, v: 11, '"': 34, "\\": 92 };
-  const bytes = [];
-  for (let index = 1; index < text.length - 1; index += 1) {
-    const character = text[index];
-    if (character !== "\\") {
-      bytes.push(...Buffer.from(character, "utf8"));
-      continue;
-    }
-    const octal = text.slice(index + 1, index + 4);
-    if (/^[0-7]{3}$/.test(octal)) {
-      bytes.push(parseInt(octal, 8));
-      index += 3;
-    } else {
-      const next = text[index + 1];
-      bytes.push(escapes[next] ?? next.charCodeAt(0));
-      index += 1;
-    }
-  }
-  return Buffer.from(bytes).toString("utf8");
-};
-
-const newSidePath = (header) => {
-  const raw = header.slice(4).replace(/\t$/, "");
-  if (raw === "/dev/null") return null;
-  const path = unquotePath(raw);
-  return path.startsWith("b/") ? path.slice(2) : path;
-};
-
-// Hunk bodies are consumed by the counts in their @@ header, so an added line whose text looks
-// like "+++ b/x" or "diff --git" is never read as a file header.
-export const rightSideLines = (diffText) => {
-  const lines = new Map();
-  let current = null;
-  let remainingOld = 0;
-  let remainingNew = 0;
-  let newLine = 0;
-  for (const raw of String(diffText).split("\n")) {
-    if (remainingOld > 0 || remainingNew > 0) {
-      const marker = raw[0] ?? " ";
-      if (marker === "\\") continue;
-      if (marker === "+") {
-        current?.add(newLine);
-        newLine += 1;
-        remainingNew -= 1;
-      } else if (marker === "-") {
-        remainingOld -= 1;
-      } else {
-        current?.add(newLine);
-        newLine += 1;
-        remainingOld -= 1;
-        remainingNew -= 1;
-      }
-      continue;
-    }
-    if (raw.startsWith("diff --git ")) {
-      current = null;
-    } else if (raw.startsWith("+++ ")) {
-      const path = newSidePath(raw);
-      current = path === null ? null : (lines.get(path) ?? lines.set(path, new Set()).get(path));
-    } else {
-      const hunk = raw.match(/^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
-      if (hunk) {
-        remainingOld = hunk[1] === undefined ? 1 : Number(hunk[1]);
-        newLine = Number(hunk[2]);
-        remainingNew = hunk[3] === undefined ? 1 : Number(hunk[3]);
-      }
-    }
-  }
-  return lines;
-};
-
-const isText = (value) => typeof value === "string" && value.trim() !== "";
-
-export const validateFindings = (findings) => {
-  if (findings === null || typeof findings !== "object" || Array.isArray(findings)) {
-    throw new PostReviewError("the findings file must hold one JSON object");
-  }
-  if ("event" in findings && String(findings.event).toUpperCase() !== "COMMENT") {
-    throw refuse(`event ${JSON.stringify(findings.event)}; this script posts COMMENT reviews only`);
-  }
-  const problems = [];
-  if (!isText(findings.body)) problems.push("body: a non-empty review body is required (GitHub requires one for COMMENT)");
-  const comments = findings.comments ?? [];
-  if (!Array.isArray(comments)) problems.push("comments: must be an array");
-  const checked = Array.isArray(comments) ? comments : [];
-  checked.forEach((comment, index) => {
-    const where = `comment ${index + 1}`;
-    if (!isText(comment?.path) || comment.path.startsWith("/")) problems.push(`${where}: path must be repository-relative`);
-    if (!Number.isInteger(comment?.line) || comment.line < 1) problems.push(`${where}: line must be a positive integer`);
-    if (comment?.side !== undefined && comment.side !== "RIGHT") problems.push(`${where}: side must be RIGHT`);
-    if (!severities.has(comment?.severity)) problems.push(`${where}: severity must be one of ${[...severities].join(", ")}`);
-    if (!isText(comment?.evidence)) problems.push(`${where}: evidence is required; an unverified finding is dropped, not posted`);
-    if (!isText(comment?.body)) problems.push(`${where}: body is required`);
-  });
-  if (problems.length) throw new PostReviewError(`invalid findings:\n- ${problems.join("\n- ")}`);
-  return { body: findings.body.trim(), comments: checked };
-};
-
-const foldedItem = (comment) => `- \`${comment.path}:${comment.line}\`: ${comment.body.trim().replace(/\n/g, "\n  ")}`;
-
-export const buildReview = ({ findings, diffLines, headSha }) => {
-  if (!shaPattern.test(String(headSha))) throw new PostReviewError(`head must be a full 40-character SHA, got ${headSha}`);
-  const inDiff = (comment) => diffLines.get(comment.path)?.has(comment.line) === true;
-  const inline = findings.comments.filter(inDiff);
-  const folded = findings.comments.filter((comment) => !inDiff(comment));
-  const body = folded.length
-    ? `${findings.body}\n\nOutside the diff:\n${folded.map(foldedItem).join("\n")}`
-    : findings.body;
-  const payload = {
-    commit_id: headSha,
-    event: "COMMENT",
-    body,
-    comments: inline.map(({ path, line, body: text }) => ({ path, line, side: "RIGHT", body: text })),
-  };
-  return { payload, inline, folded };
-};
-
 export const firstSentence = (text) => {
   const line = String(text).trim().split("\n")[0].replace(/\s+/g, " ");
   const sentence = line.match(/^.*?[.?!](?=\s|$)/)?.[0] ?? line;
@@ -239,7 +116,7 @@ export const findExistingReview = (reviews, { viewer, headSha, body }) =>
       (review.body ?? "").trim() === body.trim(),
   );
 
-const commentLine = (comment, where) => `${comment.path}:${comment.line} — ${firstSentence(comment.body)} — ${where}`;
+const commentLine = (comment, where) => `${commentLocation(comment)} — ${firstSentence(comment.body)} — ${where}`;
 
 const planLines = ({ inline, folded }) => [
   ...inline.map((comment) => commentLine(comment, "inline")),
@@ -266,13 +143,14 @@ const callGh = (gh, host, args, input) => {
   }
 };
 
-export const postReview = ({ meta, diffText, findings, realms, dryRun, oncePerHead = false, gh }) => {
+export const postReview = ({ meta, diffText, findings, realms, dryRun, oncePerHead = false, pending = false, gh }) => {
   const pr = parsePrRef(meta?.url);
   checkRealm(pr, realms);
   const { payload, inline, folded } = buildReview({
     findings: validateFindings(findings),
     diffLines: rightSideLines(diffText),
     headSha: meta.headRefOid,
+    pending,
   });
   if (dryRun) return { posted: false, payload, lines: planLines({ inline, folded }) };
 
@@ -288,7 +166,7 @@ export const postReview = ({ meta, diffText, findings, realms, dryRun, oncePerHe
 
   const commentUrls = (reviewId) => {
     try {
-      return matchCommentUrls(inline, callGh(gh, pr.host, [`${base}/reviews/${reviewId}/comments?per_page=100`]));
+      return matchCommentUrls(payload.comments, callGh(gh, pr.host, [`${base}/reviews/${reviewId}/comments?per_page=100`]));
     } catch {
       return inline.map(() => null);
     }
@@ -309,6 +187,10 @@ export const postReview = ({ meta, diffText, findings, realms, dryRun, oncePerHe
   if (onHead) {
     return { posted: false, payload, lines: [`review: ${onHead.html_url} (already reviewed this head; nothing new posted)`] };
   }
+  const openPending = pending && reviews.find((review) => sameLogin(review.user?.login, viewer) && review.state === "PENDING");
+  if (openPending) {
+    throw refuse(`a pending review already exists: ${openPending.html_url}; submit or discard it first`, payload);
+  }
 
   let review;
   try {
@@ -316,7 +198,9 @@ export const postReview = ({ meta, diffText, findings, realms, dryRun, oncePerHe
   } catch (error) {
     throw new PostReviewError(error.message, { code: 3, payload });
   }
-  const note = review.state && review.state !== "COMMENTED" ? `state is ${review.state}, expected COMMENTED` : "";
+  const expectedState = pending ? "PENDING" : "COMMENTED";
+  const pendingNote = pending ? "pending: submit it from the PR's Files changed tab" : "";
+  const note = review.state && review.state !== expectedState ? `state is ${review.state}, expected ${expectedState}` : pendingNote;
   const urls = commentUrls(review.id);
   return { posted: true, payload, lines: reportLines({ reviewUrl: review.html_url, note, inline, folded, urls }) };
 };
@@ -435,6 +319,8 @@ const parseArgs = (argv) => {
       options.dryRun = true;
     } else if (flag === "--once-per-head") {
       options.oncePerHead = true;
+    } else if (flag === "--pending") {
+      options.pending = true;
     } else if (flag === "--help" || flag === "-h") {
       options.help = true;
     } else if ((flag === "--realm" || valued[flag]) && value !== undefined && !value.startsWith("--")) {
@@ -447,6 +333,9 @@ const parseArgs = (argv) => {
   }
   if (command === "reply" && options.event !== undefined) {
     throw refuse(`event ${options.event}; a reply is a plain comment and carries no review event`);
+  }
+  if (command !== "post" && options.pending) {
+    throw new PostReviewError(`--pending applies to post only\n${usage}`);
   }
   if (options.event !== undefined && options.event.toUpperCase() !== "COMMENT") {
     throw refuse(`event ${options.event}; this script posts COMMENT reviews only`);
@@ -523,6 +412,7 @@ const main = () => {
       realms: options.realms,
       dryRun: options.dryRun,
       oncePerHead: options.oncePerHead,
+      pending: options.pending,
       gh: runGh,
     });
     if (options.dryRun) process.stdout.write(`${JSON.stringify(result.payload, null, 2)}\n`);

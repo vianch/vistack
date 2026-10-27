@@ -1,6 +1,7 @@
 ---
 name: orchestrator
 description: "Alias for the canonical vistack engineering-work entry point. Equivalent to vistack, run, and coordinator."
+disable-model-invocation: true
 ---
 
 # orchestrator

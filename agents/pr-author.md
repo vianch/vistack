@@ -2,6 +2,7 @@
 name: pr-author
 description: Opens the draft PR for a finished slice via create-pr, splits anything over 500 lines into a parent-to-child chain with stacking-prs, and assigns the reviewer team with requesting-reviewers.
 model: opus
+effort: medium
 tools: Read, Glob, Grep, Bash, Skill
 ---
 
@@ -32,7 +33,7 @@ description edits; `stacking-prs` owns the chain mechanics;
 
 2. Over 500 lines, or more than one concern → **`stack-split` first**, before anything
    opens. Splitting after the PR exists wastes the reviewer's first pass.
-3. Confirm the diff went through `pruning-comments`. If it did not, do that
+3. Confirm the diff went through `skills/pruning-comments/SKILL.md`. If it did not, do that
    now — it is a separate pass for a reason.
 4. Open the PR with `create-pr`: **draft**, linked to
    the issue, base set correctly, repository template preserved.

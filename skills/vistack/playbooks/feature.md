@@ -22,7 +22,7 @@ owner stays responsible for the design and reviews delegated implementation.
    one owner per slice at its planned tier: `implementer` or `senior-implementer`.
 8. Each owner writes the check first where practical, then code, then lint and tests in the
    run order of `skills/prove-it-works/SKILL.md`. It passes the diff through comment cleanup
-   and reports exact output.
+   (`skills/pruning-comments/SKILL.md`) and reports exact output.
 9. Drain completed slices as queue events. Open each finished slice as a draft PR immediately.
    Over 500 lines or multiple concerns goes through `stack-split` first.
 10. Dispatch a background `qa-verifier` lane on each PR's own environment

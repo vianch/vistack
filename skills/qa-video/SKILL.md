@@ -5,10 +5,6 @@ description: "Record a screen video, screen recording, walkthrough, or GIF of a 
 
 # qa-video
 
-A screenshot proves the state at one moment. A video shows how the page got there: the
-transition, the order of events, the flash of wrong content, the timing. This skill records
-that video and ties every second of it to an assertion point.
-
 The screenshot at each assertion point stays the pass or fail gate
 (`skills/qa-verify/SKILL.md`). A video never turns a fail into a pass and never stands in for
 a missing screenshot. Every browser scenario attempts a video. When one cannot be produced,
@@ -50,8 +46,7 @@ Codex QA lane under `-C <lane dir>`, passes `--playwright <absolute path>` inste
 | Grok Build | the same command with the installed plugin path; `.grok-plugin/plugin.json` loads this skill |
 | OpenCode | the `vistack_qa_video` tool from `integrations/opencode/vistack.js`, with `command` and `args_json` |
 
-The tools have separate jobs. Playwright records the browser, ffmpeg changes video over
-time, and ImageMagick composes still images. Only the browser recording is guaranteed.
+Only the browser recording is guaranteed.
 Playwright writes a `.webm` without any system tool. MP4, GIF, slideshow, and contact sheet
 each need a tool that `doctor` must find first.
 
@@ -180,13 +175,8 @@ rejected, attach the slideshow or the contact sheet and record the rejection.
 
 ## Editing by hand
 
-`skills/qa-video/references/ffmpeg-imagemagick.md` has commands for:
-
-- probing and converting;
-- fitting a size budget, trimming, and speeding up idle time;
-- palette GIFs and slideshows from screenshots;
-- side-by-side before and after, frame extraction, and burned-in labels;
-- contact sheets, caption bars, and corrupt-frame cleanup.
+Hand edits (convert, fit a size budget, trim, GIF, slideshow, side-by-side, labels, contact
+sheet): `skills/qa-video/references/ffmpeg-imagemagick.md`.
 
 Write edited output next to the original. Never overwrite the recorded evidence.
 
@@ -210,7 +200,3 @@ Write edited output next to the original. Never overwrite the recorded evidence.
   recorded case, a black-and-white cover turned the whole clip black and white. `finish
   --gif` builds the palette from the whole clip. For screenshots that differ a lot, the
   reference uses one palette per frame.
-
-Approach adapted from Playwright's video and screencast documentation, the dev.to write-up
-"I was tired of re-recording product demos every sprint" (playwright-recast), and the ffmpeg
-and ImageMagick notes credited in `skills/qa-video/references/ffmpeg-imagemagick.md`.

@@ -37,6 +37,20 @@ missing, ask a `question` instead of assuming the author is wrong.
 
 Run `node "${CLAUDE_PLUGIN_ROOT}/skills/token-guard/scripts/token-guard.mjs" check --files <the files you own>` once. A file this PR pushes over 5,000 tokens gets a `risk` comment carrying the split the command prints (`skills/token-guard/SKILL.md`).
 
+### Writing each comment
+
+- One problem per comment, anchored on the line that causes it, not where it surfaces. The
+  same problem at several lines is one comment on the first, naming the others ("same at
+  L88 and L120").
+- The problem in the first sentence, then when it breaks, then the smallest fix.
+- When the fix is certain and replaces exactly the anchored lines, put the replacement in
+  `suggestion`, with `start_line` for a range, so the author applies it in one click. Write
+  it against the head SHA you read, with the file's indentation; when unsure, describe the
+  fix instead.
+- Tell when the evidence is certain; ask when context is missing.
+- Skip what a linter or formatter in the repository already enforces, a preference with no
+  concrete problem, and any point already raised in the existing threads.
+
 ### Evidence
 
 Every `bug` and `risk` names its failure path: the input, the caller as `file:line`, the
@@ -62,4 +76,5 @@ dropped and why, one line each. Nothing else.
 - Files you own: {FILES}. Read any file for context. Anchor each comment on a line of a file
   you own; a problem that shows up elsewhere anchors on the changed line that causes it.
 - Stack checklist: {CHECKLIST}
+- Existing threads: {THREADS_PATH}, one JSON object per line.
 - Voice file: {VOICE_PATH}

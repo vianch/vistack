@@ -37,7 +37,7 @@ Free text is allowed, but these carry meaning elsewhere in the plugin:
 | `step-skipped` | any | a playbook step stayed in the list and was not run — `reason` is required |
 | `sliced` | `planner` | the slice list exists |
 | `matrix-built` | `planner` | the conflict matrix exists; dispatch may begin |
-| `dispatched` | `coordinator` | an agent is running on a slice; on Codex, the thread adopted the role, and `reason` names the role and tier. A QA lane's `reason` reads `qa lane, background, head <sha7>` and its `evidence` is the lane's evidence directory |
+| `dispatched` | `coordinator` | an agent is running on a slice; on Codex, the thread adopted the role, and `reason` names the role and tier, plus the model, effort, and `model-selection` decision id when the dispatch left its frontmatter default. A QA lane's `reason` reads `qa lane, background, head <sha7>` and its `evidence` is the lane's evidence directory |
 | `qa-superseded` | `coordinator` | a newer PR head cancelled a running QA lane; `evidence` is the new head SHA |
 | `serialized` | `coordinator` | a slice waited on another because they share a file |
 | `pr-opened` | `pr-author` | draft PR exists, linked, reviewers assigned |

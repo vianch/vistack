@@ -72,8 +72,9 @@ constraints:
 1. **Router** (`skills/vistack/SKILL.md`, Step 2) copies one playbook's steps verbatim.
 2. **Sticky.** Later turns continue the open playbook until `new task` (router, Step 0).
 3. **Coordinator.** `skills/coordinate/SKILL.md` owns dispatch, state, and ledger.
-4. **Agents** carry model and effort in frontmatter, never overridden per run; change the
-   agent file (router, Agent tree).
+4. **Agents** carry their default model and effort in frontmatter; `model-selection` moves one
+   dispatch along a fixed ladder from it (`skills/coordinate/SKILL.md`, Dispatch rules); a new
+   default changes the agent file (router, Agent tree).
 5. **Advisor.** Three checkpoints, `skills/advisor/SKILL.md`.
 6. **Laya.** Forks that need no thinker, `skills/laya-decision/SKILL.md`.
 

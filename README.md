@@ -10,7 +10,7 @@ playbook, one role phase per slice, stopping at merge-ready.
 `vistack` is the identifier you install and invoke. **viStack** is what it is called in
 prose. Same thing. It runs on Claude Code, Codex, Grok Build, and OpenCode.
 
-**Version:** `0.28.0`
+**Version:** `0.29.0`
 
 **Contents:** [install](#install) · [usage](#usage) ·
 [QA evidence: screenshots and video](#qa-evidence-screenshots-and-video) ·
@@ -340,7 +340,7 @@ task and viStack state
 ```
 
 Every `Decision` says `fork: sharp` or `fork: split`. Sharp forks — which playbook, which
-file, which tool, which tier, retry or stop — are applied without a model turn; only split
+file, which tool, which tier, which model, retry or stop — are applied without a model turn; only split
 forks reach the main session.
 
 The engine is enabled by default. Default-on means the decision hook is allowed to run; it
@@ -639,14 +639,21 @@ files are the source of truth, so they are not restated here.
 | [`report-writer`](agents/report-writer.md) | renders one self-contained HTML page from state, ledger, diff, or code map; never publishes | `sonnet` | medium |
 | [`agent-designer`](agents/agent-designer.md) | designs one new Claude Code, Codex, or OpenCode agent and verifies it loads | `opus` | medium |
 
-Models and effort sit in agent frontmatter, not in a run. The rule behind the split: put the
+Models and effort in agent frontmatter are each role's default. Before each dispatch the
+`model-selection` fork keeps that default, steps up one rung for a retry, a contract or
+boundary flag, or a large job, or steps down for small mechanical work that follows a named
+pattern; a model may settle the unclear ones, never a step-down below 0.85 confidence or
+against risk evidence. The advisor, the coordinator, design runners, reviewers, and
+`senior-implementer` never move, and the mechanical tier changes effort only, so complex work
+still changes owner through the tier rule. The rule behind the defaults: put the
 model where the *uncertainty* is. The main session runs Opus 5.5 at `xhigh` and plans,
 decides, dispatches, and verifies. It runs no work an owning role owns: code goes to the tier
 owner, QA and evidence to a background `qa-verifier` lane. Reading, doc lookups, and CI
 triage run on Opus at `medium`. Mechanical code goes to Sonnet at `high` and complex code
 to Opus at `xhigh`. Judgment and review roles run at `high`; procedural ones (PR authoring,
 QA, reports, mention replies, agent design) run at `medium`, so no role inherits the session's
-effort. The adversarial audit stays on Haiku. Fable 5.1 advises at three checkpoints and
+effort. The adversarial audit starts on Haiku and steps up on a retry or a contract or
+boundary change. Fable 5.1 advises at three checkpoints and
 never writes code. You are the owner above the main session. The levels, what passes between
 them, and which agent owns each job are defined once, in the Agent tree of
 [`skills/vistack/SKILL.md`](skills/vistack/SKILL.md).
@@ -663,7 +670,7 @@ reads the whole session                 plans + decides + delegates
   ◇ before a plan ───────────────────▶        │
                                               ▼
                                  laya · fork layer
-                                 which playbook · which file · which tier · retry or stop
+                                 which playbook · which file · which tier · which model · retry or stop
                                  sharp → runs in code     split → Opus
                                               │
                           delegate · medium effort, complex code at xhigh

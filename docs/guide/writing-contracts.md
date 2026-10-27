@@ -28,6 +28,7 @@ home and check that the pointers still describe it.
 | Merge boundary, run report, script path resolution, Codex role adoption | `skills/vistack/SKILL.md` (Merge boundary, Final report, Host adapter) |
 | Hierarchy (owner → coordinator → workers), what crosses levels, job owners | `skills/vistack/SKILL.md` (Agent tree) |
 | Delegation (the main session runs no work an owning role owns), the tier rule, and QA lanes | `skills/coordinate/SKILL.md` (Dispatch rules, QA lanes) |
+| Which model and effort a dispatch runs on: when to call `model-selection` and what to pass | `skills/coordinate/SKILL.md` (Dispatch rules); the ladder, pinned roles, and bands in `laya/model_selection.py` |
 | Enhancing a request, brief, or dossier, and what the original is kept for | `skills/prompt-enhancer/SKILL.md` |
 | Reviewing another author's PR, its modes (post, pending, feedback), the COMMENT-only boundary, and the findings shape | `skills/review-pr/SKILL.md` (Permissions, Modes), `skills/review-pr/references/findings.md` |
 | The comment policy: what may be written, what is pruned, and where a deleted comment's meaning goes | `skills/pruning-comments/SKILL.md` (The policy) |

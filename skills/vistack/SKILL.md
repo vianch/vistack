@@ -105,7 +105,8 @@ An overnight handoff also records:
 
 ## Step 4. Choose the role contract
 
-Agent frontmatter sets each role's model and effort; never override either per run. The
+Agent frontmatter sets each role's default model and effort; `model-selection` moves one
+dispatch off it under the Dispatch rules of `skills/coordinate/SKILL.md`. The
 planner sets the code tier, or `tier-selection` (`skills/laya-decision/SKILL.md`) where none
 ran. Every brief is standalone and written by the brief rule in `skills/coordinate/SKILL.md`.
 
@@ -193,7 +194,7 @@ session. Workers are independent lanes with one job each, and they run in parall
 the roles are adopted in the thread, writers one after another (Host adapter), and the model
 column does not apply.
 
-| Layer | Role | Model · effort | Job |
+| Layer | Role | Default model · effort | Job |
 |---|---|---|---|
 | Owner | the human client | human | sets requirements, corrects, answers fences, merges |
 | Coordinator (main session) | router and `coordinator` | Opus 5.5 · xhigh | hears every owner requirement, plans, decides, delegates, reviews worker output, verifies evidence; writes only the state file, the ledger, and the session record |
@@ -231,7 +232,7 @@ What crosses levels:
 ## Fork layer
 
 Laya is the fork layer. It takes the choices that need no thinker, such as which playbook,
-file, tool, or tier, and whether to dispatch or retry. When to call it, its boundaries, its
+file, tool, tier, or model, and whether to dispatch or retry. When to call it, its boundaries, its
 off switches, and its commands are in `skills/laya-decision/SKILL.md`.
 
 ## Reuse existing skills

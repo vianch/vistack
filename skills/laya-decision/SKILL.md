@@ -7,9 +7,9 @@ description: "Use the optional local Laya decision engine for typed advisory rec
 
 Laya is the fork layer. It takes the choices that need no thinker, so the main session spends
 reasoning where it changes the outcome: which playbook, which file goes to which slice, which
-file or tool the next step uses, which tier, dispatch or hold, and retry or stop. A sharp
-fork, a valid action at or above the confidence threshold that every safety gate accepts, is
-applied in code without a model turn. A split fork returns to the main session, which decides
+file or tool the next step uses, which tier, which model and effort a dispatch runs on,
+dispatch or hold, and retry or stop. A sharp fork, a valid action at or above the confidence
+threshold that every safety gate accepts, is applied in code without a model turn. A split fork returns to the main session, which decides
 and records why. Forks never reach the advisor (`skills/advisor/SKILL.md`). Move a fork from
 split to sharp only through the held-out hillclimb in `docs/guide/decision-engine.md`.
 
@@ -29,6 +29,7 @@ Call the hook at these boundaries.
 | route match | `playbook-selection` | the route table in `skills/vistack/SKILL.md` and the matched playbook |
 | slice planning | `decomposition`, `tier-selection` | file ownership, conflict matrix, the 500-line limit, and the planner's tier rule |
 | pre-dispatch and monitoring | `dispatch-readiness`, `runtime-progress` | coordinator state, dependencies, monitor, and ledger |
+| each dispatch | `model-selection` | the agent file's default model and effort, and the Dispatch rules in `skills/coordinate/SKILL.md` |
 | QA | `verification` | captured artifacts tied to each acceptance criterion |
 | a step inside a slice | `tool-selection`, `file-selection` | the slice's writable files and the fences |
 | retrospective review | `skill-improvement` | explicit human review; no automatic skill edits |

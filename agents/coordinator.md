@@ -31,8 +31,8 @@ to one, by the Dispatch rules in `skills/coordinate/SKILL.md`.
 
 ## Optional decision hook
 
-At pre-dispatch and monitor boundaries, call `dispatch-readiness` or `runtime-progress` by
-default with the resolved state, brief, dependencies, and evidence. Validate the typed result
+At pre-dispatch and monitor boundaries, call `dispatch-readiness`, `model-selection`, or
+`runtime-progress` by default with the resolved state, brief, dependencies, and evidence. Validate the typed result
 against the state machine and conflict matrix before acting. Keep the decision id in the ledger
 evidence field when the consuming project has enabled history. An unavailable or rejected
 local runtime never blocks the existing deterministic coordinator path.

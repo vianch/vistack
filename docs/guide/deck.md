@@ -132,7 +132,7 @@ also appear as rows in the `/config` menu.
 | Option | Default | Meaning |
 |---|---|---|
 | `realm` | empty | The host and owner whose repositories the deck may run `gh` and lazygit against, for example `github.com/your-org`. Empty means neither runs. A repository whose `origin` is outside the realm shows why it was skipped |
-| `jevMode` | `suggest` | `off`: no suggestion. `suggest`: show and record the fork layer's model pick. `apply`: also set that model on built-in subagent types (`general-purpose`, `Explore`, `Plan`) that named no model. viStack's own agents keep the model their agent file names |
+| `jevMode` | `suggest` | `off`: no suggestion. `suggest`: show and record the fork layer's model pick. `apply`: also set that model on built-in subagent types (`general-purpose`, `Explore`, `Plan`) that named no model. The deck never changes viStack's own agents; the coordinator picks their model with `model-selection` |
 | `autoOpen` | `true` | Dock the deck when a session starts and the terminal is wide enough |
 | `lazygitLauncher` | `auto` | Where lazygit opens: `tmux` (a split), `ghostty`, `iterm`, or `terminal` (a new window). `auto` picks tmux when inside tmux, otherwise the terminal app you run |
 | `vistackRoot` | empty | The folder that holds `scripts/vistack-decision.py`. Empty looks beside the deck and then in the installed marketplace copy |
@@ -144,7 +144,7 @@ question (`scripts/vistack-decision.py`, `--backend auto`). Deterministic policy
 The tiers you turned on with `/vistack:decisions-on` answer only the split forks, Jev first.
 A `mechanical` tier maps to the model in `agents/implementer.md`, and a `complex` tier maps
 to the model in `agents/senior-implementer.md`. The suggestion and viStack's own dispatch
-therefore agree.
+therefore agree on the default, which the coordinator's `model-selection` may move.
 
 The Cost tab records each suggestion as a chain: the recommended model, the model that
 answered, the result, and the cost. When the consuming repository has `.claude/vistack/`,

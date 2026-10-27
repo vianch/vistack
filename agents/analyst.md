@@ -53,8 +53,8 @@ Tier flags       changes_data_shape, changes_public_contract, crosses_boundary: 
 Project shape    package.json, lockfile, TS/JS config, source extensions, each <file:line>; React frontend: yes|no
 ```
 
-The tier flags feed `tier-selection` when no planner runs (`skills/coordinate/SKILL.md`,
-Dispatch rules).
+The tier flags feed `tier-selection` when no planner runs, and `model-selection` at every
+dispatch (`skills/coordinate/SKILL.md`, Dispatch rules).
 
 ## Exit criteria
 

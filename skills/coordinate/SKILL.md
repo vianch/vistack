@@ -112,6 +112,17 @@ a ledger row did not happen.
   analyst's tier flags, or the blast radius the playbook recorded. An unclear tier is
   complex. A `tier-mismatch` report re-dispatches the same slice, worktree, and branch to
   `senior-implementer`; record `tier-escalated`.
+- Agent frontmatter holds each role's default model and effort. Before each dispatch, call
+  `model-selection` (`skills/laya-decision/SKILL.md`) with the role, the original request and
+  brief, `estimated_changed_lines`, the writable files, the acceptance criteria, the named
+  pattern, the tier flags, and the slice's `retries`. When `outputs.changed` is true, pass
+  `outputs.dispatch_model` and `outputs.dispatch_effort` as the Agent tool's `model` and
+  `effort`; otherwise pass neither, so the frontmatter applies. Decide a split answer yourself, and keep the default when
+  unsure, because a wrong step-down costs a retry that outspends the saving. A re-dispatch
+  after a stall or a failure raises `retries` first, so each retry climbs one rung. Write the
+  model that ran to the slice's `model`, and name the model, effort, and decision id in the
+  `dispatched` row's `reason`. With the hook off or unavailable, the frontmatter applies. On
+  Codex the thread runs one model, so skip the fork.
 - Run the advisor `plan` checkpoint before the first wave and the `done` checkpoint before
   reporting merge-ready (`skills/advisor/SKILL.md`). Record `advisor-consulted` or
   `advisor-unavailable`.

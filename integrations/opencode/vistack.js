@@ -11,6 +11,7 @@ const DECISION_TYPES = [
   "playbook-selection",
   "decomposition",
   "tier-selection",
+  "model-selection",
   "dispatch-readiness",
   "runtime-progress",
   "verification",

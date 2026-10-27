@@ -162,6 +162,10 @@ def questions_for(context: DecisionContext) -> dict[str, dict[str, Any]]:
             ),
             "contract_change": _noul("Does the slice change a data shape or a public contract?"),
         }
+    if decision_type == "model-selection":
+        from .model_selection import question
+
+        return {"rung": question(context)}
     if decision_type == "dispatch-readiness":
         return {
             "readiness": _choice(

@@ -345,7 +345,7 @@ python3 scripts/vistack-decision.py decision grooming \
 The supported decision types are:
 
 `intake-analysis`, `grooming`, `playbook-selection`, `decomposition`, `tier-selection`,
-`dispatch-readiness`, `runtime-progress`, `verification`, `skill-improvement`,
+`model-selection`, `dispatch-readiness`, `runtime-progress`, `verification`, `skill-improvement`,
 `tool-selection`, and `file-selection`. The last two choose among options the caller lists
 in `available_actions`, described by `task.tools` or `task.file_summaries`.
 
@@ -419,6 +419,7 @@ may not change a `state` or `handoff` route or invent an unattended one.
 | `grooming` | `task.open_questions`, `task.estimated_changed_lines` | Open questions return `needs-decision`; an estimate above 500 returns `split`. |
 | `decomposition` | `task.slices[].files`, `task.slices[].depends_on`, `task.dependencies` | Overlapping slice files or a dependency return `sequence`; `outputs.shared_files` names the overlap. Textual estimates such as `"about 300"` are parsed. |
 | `tier-selection` | `task.pattern`, `task.changes_data_shape`, `task.changes_public_contract`, `task.crosses_boundary`, `current_state.tier_mismatch` | A reported mismatch, a flag, or complex-work terms in the request return `complex` with `outputs.role` `senior-implementer`. Mechanical terms or a named pattern return `mechanical` with `implementer`. Neither returns `complex` below the refinement threshold, a split fork a model may settle either way; a model never lowers evidenced complex work. |
+| `model-selection` | `task.role`, `task.estimated_changed_lines`, `task.writable_files`, `task.acceptance_criteria`, `task.pattern`, the three tier flags, `current_state.retries`, `constraints.host`; `task.model` and `task.effort` for a role with no agent file | Retries or a tier flag return `step-up`; a large job (over 300 lines, 10 files, or 8 acceptance criteria) with no cheaper signal returns `step-up`; size, pattern, and mechanical work together return `step-down`; anything weaker is split. `outputs.dispatch_model` and `outputs.dispatch_effort` are absolute, and `outputs.changed` says whether they differ from the frontmatter. Model selection, below, has the ladder and gates. |
 | `tool-selection`, `file-selection` | `available_actions` (required), `task.tools` or `task.file_summaries`, `current_state.failed_tools` or `failed_files` | One option, or a request that names exactly one option (a file by path or basename), is sharp. Anything else is split with the first unfailed option as a placeholder. An option whose name or description is irreversible (merge, production deploy, data deletion) is never chosen in code or by a model. Choices are capped at 10 options. |
 | `runtime-progress` | `current_state.attempts`, `identical_results`, `unblock_exhausted`, `next_action`, `credentials_missing`, `credentials_expired`, `contract_ambiguity` | Each fence returns `escalate` with `outputs.fence` set to 1-4. Twenty attempts or three identical results is FENCE 1; an irreversible `next_action` such as a merge is FENCE 3. |
 | `verification` | `evidence[].criterion`, `evidence[].status` | `criterion` (1-based index or exact criterion text) covers that criterion only. `status` `fail` or a summary such as `3 tests failed` returns `request-evidence`; `status` `unavailable` returns `block`. Duplicate refs count once. `outputs.uncovered_criteria` lists the gaps. |
@@ -432,6 +433,34 @@ coverage moved from 0.875 to 0.907. Only a request for a page routes there: buil
 or board inside the product stays on its own route. "The overnight run" after of, about, or
 from is a reference to a run, not an overnight handoff.
 
+### Model selection
+
+Each agent file's `model` and `effort` are the role's default; `laya/model_selection.py` reads
+them from the plugin's own `agents/`, never the working directory. A dispatch moves along a
+closed ladder, least capable first: haiku·medium, sonnet·medium, sonnet·high, opus·medium,
+opus·high, opus·xhigh. A frontmatter with no effort sits on its model's first rung. Fable is
+the advisor's and is off the ladder.
+
+| Role | Moves |
+|---|---|
+| `advisor`, `coordinator`, `design-runner`, `reviewer`, `senior-implementer` | never; the model is part of the contract, the runners and reviewers are compared on one model, and the complex tier is the top rung |
+| `implementer`, `design-implementer` | effort only, within their own model: complex work changes owner through `tier-selection` and `tier-mismatch` |
+| every other role, and a host type that names its own default | the whole ladder |
+
+A step-up climbs `max(1, retries)` rungs, so each retry of a slice moves it one rung higher
+without a new state-file field. On Codex the fork returns `keep`, because the thread runs one
+model.
+
+A wrong step-down costs a retry that outspends the saving, so the gates are asymmetric: only
+retries and tier flags step up in code at high confidence, a step-down in code needs size,
+pattern, and mechanical work together, and a model's step-down is rejected against any up
+signal or below 0.85 confidence. A model may always keep the default or step up.
+
+Measured 2026-10-27 on the 12 labelled `model-selection` scenarios: the deterministic policy
+made 9 sharp, all right, and left 3 split. Hosted Jev settled none of the 3: its two
+low-confidence answers stayed below the threshold, and it stepped a documentation lookup down
+at 0.72 and 0.76 across two runs, which the 0.85 floor sends back to the main session.
+
 ## Integration points
 
 Use the hook only when a choice affects the workflow path.
@@ -442,6 +471,7 @@ Use the hook only when a choice affects the workflow path.
 | router | playbook selection | the route table in `skills/vistack/SKILL.md` |
 | planner | decomposition | 500-line limit, file ownership, conflict matrix |
 | planner | tier selection | the tier rule in `agents/planner.md` |
+| coordinator | model selection | the agent file's default model and effort, and the Dispatch rules in `skills/coordinate/SKILL.md` |
 | coordinator | dispatch readiness, runtime progress | state transitions, dependencies, monitor and ledger rules |
 | QA verifier | verification | captured artifacts tied to acceptance criteria |
 | implementer, unblocker | tool selection, file selection | the slice's writable files and the fence rules |
@@ -460,6 +490,7 @@ changes the outcome.
 | which playbook | `playbook-selection` |
 | which file goes to which slice; serialize or parallelize | `decomposition` |
 | which tier: mechanical or complex | `tier-selection` |
+| which model and effort a dispatch runs on | `model-selection` |
 | dispatch or hold | `dispatch-readiness` |
 | retry, rescope, or stop | `runtime-progress` |
 | accept or ask for more evidence | `verification` |

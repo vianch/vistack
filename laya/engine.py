@@ -20,6 +20,7 @@ from typing import Any, Mapping
 
 from .errors import ContextOverflow, InferenceTimeout, LayaUnavailable
 from .history import HistoryStore
+from .model_selection import gate as model_gate, resolved as model_outputs
 from .policy import PolicyDraft, evaluate, irreversible, option_descriptions, verification_sufficient
 from .questions import MAX_STATE_CHARS, questions_for, state_for_laya
 from .schema import (
@@ -477,6 +478,14 @@ class DecisionEngine:
             )
             confidence_parts = [_confidence(answer)]
             probabilities = _probabilities(answer)
+        elif decision_type == "model-selection":
+            answer = _answer(result, "rung")
+            selected = _choice(answer)
+            if selected not in ACTIONS_BY_TYPE[decision_type]:
+                return None, "invalid typed model-selection answer"
+            outputs.update(model_outputs(baseline.outputs, selected))
+            confidence_parts = [_confidence(answer)]
+            probabilities = _probabilities(answer)
         elif decision_type == "dispatch-readiness":
             answer = _answer(result, "readiness")
             selected = _choice(answer)
@@ -588,6 +597,10 @@ class DecisionEngine:
         if context.decision_type == "tier-selection" and model_draft.action == "mechanical" and baseline.action == "complex":
             if baseline.outputs.get("tier_mismatch") or baseline.outputs.get("flags") or baseline.outputs.get("complex_signals"):
                 return False, "deterministic tier gate kept evidenced complex work on the complex tier"
+        if context.decision_type == "model-selection":
+            rejected = model_gate(baseline, model_draft)
+            if rejected:
+                return False, rejected
         if context.decision_type == "skill-improvement" and model_draft.action == "propose-change" and baseline.action != "propose-change":
             return False, "deterministic history gate requires repeated evidence before proposing a change"
         if context.decision_type in OPEN_ACTION_TYPES:

@@ -19,7 +19,7 @@ structure only, never what is asked.
 | `skills/advisor/SKILL.md`, before a checkpoint | the checkpoint question, or the fallback dossier | the consultation |
 | `skills/review-pr/SKILL.md` | the operator's review request | its own brief |
 
-Step 2 matching and every Laya fork (`playbook-selection`, `tier-selection`) read the
+Step 2 matching and every Laya fork (`playbook-selection`, `tier-selection`, `model-selection`) read the
 **original** request. Laya's deterministic policy matches request wording, and its labelled
 scenarios are raw requests, so reworded text would flip forks that were measured on the
 original. A brief's static role header is never rewritten: it is the cached prefix

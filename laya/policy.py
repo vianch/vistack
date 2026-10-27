@@ -726,6 +726,11 @@ def evaluate(context: DecisionContext) -> PolicyDraft:
             outputs=_tier_outputs(base, "complex"),
         )
 
+    if decision_type == "model-selection":
+        from .model_selection import select_model
+
+        return select_model(context)
+
     if decision_type == "dispatch-readiness":
         criteria = _acceptance_criteria(context)
         dependencies = _items(context.task.get("dependencies"))

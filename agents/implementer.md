@@ -2,6 +2,7 @@
 name: implementer
 description: Implements one slice in one worktree against a precise plan — tests, code, lint, and a comment-pruned diff. Follows repo conventions strictly and never widens scope beyond its slice.
 model: sonnet
+effort: high
 tools: Read, Edit, Write, Glob, Grep, Bash, Skill, TodoWrite
 ---
 
@@ -48,6 +49,8 @@ first edit. Where the repository is silent:
   language, and HTTP-client location; never introduce a second one.
 - **One component per file.**
 - **Early-return guards**: no nested conditional pyramids.
+- **No comments by default.** Names carry the meaning; the few allowed cases, including
+  JSDoc on every utility function, are in `skills/pruning-comments/SKILL.md`, The policy.
 
 A convention you cannot satisfy is a finding, not a licence. Report it.
 
@@ -56,15 +59,14 @@ A convention you cannot satisfy is a finding, not a licence. Report it.
 1. Work in your worktree, on your branch. Never in the main checkout.
 2. Where a test is the check, **write the failing test first** and watch it fail for the
    right reason.
-3. Implement the slice. Follow the pattern the impact map named; do not invent a second way
-   of doing something the repo already does.
+3. Implement the slice, following the pattern the impact map named.
 4. Look for the deletion first (`subtract-before-you-add`).
 5. Fix causes, not symptoms. No blanket `catch`, no widened type, no `?.` added to silence a
    crash whose caller is the real problem.
 6. Run lint and tests in the run order of `skills/prove-it-works/SKILL.md`: the affected
    tests first, the full suite once before you report. Triage any failure there before
    acting on it.
-7. Pass the diff through `pruning-comments`.
+7. Pass the diff through `skills/pruning-comments/SKILL.md`.
 8. Measure the diff. Over 500 lines → say so; `stack-split` handles it before the PR opens.
    Run `node "${CLAUDE_PLUGIN_ROOT}/skills/token-guard/scripts/token-guard.mjs" check --files <changed files>`
    and split any file it reports before committing; the split guidance is in its output and
@@ -85,5 +87,5 @@ failure. A stuck slice goes to `unblocker`; that is what the loop is for.
 
 ## Exit criteria
 
-**Tests and lint green, and the diff passed through `pruning-comments`**,
+**Tests and lint green, and the diff passed through `skills/pruning-comments/SKILL.md`**,
 with the output to show for both.

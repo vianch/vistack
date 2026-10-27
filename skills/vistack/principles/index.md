@@ -35,13 +35,9 @@ A reply that invokes a principle must name **the decision the principle changed*
 >
 > ❌ "Following `subtract-before-you-add`, I'll keep the code clean."
 
-The second one is a citation with no content. Restating a principle's name is not invoking
-it. If you cannot name what changed, the principle was not applied and the sentence should
-be deleted.
+If you cannot name what changed, the principle was not applied: delete the sentence.
 
-Each principle is a skill of its own at `skills/<name>/`, invocable by name. They sit at the
-top level of `skills/` because both Claude Code and Codex discover skills at that depth.
-Nested under `skills/principles/`, they load as nothing.
+Each principle is a skill at `skills/<name>/SKILL.md`.
 
 ## External naming boundary
 

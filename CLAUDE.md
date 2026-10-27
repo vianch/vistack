@@ -101,7 +101,7 @@ A change to an invariant is made in its home, then the pointers are checked.
 | Host state roots, Codex lanes | router, Host adapter |
 | Run report, long or unattended runs | router, Final report |
 | Repo-agnostic; per-repo inputs: base branch, reviewer team, verification target | this file |
-| Reuse `work-ticket`, `create-pr`, `stacking-prs`, `requesting-reviewers`, `address-ai-reviews`, `qa-verification`, `pruning-comments`, `cleanup-worktrees` | this file (the names); router, Reuse existing skills (the rule) |
+| Reuse `work-ticket`, `create-pr`, `stacking-prs`, `requesting-reviewers`, `address-ai-reviews`, `qa-verification`, `cleanup-worktrees`; comment pruning is viStack's own (`skills/pruning-comments/SKILL.md`) | this file (the names); router, Reuse existing skills (the rule) |
 
 Naming a principle means naming **the decision it changed**; a bare citation is deleted.
 

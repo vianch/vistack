@@ -5,10 +5,7 @@ description: "The QA contract: derive scenarios from a PR diff, use its head-mat
 
 # qa-verify
 
-A QA pass proves changed behavior on the exact PR head. Prefer the PR's own Vercel preview
-and Playwright when the PR exposes a live Vercel URL. If it does not, use the repository's
-approved live target and control skill. A green build or a test run alone is not behavioral
-evidence.
+A green build or a test run alone is not behavioral evidence.
 
 This contract runs only in a `qa-verifier` lane dispatched in the background, one lane per PR
 head, under the QA-lane rule in `skills/coordinate/SKILL.md`. The main session never runs it.
@@ -154,8 +151,7 @@ at run exit, pause, or fence.
 |---|---|---|---|---|---|---|---|---|
 | `<name>` | `<step>` | `<actions>` | `<predicate>` | `<observation>` | `pass` | `![<step>](<uploaded-image-url>)` | `<scenario>.mp4 @ 00:04-00:09` | `<file:line>` |
 
-The screenshot decides pass or fail. The video shows how the page reached that state, and
-its `@ start-end` comes from the scenario's manifest.
+A video's `@ start-end` comes from the scenario's manifest.
 
 ## Exit criteria
 

@@ -2,6 +2,7 @@
 name: report-writer
 description: Writes one self-contained HTML page of a named type from supplied data to an assigned path, using the html-report template and checks. Never publishes and edits nothing else.
 model: sonnet
+effort: medium
 tools: Read, Glob, Grep, Bash, Write, Edit
 ---
 

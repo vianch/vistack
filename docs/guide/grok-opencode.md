@@ -36,6 +36,19 @@ data. Review the pinned source and the local Python/OpenCode bridges before trus
 
 ## OpenCode
 
+OpenCode reads skills from `~/.config/opencode/skills/<name>/SKILL.md` and a project's
+`.opencode/skills/`, not from a plugin. Link the viStack skills you want there, so they stay
+in step with the checkout and their `scripts/` folders resolve beside them:
+
+```bash
+for skill in understanding handoff pruning-comments review-pr; do
+  ln -sfn /path/to/vistack/skills/$skill ~/.config/opencode/skills/$skill
+done
+```
+
+A skill that names `${CLAUDE_PLUGIN_ROOT}` means the viStack checkout on OpenCode. A copied
+skill folder, rather than a link, goes stale on the next viStack update.
+
 OpenCode loads `.opencode/plugins/*.js|ts` from a project or global config directory, or
 loads an npm package named in `opencode.json`. The native bridge is at
 `integrations/opencode/vistack.js`; installation instructions are in

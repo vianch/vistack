@@ -22,27 +22,11 @@ language and framework rules.
 
 ## Comments
 
-Do not write comments by default. Prefer a rename or named intermediate over explanatory
-comments, section banners, step narration, restated signatures, TODO/FIXME/NOTE/HACK,
-commented-out code, or process prose that belongs in the PR description.
-
-The only allowed comments are:
-
-1. Import grouping or ordering labels.
-2. An error inside `try`/`catch` when an external contract, provider bug, or retry semantic
-   explains why it is caught, rethrown, or swallowed.
-3. External API response models whose undocumented shape, inconsistent nullability, or
-   legacy alias cannot be expressed in the type.
-4. Every function in `*.utils.ts`, `*.util.ts`, their JavaScript equivalents, or a `utils/`
-   folder: one concise JSDoc sentence, one line per parameter, and one return line. Do not
-   add examples, remarks, authors, or types duplicated by TypeScript.
-5. Hidden invariants, non-obvious gotchas, and business rules: a fact about the world or
-   contract that the code silently depends on and cannot be named in the code. A fact about
-   implementation history belongs in the PR description, not a comment.
-
-`pruning-comments` is the review-time pass, but this contract is stricter for frontend
-TypeScript and JavaScript: comments outside these five cases are removed, while utility
-function docblocks remain.
+Do not write comments by default. The allowed cases (import grouping labels, the reason a
+`catch` handles an external failure, external API response models, JSDoc on every utility
+function, and hidden invariants or business rules no name can carry) are listed with their
+exact shape in `skills/pruning-comments/SKILL.md`, The policy, which is the rule's home.
+Comments outside those cases are removed; utility-function docblocks remain.
 
 ## Names and conditionals
 

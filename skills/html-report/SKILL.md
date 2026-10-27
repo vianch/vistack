@@ -5,18 +5,14 @@ description: "Make an HTML file, a Claude artifact, a report, status page, chart
 
 # html-report
 
-One page, one job, one reader. The page turns evidence the run already holds into something
-a person scans once and acts on.
-
 ## When to use it
 
 Use a page when the answer has structure a reader scans (a board, a timeline, a diff, a
 chart, a set of toggles) or runs past about 30 lines. A Markdown report over about 100 lines
 goes unread. An answer under about 30 lines with no structure stays in the chat as Markdown.
 
-A run with more than one slice, and every unattended run, gets a run report. Render it before
-the advisor `done` checkpoint (`skills/advisor/SKILL.md`) so the advisor reviews it, and
-render it again at exit so the file shows the final state.
+When a run report is due and when it is refreshed: the router's Final report and
+coordinate's Exit.
 
 ## One page, one job, one reader
 
@@ -82,11 +78,9 @@ the ledger. The main session, which is the coordinator in a coordinated run, rec
 rows: `report-rendered` with the file path as evidence, and `report-published` with the
 artifact URL as evidence (`docs/guide/ledger-format.md`).
 
-The script path resolves from the plugin root; run it from the consuming repository, so
-relative `--state`, `--ledger`, and `--out` paths stay in the project. On Claude Code that is
-`node "${CLAUDE_PLUGIN_ROOT}/skills/html-report/scripts/run-report.mjs" ...`; on Codex, put
-the installed plugin path in place of `${CLAUDE_PLUGIN_ROOT}`. The script needs Node 18 or
-later and nothing else.
+Run the script from the consuming repository so relative `--state`, `--ledger`, and `--out`
+paths stay in the project; its path resolves from the plugin root (router, Host adapter). It
+needs Node 18 or later.
 
 ## Naming boundary
 
@@ -137,7 +131,3 @@ them.
 - ASCII diagrams and unicode color squares read as noise. Draw SVG, use the status pills.
 - The example pages this structure came from use a cream, clay, and serif palette. It is
   another product's look and reads as generic AI design. Do not reuse it.
-
-Structure and components adapted from the Apache-2.0 example pages accompanying Thariq
-Shihipar's post "Using Claude Code: The unreasonable effectiveness of HTML"; no markup copied
-verbatim.

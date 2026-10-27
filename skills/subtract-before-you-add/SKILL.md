@@ -25,8 +25,8 @@ deletion and removes a slice from the plan. It changes a diff from "add wrapper,
 component, mark deprecated" into "swap call sites, delete old component" — smaller, and it
 leaves nothing for the next person to have to decide about.
 
-It changes what `pruning-comments` is for: the comment pass is a subtraction pass, and it
-runs on every diff before the PR opens.
+It changes what the comment pass (`skills/pruning-comments/SKILL.md`) is for: it is a
+subtraction pass, and it runs on every diff before the PR opens.
 
 ## The failure it prevents
 

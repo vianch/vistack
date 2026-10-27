@@ -112,6 +112,3 @@ or the playbook ask for; neither replaces the other.
 | Invoke | `/vistack:architect`, `/vistack:interrogate` | `$vistack:architect`, `$vistack:interrogate` | ask for the skill by name |
 | Runners and reviewers | `design-runner` and `reviewer` agents on opus, dispatched in parallel | separate `codex exec --ephemeral -m gpt-6-luna` processes; reviewers in a read-only sandbox | the current model, one at a time in the thread |
 | Independence | fresh context per agent | fresh process per runner or reviewer | reduced — recorded in the ledger |
-
-Credit: the design ladder, the red flags, and the review framework are adapted from the
-pstack plugin's design guide and its `architect` and `interrogate` skills.

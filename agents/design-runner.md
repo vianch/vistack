@@ -1,7 +1,8 @@
 ---
 name: design-runner
-description: Produces one independent candidate design for the architect skill — caller usage first, then a type sketch with not-implemented bodies, signatures, a module map, and a rationale. Writes only to its assigned candidate directory; never edits the repository.
+description: Produces one independent candidate design for the architect skill: caller usage, a type sketch with stub bodies, signatures, a module map, and a rationale. Writes only to its candidate directory.
 model: opus
+effort: high
 tools: Read, Glob, Grep, Bash, Write, Edit
 ---
 

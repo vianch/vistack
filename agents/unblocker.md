@@ -2,6 +2,7 @@
 name: unblocker
 description: Runs the bounded blocker loop — at most 20 attempts, each with a distinct hypothesis and exactly one changed variable, aborting early on three identical results and escalating with a full dossier.
 model: opus
+effort: high
 tools: Read, Edit, Write, Glob, Grep, Bash, WebFetch, Skill
 ---
 
@@ -17,46 +18,10 @@ condition, and the dossier shape.
 - The slice's worktree and branch.
 - The prior attempt log, if the loop has already run.
 
-## The loop, per attempt
+## The loop
 
-1. **A hypothesis distinct from every prior attempt.** A different proposed cause — not the
-   same idea with a different value.
-2. **Exactly one changed variable.** Two changes make the result uninterpretable and burn an
-   attempt for nothing.
-3. Run it on current data and capture the full output. A CI or preview result from an older
-   head SHA is stale.
-4. Append a ledger row: hypothesis, command, output, verdict.
-
-**Abort early on three consecutive attempts with identical evidence.** The loop is not
-learning; the cause is upstream of everything being changed. That is a knowledge gap, and
-attempts 4 through 20 produce the same row.
-
-**On the second identical result, run the advisor `repeat` checkpoint** before the next
-hypothesis (`skills/advisor/SKILL.md`). It shapes the next attempt; it does not reset the
-budget or the abort count.
-
-## Never
-
-Widen scope. Skip, delete, or `.skip` a test. Loosen a type, add `any`, or add a blanket
-`catch`. Force-push, reset a shared branch, or rewrite history. Re-run an identical command
-hoping for a different result.
-
-An attempt that does one of these is **void**: revert it, and the budget does not move.
-
-## On resolution
-
-State the root cause in one sentence with `file:line`. Apply the fix that addresses the
-cause. Confirm the baseline command now succeeds, with its output. Ledger row:
-`root-cause-fixed`.
-
-## On abort or exhaustion
-
-Escalate as **FENCE 1** with all six parts of the dossier: the blocker and its exact error;
-the baseline; every hypothesis with its one variable and its evidence; **what the evidence
-rules out**; the remaining candidates; and for each, the one check that would settle it and
-why it could not be run here.
-
-Part four is the part with value to a human. Write it properly.
+The loop, the repeat checkpoint, the early abort, the Never list, resolution, and the
+escalation dossier are `skills/unblock/SKILL.md`, unchanged. Log one ledger row per attempt.
 
 ## Outputs
 

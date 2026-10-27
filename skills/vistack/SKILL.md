@@ -8,8 +8,7 @@ description: "Standing entry point for engineering work. Canonical name: vistack
 The router chooses the contract. The playbook owns the steps. The coordinator owns state,
 dispatch, and evidence. The owning role does the work.
 
-`vistack` is the identifier. `viStack` is the name used in prose. Every path in this plugin
-is relative to its root. External text follows the External naming boundary in
+Every path in this plugin is relative to its root. External text follows the External naming boundary in
 `skills/vistack/principles/index.md`.
 
 ## Step 0. Sticky mode
@@ -20,7 +19,9 @@ Once this skill starts, every later turn stays inside the open playbook.
 |---|---|
 | `babysit <slug>` or a monitor wake | Run one babysit pass, then return to the open playbook. Do not re-match. |
 | A request for a report, chart, diagram, flow, architecture view, or other page about the open run | Run `skills/html-report/SKILL.md` against the run's state and ledger, then return to the open playbook. Do not re-match. |
-| A request to review someone else's PR by URL | Run `skills/review-pr/SKILL.md`, then return to the open playbook, or to idle when none is open. Do not re-match. |
+| A request to review, comment on, or give feedback on someone else's PR by URL | Run `skills/review-pr/SKILL.md`, then return to the open playbook, or to idle when none is open. Do not re-match. |
+| A how, why, teach, or recall question that needs only an answer in the thread | Run `skills/understanding/SKILL.md`, then return to the open playbook, or to idle when none is open. Do not re-match. |
+| A request for a handoff, or to pick one up | Run `skills/handoff/SKILL.md`, then return to the open playbook, or to idle when none is open. Do not re-match. |
 | `/vistack:review-watch` with `on`, `off`, `status`, or `pass`, or its loop firing | Run `skills/review-watch/SKILL.md` with that argument, then return to the open playbook, or to idle when none is open. Do not re-match. |
 | The operator corrects how an agent works, not what the work is | Route the fix to the role that owns the mistaken work, add a `correction-recorded` ledger row, and propose `/vistack:correct` for that class in the next phase report. Do not re-match. |
 | Any other mid-run input | Continue the next unchecked playbook step. |
@@ -81,9 +82,10 @@ Ties break toward the most specific route. A groomed ticket with no other signal
 `autopilot-stack`. A large run the user will review later is `overnight` when the request
 includes a sleep or step-away handoff. A program that needs a standing coordinator across
 many days is `multi-phase-plan`; it must still state its size and finish predicate. An
-explicit request for an HTML page, chart, diagram, or artifact matches `html-report`; a
-request to understand or explain how something works matches `investigation`, whose report
-step renders through `html-report`.
+explicit request for an HTML page, chart, diagram, or artifact matches `html-report`. A
+request to understand or explain something that needs a recommendation, several angles, or a
+report matches `investigation`, whose report step renders through `html-report`; one that
+needs only an answer in the thread runs `skills/understanding/SKILL.md` from Step 0.
 
 ## Step 3. State the finish condition
 
@@ -198,13 +200,13 @@ column does not apply.
 | Fork layer | `laya-decision` | code | sharp forks run in code; split forks return to the main session |
 | Explorer | `analyst` | opus · medium | reads the code |
 | Researcher | `researcher` | opus · medium | pulls the docs |
-| Worker, mechanical | `implementer`, `design-implementer` | sonnet | repetitive edits, basic utils, unit tests |
+| Worker, mechanical | `implementer`, `design-implementer` | sonnet · high | repetitive edits, basic utils, unit tests |
 | Worker, complex | `senior-implementer` | opus · xhigh | data shapes, contracts, boundaries, hot paths |
 | DevOps | `devops` | opus · medium | CI failures a slice did not cause, pipelines, environments, dependency and health audits |
-| Judgment roles | `groomer`, `planner`, `pr-author`, `unblocker` | opus · session effort | tickets, slices, PRs, blockers |
-| Verification | `qa-verifier`, `health-check` | sonnet, haiku | QA evidence, adversarial audit |
-| Reporting | `report-writer` | sonnet | renders one HTML page from state, ledger, diff, or a code map; never publishes |
-| Design and review | `design-runner`, `reviewer`, `pr-reviewer`, `mention-responder` | the host model: opus, or Luna on Codex | `architect` candidates, `interrogate` findings, `review-pr` findings, `review-watch` replies |
+| Judgment roles | `groomer`, `planner`, `pr-author`, `unblocker` | opus · high; `pr-author` medium | tickets, slices, PRs, blockers |
+| Verification | `qa-verifier`, `health-check` | sonnet · medium, haiku | QA evidence, adversarial audit |
+| Reporting | `report-writer` | sonnet · medium | renders one HTML page from state, ledger, diff, or a code map; never publishes |
+| Design and review | `design-runner`, `reviewer`, `pr-reviewer`, `mention-responder` | opus · high, `mention-responder` medium; Luna on Codex | `architect` candidates, `interrogate` findings, `review-pr` findings, `review-watch` replies |
 | Advisor | advisor tool, else `advisor` | Fable 5.1 | before a plan, when an error repeats, before done |
 
 What crosses levels:
@@ -236,7 +238,9 @@ off switches, and its commands are in `skills/laya-decision/SKILL.md`.
 
 viStack supplies routing, coordination, run state, the conflict matrix, and the ledger.
 Invoke the project's existing skills for ticket work, PR creation, review assignment, QA,
-comment cleanup, and worktree cleanup instead of writing a second implementation.
+and worktree cleanup instead of writing a second implementation. Comment pruning is
+viStack's own, `skills/pruning-comments/SKILL.md`, bound by path because another plugin may
+ship a skill with the same name.
 
 ## Final report
 

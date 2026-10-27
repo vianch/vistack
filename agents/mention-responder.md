@@ -1,7 +1,8 @@
 ---
 name: mention-responder
-description: Drafts one reply to one comment that tags the operator or their team on someone else's pull request, for the review-watch skill, after reading the PR, the thread, and the code at the head SHA. Returns a reply, needs-you, or skip draft in the operator's voice for the pass to verify and post; read-only, never posts, approves, requests changes, or edits.
+description: Drafts one reply, for the review-watch skill, to a comment tagging the operator or their team on someone else's PR, after reading the thread and the code at the head SHA. Read-only; never posts, approves, or edits.
 model: opus
+effort: medium
 tools: Read, Glob, Grep, Bash
 ---
 

@@ -98,7 +98,30 @@ The diagram shows the common routes. The full route set includes intake, design
 implementation, blocker recovery, PR stacks, QA verification, session pickup, safe pause,
 babysitting, worktree cleanup, skill authoring, agent design, preference capture, mistake
 correction (`correct`), and `html-report`. A request to review someone else's PR by URL runs
-`review-pr`, which posts one comment-only review and never approves.
+`review-pr`, which posts one comment-only review, leaves it pending for you to submit, or
+returns the feedback without posting, and never approves.
+
+## Questions, handoffs, and comments
+
+These run on their own or mid-run, and return to the open playbook when one exists:
+
+```text
+/vistack:understanding how does checkout reserve seats?
+/vistack:understanding why does the refund window skip weekends?
+/vistack:understanding teach me how the event bus retries
+/vistack:understanding recall what did we decide about the cart cache?
+/vistack:handoff finish the review fixes on the cart branch
+/vistack:handoff pickup
+/vistack:pruning-comments
+```
+
+`understanding` answers in the thread from code, history, and past sessions
+(`skills/understanding/SKILL.md`); a question that needs a recommendation report is
+`investigation`. `handoff` writes or resumes a handoff document under
+`~/.claude/handoff-documents/` (`skills/handoff/SKILL.md`). `pruning-comments` removes the
+comments a diff added outside the allowed cases (`skills/pruning-comments/SKILL.md`). On
+Codex the same skills run as `$vistack:understanding`, `$vistack:handoff`, and
+`$vistack:pruning-comments`.
 
 ## Reports and pages
 
@@ -112,8 +135,8 @@ Ask for the page you want and viStack renders it:
 What comes back is one self-contained HTML page at `<state-root>/reports/`, plus a private
 Claude artifact link on Claude Code. A run with more than one slice, or any unattended run,
 ends with a run report the same way, so the first thing to open after an overnight run is a
-page, not the ledger. "Explain how X works" stays `investigation`; its answer may also render
-as a page. The contract is `skills/html-report/SKILL.md`.
+page, not the ledger. "Explain how X works" with a recommendation stays `investigation`; a
+plain question runs `understanding`. Either answer may also render as a page. The contract is `skills/html-report/SKILL.md`.
 
 ## The four fences
 

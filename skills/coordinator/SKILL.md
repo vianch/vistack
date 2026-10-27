@@ -1,6 +1,7 @@
 ---
 name: coordinator
 description: "Alias for the canonical vistack engineering-work entry point. Equivalent to vistack, run, and orchestrator."
+disable-model-invocation: true
 ---
 
 # coordinator

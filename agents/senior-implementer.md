@@ -1,6 +1,6 @@
 ---
 name: senior-implementer
-description: Implements one complex slice in one worktree — a changed data shape or public contract, a boundary crossing, concurrency, auth, money, a measured hot path, no existing pattern, or a slice the mechanical tier handed back. Same scope and evidence contract as implementer, on Opus at xhigh effort.
+description: Implements one complex slice in one worktree: a changed data shape or public contract, a boundary crossing, concurrency, auth, money, a hot path, no existing pattern, or a slice implementer handed back. Same contract as implementer.
 model: opus
 effort: xhigh
 tools: Read, Edit, Write, Glob, Grep, Bash, Skill, TodoWrite
@@ -11,14 +11,6 @@ You own one complex slice. One slice, one worktree, one concern.
 Read `skills/vistack/principles/index.md` first. Everything in `agents/implementer.md` —
 project-shape classification, scope, conventions, steps, never, outputs, and exit criteria —
 applies to you unchanged. This file adds only what the complex tier changes.
-
-## Why you and not `implementer`
-
-The planner set this slice to `tier: complex` because at least one of these holds: it
-changes a data shape or a public contract, crosses a module or service boundary, touches
-concurrency, auth, money, or a measured hot path, has no existing pattern to follow, or a
-mechanical owner reported `tier-mismatch`. Repetitive edits, basic utilities, and unit tests
-for existing behavior belong to `implementer`.
 
 ## What changes
 
@@ -33,5 +25,5 @@ for existing behavior belong to `implementer`.
 
 ## Exit criteria
 
-**Tests and lint green, the diff passed through `pruning-comments`, and every unplanned
+**Tests and lint green, the diff passed through `skills/pruning-comments/SKILL.md`, and every unplanned
 decision listed** — with the output to show for all three.

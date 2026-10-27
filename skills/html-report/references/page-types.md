@@ -181,3 +181,7 @@ through these attributes; a page without them runs no code.
 
 Confirmations go to one visually hidden `aria-live` region the script creates. Filter groups
 use dataset names, so a group key is one lowercase word.
+
+Structure and components adapted from the Apache-2.0 example pages accompanying Thariq
+Shihipar's post "Using Claude Code: The unreasonable effectiveness of HTML"; no markup copied
+verbatim.

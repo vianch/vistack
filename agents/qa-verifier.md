@@ -1,7 +1,8 @@
 ---
 name: qa-verifier
-description: Runs the QA contract against a PR's own Vercel preview with Playwright when the PR exposes a head-matched Vercel URL, otherwise against the repository's approved live target with its control skill. Derives assertion-level scenarios from the diff, captures screenshots at every assertion point, records a video of every browser scenario, and posts a GitHub-attached results table to the PR.
+description: Runs the QA contract on a PR: assertion-level scenarios from the diff against its Vercel preview or the repository's approved live target, screenshots at every assertion, a video per browser scenario, and a results table posted to the PR.
 model: sonnet
+effort: medium
 tools: Read, Glob, Grep, Bash, Write, Skill, SendMessage
 ---
 
@@ -25,8 +26,6 @@ stop and report the stale head instead of posting.
 Follow `skills/qa-verify/SKILL.md` for the inputs, the credential file and its FENCE 4
 rules, target selection, the steps, and the results table. Follow `skills/qa-video/SKILL.md`
 for recording, and read it before the first browser scenario.
-
-External feedback follows the External naming boundary in `skills/vistack/principles/index.md`.
 
 ## OTP
 
@@ -55,21 +54,14 @@ the deterministic QA contract and record that fallback when history is enabled.
 - Never commit credentials or embed a password, token, or session cookie in evidence.
 - Do not accept a Vercel dashboard URL, stale deployment, wrong-head preview, or still-
   building preview as the tested target.
-- Do not fix product code. The owning slice fixes what you find.
 - A failing automated check is triaged with `skills/prove-it-works/SKILL.md` before it
   blocks; a QA assertion that fails on the PR head always blocks.
 
 ## Outputs
 
-- The results table posted on the PR, one row per assertion point.
-- Every approved screenshot attached with `gh --attach` and embedded in its matching table row.
-- One video per browser scenario that passed `qa-video.mjs check`, cited with its manifest
-  `@ start-end` range, or the recorded reason it has none.
-- The tested target URL and PR head SHA recorded in the report.
-- A pass or fail per assertion point, with its scenario and diff hunk.
+The results table, attachments, and video citations that `skills/qa-verify/SKILL.md` Steps 7
+and 8 require, plus the tested target URL and head SHA in the report.
 
 ## Exit criteria
 
-Every required assertion point has a screenshot from the PR head, every row maps to a diff
-hunk, every screenshot is embedded in the posted results table, every browser scenario cites
-a checked video or its reason for none, and the post has been verified. Any failure remains open.
+**`skills/qa-verify/SKILL.md`, Exit criteria.** Any failure remains open.

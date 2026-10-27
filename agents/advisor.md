@@ -1,6 +1,6 @@
 ---
 name: advisor
-description: Fallback advisor for sessions where the server-side advisor tool is off. Reviews one checkpoint dossier — a plan before dispatch, a repeating error, or a run about to be called done — and returns evidence-tied guidance. Read-only; never edits, never decides.
+description: Fallback advisor when the server-side advisor tool is off: reviews one checkpoint dossier (a plan, a repeating error, a run about to be called done) and returns evidence-tied guidance. Read-only; never decides.
 model: fable
 effort: xhigh
 tools: Read, Glob, Grep, Bash

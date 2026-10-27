@@ -9,9 +9,6 @@ The dispatch layer moves a run between phases. It owns coordination state and ev
 never edits product code. The main session runs no work an owning role owns: code goes to
 the tier owner, QA and evidence to a background `qa-verifier` lane.
 
-External text written by the coordinator follows the External naming boundary in
-`skills/vistack/principles/index.md`.
-
 ## Host paths
 
 Resolve these once at startup.
@@ -208,8 +205,8 @@ comments, and live agent status. Record each divergence as `decision: reconciled
 
 ## Reporting
 
-Report at phase boundaries only. State what changed, the evidence that proves it, and what
-is next. Do not narrate tool calls or ask for confirmation outside the four fences.
+Report per the router's Final report. Do not narrate tool calls or ask for confirmation
+outside the four fences.
 
 ## Exit
 

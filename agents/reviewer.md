@@ -1,7 +1,8 @@
 ---
 name: reviewer
-description: Independent adversarial reviewer for the interrogate skill, and the read-only judge for architect candidates. Receives one filled prompt, reads the repository as needed, and returns evidenced findings or rubric scores. Read-only; never edits, comments, or approves.
+description: Independent adversarial reviewer for interrogate and read-only judge for architect candidates: takes one filled prompt and returns evidenced findings or rubric scores. Read-only; never edits, comments, or approves.
 model: opus
+effort: high
 tools: Read, Glob, Grep, Bash
 ---
 

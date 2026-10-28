@@ -208,6 +208,7 @@ test('with the realm saved in the deck, the board lists open PRs across the real
   await $.tool.call({ command: 'gh pr review 12 --repo acme/app --comment -b "looks good"', tool: 'Bash' } as never)
   await clock.advance(300)
   expect(searches()).toHaveLength(3)
+  await ui.press({ key: 'tab-agents' })
   expect(await ui.find({ text: /review posted/ })).toBeDefined()
   await ui.press({ key: 'tab-settings' })
   expect(await ui.find({ text: /github\.com\/acme \(deck\)/ })).toBeDefined()
@@ -322,7 +323,7 @@ const host = (on: On, children: Child[], exitCode: number | undefined) => {
 
 // Starts the session so the deck's timers run; resolves to the descriptions it registered. Keep-awake
 // is off unless `stored` says otherwise: a held child slows every step of the mocked clock.
-const startSession = async ($: Engine, on: On, { children = [], exitCode, stored = { deckKeepAwake: 'off' } }: Host = {}): Promise<string[]> => {
+const startSession = async ($: Engine, on: On, { children = [], exitCode, stored = { deckFolds: { 'loop-form': false, 'monitors-ended': false }, deckKeepAwake: 'off' } }: Host = {}): Promise<string[]> => {
   const described: string[] = []
 
   mock.store(on, stored)
@@ -351,7 +352,7 @@ test("a Monitor call shows a running row in the Board's Monitors section, and /d
 
   const [description = ''] = await startSession($, on)
 
-  expect(description).toContain('Board, Agents, Cost, Session, Changes, Timeline, Flow, Recall, Settings')
+  expect(description).toContain('Board, Agents, Cost, Session, Changes, Timeline, Flow, Decisions, Settings')
   await $.tool.call(WATCH as never)
   await clock.advance(300)
   for (const surface of SURFACES) {
@@ -821,7 +822,7 @@ test('an advisor call in the stream stays open past a change of chunk kind and e
   expect(await ui.find({ text: /consults 1/ })).toBeDefined()
   expect(await ui.find({ text: /took 5\.0s/ })).toBeDefined()
   expect(await ui.find({ text: /on call/ })).toBeDefined()
-  await ui.press({ key: 'tab-board' })
+  await ui.press({ key: 'tab-cost' })
   expect(await ui.find({ text: '1.2k' })).toBeDefined()
   await ui.unmount()
 })
@@ -1134,6 +1135,7 @@ test('an interactive session arms the watch loop once when no pass ran for 50 mi
 
   expect(await ui.find({ text: /on · github\.com\/acme/ })).toBeDefined()
   expect(await ui.find({ text: /arming… · last pass 50m ago/ })).toBeDefined()
+  await ui.press({ key: 'tab-agents' })
   expect(await ui.find({ text: /action: review watch arm/ })).toBeDefined()
   await ui.unmount()
   await clock.advance(5 * 60_000)

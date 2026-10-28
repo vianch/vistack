@@ -1,23 +1,24 @@
 import { pending } from '../lib/board'
-import { ago, basename, duration, fit, tokens, until, usd } from '../lib/format'
+import { face, isLive } from '../lib/crew'
+import { ago, basename, duration, fit, until, usd } from '../lib/format'
 import { addUp } from '../lib/ledger'
-import { STATE_LABELS, codeWrites, coordinatorStatus, histogram, isWorking, orgTree, stacked, teamStatus } from '../lib/org'
+import { STATE_LABELS, codeWrites, coordinatorStatus, doingNow, isOnStaff, teamStatus } from '../lib/org'
 import { ARM_RETRY_MS, CLEAN_TEXT, CRON_LIFE_MS, ROTATE_BEFORE_MS } from '../lib/review-watch'
-import { flow } from '../lib/theme'
-import { monitorsSection } from './monitors'
-import { Bars, CommRow, Empty, Line, Section, Spark, Tile, glyph, pulse } from './parts'
+import { cells, flow } from '../lib/theme'
+import { monitorCounts, monitorsSection } from './monitors'
+import { ACTIVITY_ICON, Empty, Fold, Line, PickRows, Section, glyph, pulse, statusColor } from './parts'
 
 import type { RenderElement } from 'claude-code'
 import type { Reply } from '../lib/board'
 import type { IconName } from '../lib/theme'
 import type { MonitorsSectionActions, MonitorsSectionData } from './monitors'
-import type { BarEntry, Kit } from './parts'
+import type { Kit } from './parts'
 import type {
   DeckActivity,
   DeckAdvisor,
   DeckAgent,
-  DeckComm,
   DeckMonitor,
+  DeckPick,
   DeckPr,
   DeckPrs,
   DeckReviewWatch,
@@ -40,7 +41,6 @@ export type BoardData = {
   todos: DeckTodo[]
   prs: DeckPrs
   workflow: DeckWorkflow | null
-  comms: DeckComm[]
   activity: Record<string, DeckActivity>
   advisor: DeckAdvisor
   usage: DeckUsage | null
@@ -50,6 +50,9 @@ export type BoardData = {
   reviewWatch: DeckReviewWatch | null
   // The newest open loop row of the review watch in this session.
   watchLoop?: DeckMonitor
+  picks?: DeckPick[]
+  // Section id → true while folded.
+  folds?: Readonly<Record<string, boolean>>
 }
 
 export type BoardActions = {
@@ -57,13 +60,14 @@ export type BoardActions = {
   refreshPrs: () => void
   monitors: MonitorsSectionActions
   turnWatchOff: () => void
+  fold?: (id: string) => void
 }
 
 // The shared confirm atom's value while Turn off waits for its second press.
 export const WATCH_OFF_CONFIRM = 'watch-off:review-watch'
 
-const ACTIVITY_BUCKETS = 30
-const MINUTE = 60_000
+const NOW_SHOWN = 5
+const RECENT_SHOWN = 3
 const WATCH_POSTS_SHOWN = 5
 const WATCH_ERRORS: Readonly<Record<string, string>> = {
   realm: 'the state file names no valid realm (host/owner)',
@@ -119,14 +123,8 @@ const watchGroup = (kit: Kit, data: BoardData, actions: BoardActions, group: Wat
   ]
 }
 
-const watchBlock = (kit: Kit, data: BoardData, actions: BoardActions, columns: number): RenderElement[] => {
+const watchBody = (kit: Kit, data: BoardData, actions: BoardActions, watch: DeckReviewWatch, columns: number): RenderElement[] => {
   const { Button, Text, theme } = kit
-  const watch = data.reviewWatch
-
-  if (watch === null) {
-    return []
-  }
-
   const last = watch.lastPassStartedAt ?? watch.lastPassAt
   const loopLine = `${watchLoopText(watch, data.watchLoop, data.now)} · ${last === undefined ? 'no pass yet' : `last pass ${ago(last, data.now)}`}`
   const join = (...parts: (string | undefined)[]): string => parts.filter(part => part !== undefined && part !== '').join(' · ')
@@ -155,7 +153,6 @@ const watchBlock = (kit: Kit, data: BoardData, actions: BoardActions, columns: n
   const isEmpty = groups.every(group => group.items.length === 0)
 
   return [
-    Section(kit, `${glyph(kit, 'pr')}Review watch`, columns, watch.enabled ? `on · ${watch.realm}` : 'off'),
     ...(watch.enabled ? [<Text key="watch-loop" dimColor>{fit(loopLine, columns)}</Text>] : []),
     ...(watch.error === undefined ? [] : [<Text key="watch-error" color={theme.bad}>{fit(WATCH_ERRORS[watch.error] ?? watch.error, columns)}</Text>]),
     ...(isEmpty ? [Empty(kit, 'Nothing posted, clean, or waiting on you.')] : []),
@@ -190,16 +187,22 @@ const replyContext = (kit: Kit, data: BoardData, reply: Reply, columns: number):
   )
 }
 
-const prBlock = (kit: Kit, data: BoardData, actions: BoardActions, columns: number): RenderElement[] => {
+const prRight = (data: BoardData): string => {
+  const { prs } = data
+  const checked = prs.checkedAt === 0 ? '' : ago(prs.checkedAt, data.now)
+
+  return prs.state === 'ok' ? [String(prs.items.length), checked].filter(part => part !== '').join(' · ') : checked
+}
+
+const prBody = (kit: Kit, data: BoardData, actions: BoardActions, columns: number): RenderElement[] => {
   const { Box, Button, Text, theme } = kit
   const { prs } = data
-  const head = Section(kit, `${glyph(kit, 'pr')}Open PRs`, columns, prs.checkedAt === 0 ? '' : ago(prs.checkedAt, data.now))
 
   if (prs.state === 'off') {
-    return [head, Empty(kit, `${prs.reason === undefined ? '' : `${prs.reason}. `}Set your Git realm in Settings (9) to list PRs.`)]
+    return [Empty(kit, `${prs.reason === undefined ? '' : `${prs.reason}. `}Set your Git realm in Settings (9) to list PRs.`)]
   }
   if (prs.state === 'out-of-realm') {
-    return [head, Empty(kit, `Skipped: ${prs.reason ?? 'origin is outside the realm'}.`)]
+    return [Empty(kit, `Skipped: ${prs.reason ?? 'origin is outside the realm'}.`)]
   }
 
   const repos = [...new Set(prs.items.map(pr => pr.repo))]
@@ -248,7 +251,6 @@ const prBlock = (kit: Kit, data: BoardData, actions: BoardActions, columns: numb
       : prs.items.flatMap(prRows)
 
   return [
-    head,
     ...(prs.state === 'error'
       ? [
           <Text key="pr-error" color={theme.bad}>
@@ -262,170 +264,200 @@ const prBlock = (kit: Kit, data: BoardData, actions: BoardActions, columns: numb
   ]
 }
 
-const tiles = (kit: Kit, data: BoardData, columns: number): RenderElement => {
-  const { Box, theme } = kit
-  const all = addUp(data.steps)
-  const staff = data.agents.filter(agent => agent.leftAt === undefined)
-  const width = Math.max(12, Math.floor((columns - 2) / 3))
+type StatusSegment = { key: string; text: string; color: string; isBold?: boolean }
+
+const statusLine = (kit: Kit, data: BoardData, columns: number): RenderElement => {
+  const { Box, Text, theme } = kit
+  const status = coordinatorStatus(data)
+  const isBusy = status.state !== 'idle' && status.state !== 'waiting-agents'
+  const team = teamStatus(data.agents)
+  const live = team.running + team.waiting
+  const since = status.state === 'idle' ? '' : duration(data.now - status.since)
+  const context = data.usage?.contextPercent
+  const you = `${kit.icon.user} You `
+  const arrow = `${flow(2, kit.frame, isBusy && kit.isAnimated)}▸ `
+  const coordinator = [kit.icon.coordinator, pulse(kit, isBusy, ''), STATE_LABELS[status.state], since].filter(part => part !== '').join(' ')
+  const tail: readonly StatusSegment[] = [
+    { color: theme.agent, key: 'team', text: ` · team ${live}/${live + team.done + team.failed} live` },
+    { color: theme.advisor, key: 'advisor', text: ` · ${kit.icon.advisor} ${data.advisor.consults.length}` },
+    { color: theme.cost, key: 'cost', text: ` · ${usd(data.usage?.usd ?? addUp(data.steps).usd)}` },
+    ...(context === undefined
+      ? []
+      : [{ color: context >= 90 ? theme.bad : context >= 70 ? theme.warn : theme.good, key: 'ctx', text: ` · ctx ${context}%` }]),
+  ]
+  const head = fit(coordinator, Math.max(4, columns - cells(you) - cells(arrow)))
+  const shown: StatusSegment[] = []
+  let used = cells(you) + cells(arrow) + cells(head)
+
+  for (const segment of tail) {
+    if (used + cells(segment.text) > columns) {
+      break
+    }
+    shown.push(segment)
+    used += cells(segment.text)
+  }
 
   return (
-    <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
-      {Tile(kit, { color: theme.user, icon: 'ask', key: 'tile-asks', label: 'asks', value: String(data.turns.length) }, width)}
-      {Tile(
-        kit,
-        {
-          color: data.replies.length > 0 ? theme.warn : theme.good,
-          icon: 'wait',
-          key: 'tile-replies',
-          label: 'needs reply',
-          value: String(data.replies.length),
-        },
-        width,
-      )}
-      {Tile(
-        kit,
-        { color: theme.agent, icon: 'org', key: 'tile-team', label: 'team live', value: `${staff.filter(isWorking).length}/${staff.length}` },
-        width,
-      )}
-      {Tile(kit, { color: theme.cost, icon: 'cost', key: 'tile-cost', label: 'cost', value: usd(data.usage?.usd ?? all.usd) }, width)}
-      {Tile(
-        kit,
-        {
-          color: theme.model,
-          icon: 'tokens',
-          key: 'tile-tokens',
-          label: 'tokens',
-          value: tokens(all.input + all.cacheRead + all.cacheWrite + all.output),
-        },
-        width,
-      )}
-      {Tile(
-        kit,
-        { color: theme.advisor, icon: 'advisor', key: 'tile-consults', label: 'consults', value: String(data.advisor.consults.length) },
-        width,
-      )}
+    <Box key="board-status" width={columns}>
+      <Text color={theme.user}>{you}</Text>
+      <Text color={theme.muted}>{arrow}</Text>
+      <Text bold color={status.state === 'waiting-you' ? theme.warn : theme.coordinator}>
+        {head}
+      </Text>
+      {shown.map(segment => (
+        <Text key={`status-${segment.key}`} color={segment.color}>
+          {segment.text}
+        </Text>
+      ))}
     </Box>
   )
 }
 
-const glance = (kit: Kit, data: BoardData, columns: number): RenderElement[] => {
-  const { Box, Text, theme } = kit
-  const status = coordinatorStatus(data)
-  const isBusy = status.state !== 'idle' && status.state !== 'waiting-agents'
-  const isFlowing = isBusy && kit.isAnimated
-  const org = orgTree(data.agents)
+const policyLine = (kit: Kit, data: BoardData, columns: number): RenderElement => {
+  const { Text, theme } = kit
   const writes = codeWrites(data.tools)
-  const team = teamStatus(data.agents)
-  const parts = [team.running, team.waiting, team.done, team.failed]
-  const colors = [theme.agent, theme.warn, theme.good, theme.bad]
-  const sizes = stacked(parts, Math.max(4, columns - 2))
-  const coordinator = [kit.icon.coordinator, pulse(kit, isBusy, ''), STATE_LABELS[status.state]].filter(part => part !== '').join(' ')
-  const departments = org.departments.map(department => `${kit.icon[department.icon]}${department.count}`).join(' ')
+
+  if (writes.length === 0) {
+    return <Text key="board-policy" color={theme.good}>{`${glyph(kit, 'ok')}coordinator delegates only`}</Text>
+  }
+
+  return (
+    <Text key="board-policy" bold color={theme.bad}>
+      {fit(`${glyph(kit, 'warn')}coordinator wrote code: ${writes.length} edit${writes.length === 1 ? '' : 's'}`, columns)}
+    </Text>
+  )
+}
+
+const repliesBlock = (kit: Kit, data: BoardData, actions: BoardActions, columns: number): RenderElement[] => {
+  const { Box, Button, Text, theme } = kit
 
   return [
-    <Box key="glance-flow" flexDirection="row" flexWrap="wrap" width={columns}>
-      <Text color={theme.user}>{`${kit.icon.user} You `}</Text>
-      <Text color={theme.muted}>{`${flow(2, kit.frame, isFlowing)}▸ `}</Text>
-      <Text bold color={theme.coordinator}>{`${coordinator} `}</Text>
-      <Text color={theme.muted}>{`${flow(2, kit.frame, isFlowing)}▸ `}</Text>
-      <Text color={theme.agent}>{`${departments}  `}</Text>
-      <Text color={theme.advisor}>{`${kit.icon.advisor} ${data.advisor.consults.length}`}</Text>
-    </Box>,
-    writes.length === 0 ? (
-      <Text key="glance-policy" color={theme.good}>{`${glyph(kit, 'ok')}coordinator delegates only`}</Text>
-    ) : (
-      <Text key="glance-policy" bold color={theme.bad}>
-        {fit(`${glyph(kit, 'warn')}coordinator wrote code: ${writes.length} edit${writes.length === 1 ? '' : 's'}`, columns)}
-      </Text>
-    ),
-    <Text key="glance-team">
-      {sizes.map((size, index) => (
-        <Text key={`team-${index}`} color={colors[index] ?? theme.muted}>
-          {'█'.repeat(size)}
-        </Text>
-      ))}
-      {sizes.every(size => size === 0) && <Text color={theme.muted}>{'░'.repeat(Math.max(4, columns - 2))}</Text>}
-    </Text>,
-    <Text key="glance-legend" dimColor>
-      {fit(`running ${team.running} · waiting ${team.waiting} · done ${team.done} · failed ${team.failed}`, columns)}
-    </Text>,
+    Section(kit, `${glyph(kit, 'wait')}Needs reply`, columns, String(data.replies.length)),
+    ...(data.replies.length === 0 ? [Empty(kit, 'Nothing waits on you.')] : []),
+    ...data.replies.flatMap(reply => {
+      const isOpen = data.openId === reply.id
+      const row = (
+        <Box key={reply.id} justifyContent="space-between" width={columns}>
+          <Text color={reply.kind === 'plan' || reply.kind === 'question' ? theme.warn : theme.accent}>
+            {fit(`${glyph(kit, reply.kind === 'agent' ? 'wait' : 'question')}${reply.text}`, columns - 14)}
+          </Text>
+          <Button key={`${reply.id}-ctx`} plain label={isOpen ? 'hide' : 'context'} onPress={() => actions.toggle(reply.id)} />
+        </Box>
+      )
+
+      return isOpen ? [row, replyContext(kit, data, reply, columns)] : [row]
+    }),
   ]
 }
 
-const charts = (kit: Kit, data: BoardData, columns: number): RenderElement[] => {
-  const { Box, Text, theme } = kit
-  const mainCost = addUp(data.steps.filter(step => step.agentId === undefined)).usd
-  const members: BarEntry[] = data.agents.map(agent => {
-    const cost = addUp(data.steps.filter(step => step.agentId === agent.agentId)).usd
+const doingText = (kit: Kit, doing: DeckActivity | null, fallback: string): string =>
+  doing === null ? fallback : `${kit.icon[ACTIVITY_ICON[doing.kind]]} ${doing.detail || doing.kind}`
 
-    return { color: theme.agent, key: `cost-${agent.agentId}`, label: agent.nickname, text: usd(cost), value: cost }
-  })
-  const entries = [
-    { color: theme.coordinator, key: 'cost-coordinator', label: 'Coordinator', text: usd(mainCost), value: mainCost },
-    ...members,
-  ]
-    .filter(entry => entry.value > 0)
-    .sort((left, right) => right.value - left.value)
-    .slice(0, 6)
-  const width = Math.min(ACTIVITY_BUCKETS, Math.max(8, columns - 16))
-  const counts = histogram(
-    data.tools.map(tool => tool.startedAt),
-    data.now,
-    width,
-    MINUTE,
-  )
-  const top = Math.max(0, ...counts)
-  const low = Math.min(...counts, top)
+const nowBlock = (kit: Kit, data: BoardData, columns: number): RenderElement[] => {
+  const { Box, Text, theme } = kit
+  const running = data.agents.filter(agent => isOnStaff(agent) && isLive(agent.status))
+  const ownTool = [...data.tools].reverse().find(tool => tool.status === 'running' && tool.agentId === undefined)
+  const agentRow = (agent: DeckAgent): RenderElement => {
+    const faceText = face(agent.type, agent.status, kit.isAnimated ? kit.frame : 0)
+    const elapsed = duration(data.now - agent.startedAt)
+    const room = Math.max(4, columns - cells(faceText) - cells(elapsed) - 2)
+
+    return (
+      <Box key={`now-${agent.agentId}`} justifyContent="space-between" width={columns}>
+        <Text wrap="truncate-end">
+          <Text color={statusColor(kit, agent.status)}>{faceText}</Text>
+          <Text>{fit(`${agent.nickname} · ${doingText(kit, doingNow(agent.agentId, data.activity, data.tools), agent.description)}`, room)}</Text>
+        </Text>
+        <Text dimColor>{elapsed}</Text>
+      </Box>
+    )
+  }
 
   return [
-    Section(kit, `${glyph(kit, 'chart')}Cost by member`, columns, 'top 6'),
-    ...(entries.length === 0 ? [Empty(kit, 'No cost recorded yet.')] : Bars(kit, entries, columns)),
-    Section(kit, `${glyph(kit, 'chart')}Activity`, columns, 'tool calls / min'),
-    <Box key="spark" columnGap={2} width={columns}>
-      {Spark(kit, counts, width, theme.tool)}
-      <Text dimColor>{fit(`min ${low} · max ${top} per min`, Math.max(0, columns - width - 2))}</Text>
-    </Box>,
-    <Box key="spark-axis" justifyContent="space-between" width={Math.min(columns, width)}>
-      <Text dimColor>{`${width}m ago`}</Text>
-      <Text dimColor>now</Text>
-    </Box>,
+    Section(kit, `${glyph(kit, 'live')}Now`, columns, `${running.length} live`),
+    ...running.slice(0, NOW_SHOWN).map(agentRow),
+    ...(running.length > NOW_SHOWN ? [Empty(kit, `+${running.length - NOW_SHOWN} more on Agents (2)`)] : []),
+    ...(ownTool === undefined
+      ? []
+      : [Line(kit, `${kit.icon.coordinator} Coordinator · ${ownTool.tool} ${ownTool.detail}`, duration(data.now - ownTool.startedAt), columns, theme.coordinator)]),
+    ...(running.length === 0 && ownTool === undefined ? [Empty(kit, 'Nothing running.')] : []),
   ]
+}
+
+const forkBlock = (kit: Kit, data: BoardData, columns: number): RenderElement[] => {
+  const picks = data.picks ?? []
+  const last = picks[picks.length - 1]
+
+  return [
+    Section(kit, `${glyph(kit, 'model')}Last fork`, columns, 'see Decisions (8)'),
+    ...(last === undefined ? [Empty(kit, 'No fork asked yet.')] : PickRows(kit, last, columns, { agents: data.agents })),
+  ]
+}
+
+type FoldSpot = { id: string; title: string; right: string }
+
+const foldable = (kit: Kit, data: BoardData, actions: BoardActions, spot: FoldSpot, body: () => RenderElement[], columns: number): RenderElement[] => {
+  const { fold } = actions
+
+  if (fold === undefined) {
+    return [Section(kit, spot.title, columns, spot.right), ...body()]
+  }
+
+  const isFolded = data.folds?.[spot.id] === true
+
+  return [Fold(kit, { ...spot, isFolded, onToggle: () => fold(spot.id) }, columns), ...(isFolded ? [] : body())]
+}
+
+const monitorsBlock = (kit: Kit, data: BoardData, actions: BoardActions, columns: number): RenderElement[] => {
+  const { fold } = actions
+
+  if (fold === undefined) {
+    return [monitorsSection(kit, data.monitors, actions.monitors, columns)]
+  }
+
+  const isFolded = data.folds?.monitors === true
+  const head = Fold(kit, { id: 'monitors', isFolded, onToggle: () => fold('monitors'), right: monitorCounts(data.monitors.monitors), title: 'Monitors' }, columns)
+
+  if (isFolded) {
+    return [head]
+  }
+
+  return [head, monitorsSection(kit, { ...data.monitors, folds: data.folds ?? {}, hasHeader: false }, { ...actions.monitors, fold }, columns)]
 }
 
 export const boardTab = (kit: Kit, data: BoardData, actions: BoardActions, columns: number): RenderElement => {
   const { Box, Button, Text, theme } = kit
-  const recent = [...data.turns].reverse().slice(0, 6)
-  const sections = pending(data)
-  const comms = [...data.comms].reverse().slice(0, 5)
+  const recent = [...data.turns].reverse().slice(0, RECENT_SHOWN)
+  const sections = pending({ ...data, agents: [], tools: [] })
+  const watch = data.reviewWatch
   const TONE = { fail: theme.bad, run: theme.agent, todo: theme.warn, wait: theme.muted } as const
 
   return (
     <Box flexDirection="column">
-      {tiles(kit, data, columns)}
-      {Section(kit, `${glyph(kit, 'org')}Org at a glance`, columns)}
-      {glance(kit, data, columns)}
-      {monitorsSection(kit, data.monitors, actions.monitors, columns)}
-      {watchBlock(kit, data, actions, columns)}
-      {charts(kit, data, columns)}
-      {Section(kit, `${glyph(kit, 'message')}Comms`, columns, String(data.comms.length))}
-      {comms.length === 0 && Empty(kit, 'Nobody has said anything yet.')}
-      {comms.map(comm => CommRow(kit, comm, data.agents, columns))}
-      {Section(kit, `${glyph(kit, 'wait')}Needs reply`, columns, String(data.replies.length))}
-      {data.replies.length === 0 && Empty(kit, 'Nothing waits on you.')}
-      {data.replies.flatMap(reply => {
-        const isOpen = data.openId === reply.id
-        const row = (
-          <Box key={reply.id} justifyContent="space-between" width={columns}>
-            <Text color={reply.kind === 'plan' || reply.kind === 'question' ? theme.warn : theme.accent}>
-              {fit(`${glyph(kit, reply.kind === 'agent' ? 'wait' : 'question')}${reply.text}`, columns - 14)}
-            </Text>
-            <Button key={`${reply.id}-ctx`} plain label={isOpen ? 'hide' : 'context'} onPress={() => actions.toggle(reply.id)} />
-          </Box>
-        )
-
-        return isOpen ? [row, replyContext(kit, data, reply, columns)] : [row]
-      })}
-      {Section(kit, `${glyph(kit, 'ask')}Recent asks`, columns)}
+      {statusLine(kit, data, columns)}
+      {policyLine(kit, data, columns)}
+      {repliesBlock(kit, data, actions, columns)}
+      {nowBlock(kit, data, columns)}
+      {forkBlock(kit, data, columns)}
+      {monitorsBlock(kit, data, actions, columns)}
+      {foldable(
+        kit,
+        data,
+        actions,
+        { id: 'prs', right: prRight(data), title: `${glyph(kit, 'pr')}Open PRs` },
+        () => prBody(kit, data, actions, columns),
+        columns,
+      )}
+      {watch !== null &&
+        foldable(
+          kit,
+          data,
+          actions,
+          { id: 'watch', right: watch.enabled ? `on · ${watch.realm}` : 'off', title: `${glyph(kit, 'pr')}Review watch` },
+          () => watchBody(kit, data, actions, watch, columns),
+          columns,
+        )}
+      {Section(kit, `${glyph(kit, 'ask')}Recent asks`, columns, String(data.turns.length))}
       {recent.length === 0 && Empty(kit, 'No prompts yet this session.')}
       {recent.map(turn => {
         const own = data.steps.filter(step => step.agentId === undefined && step.turnId === turn.turnId)
@@ -433,7 +465,6 @@ export const boardTab = (kit: Kit, data: BoardData, actions: BoardActions, colum
 
         return Line(kit, turn.text === '' ? '(continuation)' : turn.text, right, columns, undefined, turn.reason !== undefined)
       })}
-      {prBlock(kit, data, actions, columns)}
       {sections.flatMap(section => [
         Section(kit, section.title, columns, String(section.rows.length)),
         ...section.rows.slice(0, 8).map(row => (
@@ -442,8 +473,6 @@ export const boardTab = (kit: Kit, data: BoardData, actions: BoardActions, colum
           </Text>
         )),
       ])}
-      {sections.length === 0 && Section(kit, 'Pending', columns)}
-      {sections.length === 0 && Empty(kit, 'Nothing pending.')}
       {data.openId !== '' && <Button key="close-all" plain dimColor label="collapse" onPress={() => actions.toggle('')} />}
     </Box>
   )

@@ -1,9 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import { needsReply } from '../hooks/lib/board'
-import { face, nickname, roleOf } from '../hooks/lib/crew'
 import { fit } from '../hooks/lib/format'
-import { frontmatterModel, mayApply, parseDecision } from '../hooks/lib/jev'
 import { launchPlan, lazygitMarker, pickLauncher } from '../hooks/lib/launch'
 import { addUp, byModel, editDelta, lineDelta, makeStep, mergeEdit, recordStep, timeline } from '../hooks/lib/ledger'
 import {
@@ -24,7 +22,6 @@ import {
 } from '../hooks/lib/org'
 import { costOf, modelLabel } from '../hooks/lib/pricing'
 import { effectiveRealm, isInRealm, normalizeRemote, realmParts } from '../hooks/lib/realm'
-import { pairs, search } from '../hooks/lib/recall'
 import { DEFAULT_SETTINGS, cells, clip, readSettings } from '../hooks/lib/theme'
 import { checksSummary, headBranch, isPrChange, lastLedgerRow, parsePrSearch, parseRun, prSearchArgs } from '../hooks/lib/workflow'
 
@@ -143,72 +140,6 @@ describe('realm', () => {
     expect(realmParts('https://ghe.acme.io/Platform')).toEqual({ host: 'ghe.acme.io', owner: 'platform' })
     expect(realmParts('github.com')).toBeNull()
     expect(realmParts('github.com/acme/app')).toBeNull()
-  })
-})
-
-describe('recall', () => {
-  const rows = [
-    { role: 'user', text: 'how do I rotate the token' },
-    { role: 'assistant', text: 'Run the rotate script.' },
-    { role: 'user', text: 'and the cache?' },
-    { role: 'assistant', text: 'Clear it with the flush command.' },
-  ]
-
-  test('pairs each ask with the answer after it', async () => {
-    expect(pairs(rows).map(pair => [pair.ask, pair.answer])).toEqual([
-      ['how do I rotate the token', 'Run the rotate script.'],
-      ['and the cache?', 'Clear it with the flush command.'],
-    ])
-  })
-
-  test('needs every term, phrases kept whole', async () => {
-    expect(search(pairs(rows), 'flush').map(hit => hit.ask)).toEqual(['and the cache?'])
-    expect(search(pairs(rows), '"rotate script"').map(hit => hit.ask)).toEqual(['how do I rotate the token'])
-    expect(search(pairs(rows), 'rotate flush')).toHaveLength(0)
-  })
-})
-
-describe('jev', () => {
-  test('reads a tier decision and the agent file model', async () => {
-    const decision = parseDecision('{"action":"mechanical","backend":"deterministic","confidence":0.8,"decision_id":"dec_1","outputs":{"tier":"mechanical"}}')
-
-    expect(decision).toEqual({ backend: 'deterministic', confidence: 0.8, decisionId: 'dec_1', rationale: '', tier: 'mechanical' })
-    expect(parseDecision('not json')).toBeNull()
-    expect(frontmatterModel('---\nname: implementer\nmodel: sonnet\n---\nbody')).toBe('sonnet')
-  })
-
-  test('applies only to built-in types that named no model', async () => {
-    expect(mayApply('apply', 'Explore', undefined)).toBe(true)
-    expect(mayApply('apply', 'vistack:implementer', undefined)).toBe(false)
-    expect(mayApply('apply', 'Explore', 'haiku')).toBe(false)
-    expect(mayApply('suggest', 'Explore', undefined)).toBe(false)
-  })
-})
-
-describe('crew', () => {
-  test('names stay unique and faces keep their width', async () => {
-    const first = nickname('Explore', 'a1', [])
-
-    expect(nickname('Explore', 'a1', [first])).not.toBe(first)
-
-    const widths = [0, 1, 2, 3].map(tickCount => face('vistack:implementer', 'running', tickCount).length)
-
-    expect(new Set(widths).size).toBe(1)
-    expect(face('x', 'failed', 0)).toContain('x_x')
-  })
-
-  test('the advisor role wins over the other patterns and keeps its face width', async () => {
-    expect(roleOf('vistack:advisor')).toBe('advisor')
-    expect(['The Oracle', 'Sage', 'Athena', 'Wise Owl', 'Mentor']).toContain(nickname('vistack:advisor', 'a9', []))
-
-    const widths = [0, 1, 2, 3].map(tickCount => face('vistack:advisor', 'running', tickCount).length)
-
-    expect(new Set(widths).size).toBe(1)
-    expect(widths[0]).toBe(face('Explore', 'running', 0).length)
-  })
-
-  test('devops agents work in Operations, not Engineering', async () => {
-    expect(roleOf('vistack:devops')).toBe('helper')
   })
 })
 

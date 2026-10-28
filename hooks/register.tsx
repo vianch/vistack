@@ -5,7 +5,30 @@ import { AWAKE_LINGER_MS, DEFAULT_KEEP_AWAKE, awakePlan, readKeepAwake, shouldHo
 import { needsReply } from './lib/board'
 import { isLive, nickname, roleOf } from './lib/crew'
 import { basename, duration, usd } from './lib/format'
-import { DEFAULT_ROSTER, decisionContext, frontmatterModel, mayApply, parseDecision } from './lib/jev'
+import {
+  headArgs,
+  isGitChange,
+  mergeNumstat,
+  numstatArgs,
+  parseHead,
+  parsePreview,
+  parseStatus,
+  previewArgs,
+  statusArgs as gitStatusArgs,
+} from './lib/git'
+import {
+  DEFAULT_ROSTER,
+  askedOf,
+  decidingPick,
+  decisionContext,
+  forkCallOf,
+  forkLayerOf,
+  frontmatterModel,
+  isForkSwitch,
+  mayApply,
+  settledPick,
+  statusArgs,
+} from './lib/jev'
 import { launchPlan, lazygitMarker, pickLauncher } from './lib/launch'
 import {
   addUp,
@@ -53,7 +76,6 @@ import {
 } from './lib/monitors'
 import { modelLabel } from './lib/pricing'
 import { effectiveRealm, isInRealm, normalizeRemote, realmParts } from './lib/realm'
-import { pairs, search } from './lib/recall'
 import { relaunchPlan, withLoopArgs } from './lib/relaunch'
 import { carryWatch, isWatchLoop, parseWatchState, planWatch, watchLoopArgs } from './lib/review-watch'
 import { DEFAULT_SETTINGS, iconsOf, paletteOf, readSettings } from './lib/theme'
@@ -62,8 +84,8 @@ import { agentsTab } from './tabs/agents'
 import { WATCH_OFF_CONFIRM, boardTab } from './tabs/board'
 import { changesTab } from './tabs/changes'
 import { costTab } from './tabs/cost'
+import { decisionsTab } from './tabs/decisions'
 import { Header } from './tabs/parts'
-import { recallTab } from './tabs/recall'
 import { sessionTab } from './tabs/session'
 import { settingsTab } from './tabs/settings'
 import { timelineTab } from './tabs/timeline'
@@ -81,7 +103,7 @@ import type {
   TurnStepChunk,
   TurnStepResult,
 } from 'claude-code'
-import type { Decision, Roster } from './lib/jev'
+import type { Asked, Roster } from './lib/jev'
 import type { Launcher } from './lib/launch'
 import type { ReviewPost } from './lib/org'
 import type { RealmSource } from './lib/realm'
@@ -99,6 +121,9 @@ import type {
   DeckComm,
   DeckConsult,
   DeckEdit,
+  DeckForkLayer,
+  DeckGit,
+  DeckGitFile,
   DeckLazygit,
   DeckMonitor,
   DeckPick,
@@ -158,6 +183,9 @@ type Job =
   | { kind: 'loop-tie'; args: string; at: number }
   | { kind: 'review-watch' }
   | { kind: 'review-watch-off' }
+  | { kind: 'fork-status' }
+  | { kind: 'git' }
+  | { kind: 'git-preview'; path: string; area: DeckGitFile['area'] }
 
 type AwakeHold = { how: string; stream: HookStream<ProcessSpawnChunk, ProcessSpawnResult> }
 
@@ -180,6 +208,10 @@ const STORE_KEY = 'deckSettings'
 // Kept apart from the look settings so Reset leaves them alone.
 const REALM_KEY = 'deckRealm'
 const KEEP_AWAKE_KEY = 'deckKeepAwake'
+const FOLDS_KEY = 'deckFolds'
+const DEFAULT_FOLDS: Readonly<Record<string, boolean>> = { 'loop-form': true, 'monitors-ended': true }
+const PROCESS_TIMEOUT_MS = 8000
+const GIT_POLL_MS = 10_000
 const PR_POLL_MS = 60_000
 const LIVE_TICK_MS = 300
 const IDLE_TICK_MS = 5000
@@ -209,7 +241,7 @@ const TABS: readonly { id: DeckTab; label: string; hotkey: string; icon: IconNam
   { hotkey: '5', icon: 'tab-changes', id: 'changes', label: 'Changes' },
   { hotkey: '6', icon: 'tab-timeline', id: 'timeline', label: 'Timeline' },
   { hotkey: '7', icon: 'tab-workflow', id: 'workflow', label: 'Flow' },
-  { hotkey: '8', icon: 'tab-recall', id: 'recall', label: 'Recall' },
+  { hotkey: '8', icon: 'tab-decisions', id: 'decisions', label: 'Decisions' },
   { hotkey: '9', icon: 'tab-settings', id: 'settings', label: 'Settings' },
 ]
 
@@ -238,7 +270,6 @@ const workflow = atom({ plugin: 'vistack', key: 'workflow' } as const, null as D
 const usage = atom({ plugin: 'vistack', key: 'usage' } as const, null as DeckUsage | null)
 const lazygit = atom({ plugin: 'vistack', key: 'lazygit' } as const, { isOpen: false } as DeckLazygit)
 const frame = atom({ plugin: 'vistack', key: 'frame' } as const, 0)
-const query = atom({ plugin: 'vistack', key: 'query' } as const, '')
 const openId = atom({ plugin: 'vistack', key: 'openId' } as const, '')
 const deckSettings = atom({ plugin: 'vistack', key: 'settings' } as const, DEFAULT_SETTINGS as DeckSettings)
 const activity = atom({ plugin: 'vistack', key: 'activity' } as const, {} as Record<string, DeckActivity>)
@@ -255,6 +286,9 @@ const awake = atom({ plugin: 'vistack', key: 'awake' } as const, { isHeld: false
 const loopPrompt = atom({ plugin: 'vistack', key: 'loopPrompt' } as const, '')
 const loopInterval = atom({ plugin: 'vistack', key: 'loopInterval' } as const, '')
 const reviewWatch = atom({ plugin: 'vistack', key: 'reviewWatch' } as const, null as DeckReviewWatch | null)
+const forkLayer = atom({ plugin: 'vistack', key: 'forkLayer' } as const, null as DeckForkLayer | null)
+const git = atom({ plugin: 'vistack', key: 'git' } as const, null as DeckGit | null)
+const folds = atom({ plugin: 'vistack', key: 'folds' } as const, DEFAULT_FOLDS as Record<string, boolean>)
 
 // Module state: rebuilt by register and session.start on every load.
 let config: Config = { isAutoOpen: true, jevMode: 'suggest', launcher: 'auto', realm: '', vistackRoot: '' }
@@ -532,20 +566,27 @@ const decisionFlags = async ($: Dollar): Promise<string[]> => {
   return ['--history', `${stateDir}/decision-history.jsonl`, ...((await exists($, decisions)) ? ['--config', decisions] : [])]
 }
 
-const decide = async ($: Dollar, request: string, source: string): Promise<Decision | null> => {
-  if (script === null || request.trim() === '') {
-    return null
-  }
-  try {
-    const ran = await $.process.run(
-      ['python3', script, 'decision', 'tier-selection', '--backend', 'auto', ...(await decisionFlags($))],
-      { cwd, stdin: decisionContext(request, source), timeoutMs: 20_000 },
-    )
+const forkCall = async ($: Dollar) => forkCallOf(script, script === null ? [] : await decisionFlags($))
 
-    return ran.exitCode === 0 ? parseDecision(ran.stdout) : null
-  } catch {
-    return null
+const decide = async ($: Dollar, argv: string[] | null, request: string, source: string): Promise<Asked> => {
+  if (argv === null) {
+    return askedOf('script not found', 0)
   }
+
+  const startedAt = await $.clock.now()
+  const ran = await $.process
+    .run(argv, { cwd, stdin: decisionContext(request, source), timeoutMs: 20_000 })
+    .catch((error: unknown) => String(error))
+
+  return askedOf(ran, (await $.clock.now()) - startedAt)
+}
+
+const addPick = async ($: Dollar, pick: DeckPick): Promise<void> => {
+  await update($, picks, list => [...list.filter(one => one.id !== pick.id), pick].slice(-80))
+}
+
+const patchPick = async ($: Dollar, id: string, patch: (pick: DeckPick) => DeckPick): Promise<void> => {
+  await update($, picks, list => list.map(pick => (pick.id === id ? patch(pick) : pick)))
 }
 
 const recordOutcome = async ($: Dollar, pick: DeckPick): Promise<void> => {
@@ -554,8 +595,7 @@ const recordOutcome = async ($: Dollar, pick: DeckPick): Promise<void> => {
   }
 
   const evidence = `actual=${pick.actual ?? '?'} recommended=${pick.recommended} usd=${(pick.usd ?? 0).toFixed(4)}`
-
-  await $.process
+  const ran = await $.process
     .run(
       [
         'python3',
@@ -570,63 +610,30 @@ const recordOutcome = async ($: Dollar, pick: DeckPick): Promise<void> => {
       ],
       { cwd, timeoutMs: 10_000 },
     )
-    .catch(() => undefined)
+    .catch(() => null)
+
+  if (ran?.exitCode === 0) {
+    await patchPick($, pick.id, one => ({ ...one, outcomeRecorded: true }))
+  }
 }
 
-const addPick = async ($: Dollar, pick: DeckPick): Promise<void> => {
-  await update($, picks, list => [...list.filter(one => one.id !== pick.id), pick].slice(-80))
+// The row shows while the script runs; its answer, or why there is none, settles it in place.
+const askFork = async ($: Dollar, ask: Omit<Parameters<typeof decidingPick>[0], 'command' | 'history'>, request: string, source: string): Promise<void> => {
+  const call = await forkCall($)
+
+  await addPick($, decidingPick({ ...ask, ...call.shown }))
+
+  const asked = await decide($, call.argv, request, source)
+  const ladder = (await read($, forkLayer))?.ladder ?? []
+
+  await patchPick($, ask.id, pick => settledPick(pick, asked, roster, ladder))
 }
 
 const decideTurn = async ($: Dollar, turnId: string, text: string, at: number): Promise<void> => {
-  const decision = await decide($, text, 'main-turn')
-
-  if (decision === null) {
-    return
-  }
-
   const firstStep = (await read($, steps)).find(step => step.agentId === undefined && step.turnId === turnId)
+  const ask = { at, id: `turn-${turnId}`, scope: 'main' as const, subject: text, trigger: 'prompt' as const, turnId }
 
-  await addPick($, {
-    at,
-    backend: decision.backend,
-    confidence: decision.confidence,
-    id: `turn-${turnId}`,
-    isApplied: false,
-    recommended: roster[decision.tier],
-    scope: 'main',
-    subject: text,
-    tier: decision.tier,
-    turnId,
-    ...(decision.decisionId === undefined ? {} : { decisionId: decision.decisionId }),
-    ...(firstStep === undefined ? {} : { actual: firstStep.model }),
-  })
-}
-
-const agentPick = (
-  decision: Decision,
-  input: { agentId: string; subject: string; model: string; at: number },
-  isApplied: boolean,
-): DeckPick => ({
-  actual: input.model,
-  agentId: input.agentId,
-  at: input.at,
-  backend: decision.backend,
-  confidence: decision.confidence,
-  id: `agent-${input.agentId}`,
-  isApplied,
-  recommended: roster[decision.tier],
-  scope: 'agent',
-  subject: input.subject,
-  tier: decision.tier,
-  ...(decision.decisionId === undefined ? {} : { decisionId: decision.decisionId }),
-})
-
-const decideAgent = async ($: Dollar, job: Extract<Job, { kind: 'decide-agent' }>): Promise<void> => {
-  const decision = await decide($, job.request, 'agent-spawn')
-
-  if (decision !== null) {
-    await addPick($, agentPick(decision, job, false))
-  }
+  await askFork($, firstStep === undefined ? ask : { ...ask, actual: firstStep.model }, text, 'main-turn')
 }
 
 const settlePick = async ($: Dollar, pickId: string, result: string, cost: number | null): Promise<void> => {
@@ -638,8 +645,95 @@ const settlePick = async ($: Dollar, pickId: string, result: string, cost: numbe
 
   const settled = { ...found, result, usd: cost }
 
-  await addPick($, settled)
+  await patchPick($, pickId, () => settled)
   await recordOutcome($, settled)
+}
+
+// `decisions status` sends nothing off the machine. Skipped while suggestions are off or no script
+// was found; the fork layer then says which.
+const readForkLayer = async ($: Dollar): Promise<void> => {
+  const base = { ladder: [] as string[], mode: config.jevMode, readAt: await $.clock.now(), ...(script === null ? {} : { script }) }
+  const switchFile = `${cwd}/.claude/vistack/decisions.json`
+  const argv = script === null ? null : statusArgs(script, (await exists($, switchFile)) ? switchFile : undefined)
+  const ran =
+    config.jevMode === 'off' || argv === null
+      ? null
+      : await $.process.run(argv, { cwd, timeoutMs: PROCESS_TIMEOUT_MS }).catch((error: unknown) => String(error))
+
+  await update($, forkLayer, () => (ran === null ? base : forkLayerOf(base, ran)))
+}
+
+const enqueueGit = (): void => {
+  if (!jobs.some(job => job.kind === 'git')) {
+    enqueue({ kind: 'git' })
+  }
+}
+
+const firstLine = (stderr: string, fallback: string): string => stderr.trim().split('\n')[0] || fallback
+
+// Read-only git, inside the realm only: status, both numstats and HEAD. The open preview stays.
+const refreshGit = async ($: Dollar): Promise<void> => {
+  const readAt = await $.clock.now()
+  const { realm } = realmNow()
+  const root = (await read($, workflow))?.repoRoot ?? cwd
+  const run = (argv: string[]) => $.process.run(argv, { cwd: root, timeoutMs: PROCESS_TIMEOUT_MS })
+  const fail = async (state: DeckGit['state'], reason: string): Promise<void> => {
+    await update($, git, () => ({ files: [], readAt, reason, state }))
+  }
+
+  if (!isGitAllowed()) {
+    return fail(realm === '' ? 'off' : 'out-of-realm', realm === '' ? 'no Git realm set' : 'origin outside the realm')
+  }
+  try {
+    const status = await run(gitStatusArgs(root))
+
+    if (status.exitCode !== 0) {
+      return fail('error', firstLine(status.stderr, `git status exited ${status.exitCode}`))
+    }
+
+    const [staged, unstaged, head] = [await run(numstatArgs(root, true)), await run(numstatArgs(root, false)), await run(headArgs(root))]
+    const { files, ...branch } = parseStatus(status.stdout)
+
+    await update($, git, current => ({
+      ...branch,
+      files: mergeNumstat(files, staged.stdout, unstaged.stdout),
+      head: head.exitCode === 0 ? parseHead(head.stdout) : undefined,
+      preview: current?.preview,
+      readAt,
+      state: 'ok' as const,
+    }))
+  } catch (error) {
+    await fail('error', String(error))
+  }
+}
+
+// A second press on the shown file closes its preview.
+const previewGit = async ($: Dollar, path: string, area: DeckGitFile['area']): Promise<void> => {
+  const shown = (await read($, git))?.preview
+  const root = (await read($, workflow))?.repoRoot ?? cwd
+
+  if ((shown?.path === path && shown.area === area) || !isGitAllowed()) {
+    await update($, git, current => (current === null ? current : { ...current, preview: undefined }))
+
+    return
+  }
+
+  const ran = await $.process
+    .run(previewArgs(root, path, area), { cwd: root, timeoutMs: PROCESS_TIMEOUT_MS })
+    .catch((error: unknown) => ({ exitCode: -1, stderr: String(error), stdout: '' }))
+  // `diff --no-index` exits 1 whenever the files differ, which an untracked file always does.
+  const isRead = ran.exitCode === 0 || (area === 'untracked' && ran.exitCode === 1)
+  const preview = isRead ? parsePreview(ran.stdout) : { isTruncated: false, lines: [firstLine(ran.stderr, `git diff exited ${ran.exitCode}`)] }
+
+  await update($, git, current => (current === null ? current : { ...current, preview: { area, path, ...preview } }))
+}
+
+const toggleFold = async ($: Dollar, id: string): Promise<void> => {
+  const current = await read($, folds)
+  const next = { ...current, [id]: current[id] !== true }
+
+  await update($, folds, () => next)
+  await $.store.set(FOLDS_KEY, next).catch((error: unknown) => $.ui.log(`vistack-deck folds: ${String(error)}`, { to: 'debug' }))
 }
 
 const syncAgents = async ($: Dollar): Promise<void> => {
@@ -1549,8 +1643,11 @@ const runJob = async ($: Dollar, job: Job): Promise<void> => {
       return toggleLazygit($)
     case 'decide-turn':
       return decideTurn($, job.turnId, job.text, job.at)
-    case 'decide-agent':
-      return decideAgent($, job)
+    case 'decide-agent': {
+      const { agentId, at, model: actual, request, subject } = job
+
+      return askFork($, { actual, agentId, at, id: `agent-${agentId}`, scope: 'agent', subject, trigger: 'spawn' }, request, 'agent-spawn')
+    }
     case 'settle':
       return settlePick($, job.pickId, job.result, job.usd)
     case 'kill':
@@ -1589,6 +1686,12 @@ const runJob = async ($: Dollar, job: Job): Promise<void> => {
       return syncReviewWatch($)
     case 'review-watch-off':
       return turnWatchOff($)
+    case 'fork-status':
+      return readForkLayer($)
+    case 'git':
+      return refreshGit($)
+    case 'git-preview':
+      return previewGit($, job.path, job.area)
   }
 }
 
@@ -1630,6 +1733,12 @@ const pollPrs = async ($: Dollar): Promise<void> => {
 
 // CronList runs the person's PreToolUse and PostToolUse settings hooks on every call, so it is
 // asked only while the Board shows an open cron, and on Refresh.
+const pollGit = async ($: Dollar): Promise<void> => {
+  if ((await read($, tab)) === 'changes' && (await isDeckVisible($, (await read($, deckSettings)).placement))) {
+    enqueueGit()
+  }
+}
+
 const pollCrons = async ($: Dollar): Promise<void> => {
   const isBoardShown = (await read($, tab)) === 'board' && (await isDeckVisible($, (await read($, deckSettings)).placement))
 
@@ -1707,6 +1816,9 @@ const resetSettings = async ($: Dollar): Promise<void> => {
 const switchTab = async ($: Dollar, next: DeckTab): Promise<void> => {
   await update($, confirm, () => '')
   await update($, tab, () => next)
+  if (next === 'changes') {
+    enqueueGit()
+  }
 }
 
 const refreshMonitors = (): void => {
@@ -1723,6 +1835,8 @@ const refreshAll = (): void => {
   enqueue({ kind: 'model' })
   refreshMonitors()
   enqueue({ kind: 'review-watch' })
+  enqueue({ kind: 'fork-status' })
+  enqueueGit()
 }
 
 const selectParty = async ($: Dollar, party: string): Promise<void> => {
@@ -1826,7 +1940,7 @@ const renderTab = async ($: Dollar, kit: Kit, active: DeckTab, columns: number, 
           activity: await read($, activity),
           advisor: await read($, advisor),
           agents: agentList,
-          comms: await read($, comms),
+          folds: await read($, folds),
           monitors: {
             awake: await read($, awake),
             confirm: await read($, confirm),
@@ -1838,6 +1952,7 @@ const renderTab = async ($: Dollar, kit: Kit, active: DeckTab, columns: number, 
           },
           now: at,
           openId: await read($, openId),
+          picks: await read($, picks),
           prs: await read($, prs),
           replies: needsReply(toolList, turnList, agentList),
           reviewWatch: await read($, reviewWatch),
@@ -1859,6 +1974,7 @@ const renderTab = async ($: Dollar, kit: Kit, active: DeckTab, columns: number, 
             setKeepAwake: mode => void saveKeepAwake($, mode),
             setLoop: draft => void saveLoopDraft($, draft),
           },
+          fold: id => void toggleFold($, id),
           refreshPrs: () => enqueue({ kind: 'prs' }),
           toggle: id => void update($, openId, current => (current === id ? '' : id)),
           turnWatchOff: () => void pressWatchOff($),
@@ -1922,8 +2038,12 @@ const renderTab = async ($: Dollar, kit: Kit, active: DeckTab, columns: number, 
     case 'changes':
       return changesTab(
         kit,
-        { edits: await read($, edits), home, isGitAllowed: isGitAllowed(), lazygit: await read($, lazygit), now: at },
-        { toggleLazygit: () => enqueue({ kind: 'lazygit-toggle' }) },
+        { edits: await read($, edits), git: await read($, git), home, isGitAllowed: isGitAllowed(), lazygit: await read($, lazygit), now: at },
+        {
+          preview: (path, area) => enqueue({ area, kind: 'git-preview', path }),
+          refreshGit: () => enqueueGit(),
+          toggleLazygit: () => enqueue({ kind: 'lazygit-toggle' }),
+        },
         columns,
       )
     case 'timeline':
@@ -1939,23 +2059,22 @@ const renderTab = async ($: Dollar, kit: Kit, active: DeckTab, columns: number, 
         { refresh: () => enqueue({ kind: 'workflow' }) },
         columns,
       )
-    case 'recall': {
-      const list = pairs(await $.session.messages().catch(() => []))
-      const wanted = await read($, query)
-
-      return recallTab(
+    case 'decisions':
+      return decisionsTab(
         kit,
-        { hits: search(list, wanted), openId: await read($, openId), query: wanted, total: list.length },
         {
-          open: id => void update($, openId, () => id),
-          search: value => {
-            void update($, query, () => value)
-            void update($, openId, () => '')
-          },
+          agents: await read($, agents),
+          forkLayer: await read($, forkLayer),
+          now: at,
+          openId: await read($, openId),
+          picks: await read($, picks),
+        },
+        {
+          refresh: () => enqueue({ kind: 'fork-status' }),
+          toggle: id => void update($, openId, current => (current === id ? '' : id)),
         },
         columns,
       )
-    }
     case 'settings': {
       const flow = await read($, workflow)
       const realm = realmNow()
@@ -1991,8 +2110,7 @@ const renderDeck = async ($: Dollar, elements: KitElements, columns: number, isB
   const active = await read($, tab)
   const kit: Kit = {
     ...elements,
-    // The Recall tab reads the transcript on every draw, so the animation clock leaves it alone.
-    frame: active === 'recall' ? 0 : await read($, frame),
+    frame: await read($, frame),
     icon: iconsOf(prefs.icons),
     iconSet: prefs.icons,
     isAnimated: prefs.isAnimated,
@@ -2088,6 +2206,7 @@ export const register: Register = (on, options) => {
       $.clock.every(20_000, () => void pollCrons($)),
       $.clock.every(4000, () => enqueue({ kind: 'lazygit-check' })),
       $.clock.every(PR_POLL_MS, () => void pollPrs($)),
+      $.clock.every(GIT_POLL_MS, () => void pollGit($)),
       $.clock.every(WATCH_SYNC_MS, () => enqueue({ kind: 'review-watch' })),
     ]
     await $.command.register({
@@ -2106,7 +2225,13 @@ export const register: Register = (on, options) => {
     const keep = readKeepAwake(await $.store.get(KEEP_AWAKE_KEY).catch(() => undefined))
 
     await update($, keepAwake, () => keep)
+
+    const storedFolds = await $.store.get(FOLDS_KEY).catch(() => undefined)
+    const savedFolds = Object.entries(typeof storedFolds === 'object' && storedFolds !== null ? storedFolds : {})
+
+    await update($, folds, () => ({ ...DEFAULT_FOLDS, ...Object.fromEntries(savedFolds.filter(([, value]) => typeof value === 'boolean')) }))
     enqueue({ kind: 'script' })
+    enqueue({ kind: 'fork-status' })
     enqueue({ kind: 'about' })
     enqueue({ kind: 'model' })
     enqueue({ kind: 'workflow' })
@@ -2144,6 +2269,17 @@ export const register: Register = (on, options) => {
     }
 
     return next(e)
+  }).catch(($, e, next) => next(e))
+
+  // The decisions-on and -off commands change the switch file the status reads.
+  on('command.run', async ($, e, next) => {
+    const ran = await next(e)
+
+    if (/decisions-(?:on|off)$/.test(e.command)) {
+      enqueue({ kind: 'fork-status' })
+    }
+
+    return ran
   }).catch(($, e, next) => next(e))
 
   on('command.run', { command: COMMAND }, async ($, e) => {
@@ -2338,9 +2474,10 @@ export const register: Register = (on, options) => {
     // The deck's own hire and reload come back through here; the job that made them records them.
     const isOwn = next.origin.plugin === PLUGIN
     const request = `${e.description}\n\n${e.prompt}`
-    const decision =
-      !isOwn && mayApply(config.jevMode, e.subagentType, e.model) ? await decide($, request, 'agent-spawn') : null
-    const started = await next(decision === null ? e : { ...e, model: roster[decision.tier] })
+    const call = !isOwn && mayApply(config.jevMode, e.subagentType, e.model) ? await forkCall($) : null
+    const asked = call === null ? null : await decide($, call.argv, request, 'agent-spawn')
+    const choice = asked === null || asked.decision === null ? undefined : roster[asked.decision.tier]
+    const started = await next(choice === undefined ? e : { ...e, model: choice })
 
     if (started.deny !== undefined || started.agentId === undefined) {
       return started
@@ -2378,8 +2515,10 @@ export const register: Register = (on, options) => {
       await startConsult($, { at, id: agentId, source: 'agent', ...(turnId === undefined ? {} : { turnId }) })
     }
     await addComm($, { at, from: e.parentAgentId ?? 'coordinator', kind: 'dispatch', text: tail(e.description), to: agentId })
-    if (decision !== null) {
-      await addPick($, agentPick(decision, { agentId, at, model: started.model, subject }, true))
+    if (call !== null && asked !== null) {
+      const ask = decidingPick({ ...call.shown, actual: started.model, agentId, at, id: `agent-${agentId}`, scope: 'agent', subject, trigger: 'spawn-apply' })
+
+      await addPick($, { ...settledPick(ask, asked, roster, (await read($, forkLayer))?.ladder ?? []), isApplied: choice !== undefined })
     } else if (config.jevMode !== 'off') {
       enqueue({ agentId, at, kind: 'decide-agent', model: started.model, request, subject })
     }
@@ -2519,11 +2658,18 @@ export const register: Register = (on, options) => {
     if (delta !== null) {
       await update($, edits, list => mergeEdit(list, delta, endedAt, isNew))
       enqueue({ kind: 'workflow' })
+      enqueueGit()
     }
     if (tool === 'Bash') {
       const command = String(field(e, 'command') ?? '')
       const post = reviewPostOf(command)
 
+      if (isForkSwitch(command)) {
+        enqueue({ kind: 'fork-status' })
+      }
+      if (isGitChange(command)) {
+        enqueueGit()
+      }
       if (post !== null) {
         await noteReview($, post, e.agentId ?? 'coordinator')
       } else if (isPrChange(command)) {

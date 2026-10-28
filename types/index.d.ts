@@ -6,7 +6,7 @@ export type DeckTab =
   | 'changes'
   | 'timeline'
   | 'workflow'
-  | 'recall'
+  | 'decisions'
   | 'settings'
 
 export type DeckStep = {
@@ -171,22 +171,103 @@ export type KeepAwake = 'off' | 'while-working' | 'always'
 
 export type DeckAwake = { isHeld: boolean; how?: string; reason?: string }
 
+// A value from an earlier deck version lacks `status`, `trigger` and `decisionType`: read them as
+// 'decided', 'prompt' for scope 'main' else 'spawn', and 'tier-selection'.
+export type DeckPickStatus = 'deciding' | 'decided' | 'failed' | 'skipped'
+
+// One fork the deck asked the fork layer. Fields past `at` fill in as the process returns.
 export type DeckPick = {
+  // `turn-<turnId>` or `agent-<agentId>`.
   id: string
   scope: 'main' | 'agent'
+  // The prompt, or `<type>: <description>`.
   subject: string
+  at: number
+  status: DeckPickStatus
+  // The process's wall time.
+  ms?: number
+  // Exit code and first stderr line, "parse failed", or "script not found".
+  error?: string
+  // 'jevMode off' or 'empty request'.
+  skippedWhy?: string
+  trigger: 'prompt' | 'spawn' | 'spawn-apply'
+  decisionType: string
+  // The argv joined, for the detail view.
+  command?: string
+  // The history path, or 'off'.
+  history?: string
   tier: string
+  // The roster's model for the tier.
   recommended: string
+  role?: string
   actual?: string
   backend: string
+  fork?: 'sharp' | 'split'
   confidence: number
+  probabilities?: Record<string, number>
+  rationale?: string
+  // The engine's "; "-joined reasons, as received.
+  fallbackReason?: string
+  ladder?: DeckLadderStep[]
+  signals?: { complex: string[]; mechanical: string[]; flags: string[]; pattern?: boolean; tierMismatch?: boolean }
+  // outputs.model_contract_change.noul
+  contractChange?: number
+  alternatives?: { action: string; reason: string }[]
+  requiredEvidence?: string[]
+  risks?: string[]
   decisionId?: string
   agentId?: string
   turnId?: string
   isApplied: boolean
   result?: string
   usd?: number | null
-  at: number
+  outcomeRecorded?: boolean
+}
+
+// One rung of the ladder as it played for this fork.
+export type DeckLadderStep = { tier: string; outcome: 'answered' | 'rejected' | 'unavailable' | 'skipped' | 'agreed'; note?: string }
+
+// `decisions status` as the deck read it, plus the deck's own mode.
+export type DeckForkLayer = {
+  readAt: number
+  // The jevMode option: off, suggest or apply.
+  mode: string
+  // The script path found; absent when none was.
+  script?: string
+  enabled?: boolean
+  config?: string
+  // e.g. ['deterministic', 'jev', 'cloudflare:clef-flash', 'ollama:clef-flash']
+  ladder: string[]
+  jev?: { enabled: boolean; hasKey: boolean; refused?: string }
+  cloudflare?: { enabled: boolean; hasToken: boolean; hasAccount: boolean; used?: number; cap?: number; hint?: string }
+  ollama?: { model?: string; reachable?: boolean; missing?: boolean | null; hint?: string }
+  forks?: { forks: number; sharp: number; split: number }
+  error?: string
+}
+
+// The repo's working tree, read inside the realm only. Paths are relative to the repo root.
+export type DeckGitFile = {
+  path: string
+  area: 'staged' | 'unstaged' | 'untracked' | 'conflict'
+  // M A D R C U ? and the like; one letter shows.
+  code: string
+  added?: number
+  removed?: number
+  // The rename source.
+  from?: string
+}
+
+export type DeckGit = {
+  readAt: number
+  state: 'off' | 'out-of-realm' | 'ok' | 'error' | 'loading'
+  reason?: string
+  branch?: string
+  upstream?: string
+  ahead?: number
+  behind?: number
+  head?: { sha: string; subject: string; age?: string }
+  files: DeckGitFile[]
+  preview?: { path: string; area: DeckGitFile['area']; lines: string[]; isTruncated: boolean }
 }
 
 export type DeckSkill = { skill: string; at: number; agentId?: string }
@@ -369,7 +450,6 @@ declare module 'claude-code' {
       usage: DeckUsage | null
       lazygit: DeckLazygit
       frame: number
-      query: string
       openId: string
       settings: DeckSettings
       activity: Record<string, DeckActivity>
@@ -386,6 +466,10 @@ declare module 'claude-code' {
       loopPrompt: string
       loopInterval: string
       reviewWatch: DeckReviewWatch | null
+      forkLayer: DeckForkLayer | null
+      git: DeckGit | null
+      // Section id → true while folded.
+      folds: Record<string, boolean>
     }
   }
 }

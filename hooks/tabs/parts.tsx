@@ -1,10 +1,12 @@
-import { bar, clockTime, fit } from '../lib/format'
+import { bar, clockTime, duration, fit } from '../lib/format'
+import { backendLabel, pickStatus, pickTrigger } from '../lib/jev'
 import { bars, commLabel, sparkline } from '../lib/org'
+import { modelLabel } from '../lib/pricing'
 import { cells, padEnd, spinner } from '../lib/theme'
 
 import type { Elements, RenderElement } from 'claude-code'
 import type { IconName, IconSet, Palette } from '../lib/theme'
-import type { DeckActivity, DeckAgent, DeckComm, DeckIcons } from '../../types'
+import type { DeckActivity, DeckAgent, DeckComm, DeckIcons, DeckPick } from '../../types'
 
 // The elements every tab draws with; the terminal and desktop tables both carry them.
 export type KitElements = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button' | 'Input' | 'Select'>
@@ -23,12 +25,13 @@ export const glyph = (kit: Kit, name: IconName): string => `${kit.icon[name]} `
 export const pulse = (kit: Kit, isLive: boolean, still: string): string =>
   isLive && kit.isAnimated ? spinner(kit.iconSet, kit.frame) : still
 
+const headUsed = (title: string, right: string): number => cells(`── ${title}  `) + (right === '' ? 0 : cells(`${right} ─`))
+
 // "── Title ─────────── right ─", the width of the pane body.
 export const Section = (kit: Kit, title: string, columns: number, right = ''): RenderElement => {
   const { Box, Text, theme } = kit
   const shownRight = fit(right, Math.max(0, columns - cells(title) - 8))
-  const used = cells(title) + cells(shownRight) + 6
-  const rule = '─'.repeat(Math.max(1, columns - used))
+  const rule = '─'.repeat(Math.max(1, columns - headUsed(title, shownRight)))
 
   return (
     <Box marginTop={1}>
@@ -36,6 +39,32 @@ export const Section = (kit: Kit, title: string, columns: number, right = ''): R
       <Text bold color={theme.accent}>
         {title}
       </Text>
+      <Text color={theme.muted}> {rule} </Text>
+      <Text dimColor>{shownRight}</Text>
+      <Text color={theme.muted}>{shownRight === '' ? '' : ' ─'}</Text>
+    </Box>
+  )
+}
+
+export type FoldHead = { id: string; title: string; right?: string; isFolded: boolean; onToggle: () => void }
+
+const FOLD_MARKS: Readonly<Record<DeckIcons, { open: string; folded: string }>> = {
+  ascii: { folded: '>', open: 'v' },
+  emoji: { folded: '▸', open: '▾' },
+  unicode: { folded: '▸', open: '▾' },
+}
+
+export const Fold = (kit: Kit, fold: FoldHead, columns: number): RenderElement => {
+  const { Box, Button, Text, theme } = kit
+  const marks = FOLD_MARKS[kit.iconSet]
+  const label = `${fold.isFolded ? marks.folded : marks.open} ${fold.title}`
+  const shownRight = fit(fold.right ?? '', Math.max(0, columns - cells(label) - 8))
+  const rule = '─'.repeat(Math.max(1, columns - headUsed(label, shownRight)))
+
+  return (
+    <Box key={`fold-head-${fold.id}`} marginTop={1}>
+      <Text color={theme.muted}>── </Text>
+      <Button key={`fold-${fold.id}`} plain label={label} onPress={() => fold.onToggle()} />
       <Text color={theme.muted}> {rule} </Text>
       <Text dimColor>{shownRight}</Text>
       <Text color={theme.muted}>{shownRight === '' ? '' : ' ─'}</Text>
@@ -189,6 +218,96 @@ export const CommRow = (kit: Kit, comm: DeckComm, agents: readonly DeckAgent[], 
       <Text>{fit(comm.text, Math.max(0, columns - cells(lead)))}</Text>
     </Text>
   )
+}
+
+const TRIGGER_MARKS: Readonly<Record<DeckIcons, Readonly<Record<DeckPick['trigger'], string>>>> = {
+  ascii: { prompt: '>', spawn: '+', 'spawn-apply': '+' },
+  emoji: { prompt: '⌨', spawn: '◇', 'spawn-apply': '◆' },
+  unicode: { prompt: '⌨', spawn: '◇', 'spawn-apply': '◆' },
+}
+
+const confidenceText = (confidence: number): string => {
+  const text = confidence.toFixed(2)
+
+  return text.startsWith('0') ? text.slice(1) : text
+}
+
+const PICK_INDENT = '   '
+
+// fit() collapses runs of spaces, so the indent stays outside it.
+const pickResult = (kit: Kit, pick: DeckPick, columns: number): RenderElement => {
+  const { Text, theme } = kit
+  const key = `fork-${pick.id}-result`
+  const room = Math.max(0, columns - PICK_INDENT.length)
+  const took = pick.ms === undefined ? '' : duration(pick.ms)
+  const status = pickStatus(pick)
+
+  if (status === 'deciding') {
+    return (
+      <Text key={key} color={theme.warn}>
+        {PICK_INDENT}
+        {fit(`${pulse(kit, true, kit.icon.wait)} asking the fork layer…`, room)}
+      </Text>
+    )
+  }
+  if (status === 'failed') {
+    return (
+      <Text key={key} color={theme.bad}>
+        {PICK_INDENT}
+        {fit([`${kit.icon.fail} failed: ${pick.error ?? 'no reason given'}`, took].filter(part => part !== '').join(' · '), room)}
+      </Text>
+    )
+  }
+  if (status === 'skipped') {
+    return (
+      <Text key={key} dimColor>
+        {PICK_INDENT}
+        {fit(`skipped: ${pick.skippedWhy ?? 'no reason given'}`, room)}
+      </Text>
+    )
+  }
+
+  const model = modelLabel(pick.recommended)
+  const lead = `${PICK_INDENT}${pick.tier} ▸ ${model} · `
+  const rest = [confidenceText(pick.confidence), backendLabel(pick.backend), pick.fork ?? '', took, pick.isApplied ? 'applied' : '']
+    .filter(part => part !== '')
+    .join(' · ')
+
+  return (
+    <Text key={key}>
+      <Text>{PICK_INDENT}</Text>
+      <Text color={theme.accent}>{pick.tier}</Text>
+      <Text color={theme.muted}> ▸ </Text>
+      <Text color={theme.model}>{model}</Text>
+      <Text dimColor> · </Text>
+      <Text dimColor>{fit(rest, Math.max(0, columns - cells(lead)))}</Text>
+    </Text>
+  )
+}
+
+const pickSubject = (kit: Kit, pick: DeckPick, agents: readonly DeckAgent[], columns: number): string => {
+  const lead = fit(`${clockTime(pick.at).slice(0, 5)} ${TRIGGER_MARKS[kit.iconSet][pickTrigger(pick)]} ${pick.subject}`, columns)
+  const nickname = pick.agentId === undefined ? undefined : agents.find(agent => agent.agentId === pick.agentId)?.nickname
+  const named = `${lead} · ${nickname ?? ''}`
+
+  return nickname === undefined || cells(named) > columns ? lead : named
+}
+
+export type PickRowsOptions = { agents?: readonly DeckAgent[]; onPress?: () => void }
+
+export const PickRows = (kit: Kit, pick: DeckPick, columns: number, options: PickRowsOptions = {}): RenderElement[] => {
+  const { Button, Text } = kit
+  const { onPress } = options
+  const subject = pickSubject(kit, pick, options.agents ?? [], columns)
+
+  return [
+    onPress === undefined ? (
+      <Text key={`fork-${pick.id}-subject`}>{subject}</Text>
+    ) : (
+      <Button key={`pick-${pick.id}`} plain label={subject} onPress={() => onPress()} />
+    ),
+    pickResult(kit, pick, columns),
+  ]
 }
 
 export type HeaderSegment = { key: string; icon: IconName; text: string; color: string }

@@ -10,7 +10,7 @@ playbook, one role phase per slice, stopping at merge-ready.
 `vistack` is the identifier you install and invoke. **viStack** is what it is called in
 prose. Same thing. It runs on Claude Code, Codex, Grok Build, and OpenCode.
 
-**Version:** `0.29.0`
+**Version:** `0.30.0`
 
 **Contents:** [install](#install) · [usage](#usage) ·
 [QA evidence: screenshots and video](#qa-evidence-screenshots-and-video) ·
@@ -487,13 +487,16 @@ The lifecycle skill provides the same controls through `vistack:visualizer on`, 
 ### Deck: an in-session pane (Claude Code)
 
 viStack ships a Claude Code mod: a docked pane with nine tabs (Board, Agents, Cost, Session,
-Changes, Timeline, Flow, Recall, Settings). It shows what waits on you, each subagent with its model,
-tokens, and cost, cost per model and per execution, context and rate limits, the files
-edited, where a turn's time went, viStack run state and worktrees, and a search over the
-session's prompts. The Board also lists background shells, watches, agents, and `/loop`
-wakeups by state, with Stop, Cancel, and Relaunch buttons and a New loop form. `/deck` opens
-it, `/deck <tab>` jumps to a tab, `1` to `9` switch tabs in the pane, and `g` opens lazygit
-beside the session.
+Changes, Timeline, Flow, Decisions, Settings). It shows what waits on you, each subagent with its
+model, tokens, and cost, cost per model and per execution, context and rate limits, where a
+turn's time went, and viStack run state and worktrees. Decisions shows the fork layer: its
+ladder and readiness, and for every fork the deck asked, when, with what, which tier answered,
+and the model chosen. Changes shows the working tree like lazygit's Files panel (branch,
+staged, unstaged, and untracked files with lines added and removed, and a diff preview),
+read-only and inside your realm. The Board also folds in background shells, watches, agents, and
+`/loop` wakeups by state, with Stop, Cancel, and Relaunch buttons and a New loop form. `/deck`
+opens it, `/deck <tab>` jumps to a tab, `1` to `9` switch tabs in the pane, and `g` opens
+lazygit beside the session.
 
 It loads with the plugin: after an install or update, run `/reload-plugins`. PR listing and
 lazygit stay off until you set your realm:
@@ -502,7 +505,7 @@ lazygit stay off until you set your realm:
 { "pluginConfigs": { "vistack": { "options": { "realm": "github.com/your-org" } } } }
 ```
 
-See [`docs/guide/deck.md`](docs/guide/deck.md) for the tabs, options, model suggestions, and
+See [`docs/guide/deck.md`](docs/guide/deck.md) for the tabs, options, decisions, and
 what the deck reads and runs.
 
 ### Review watch

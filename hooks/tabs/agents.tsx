@@ -1,6 +1,7 @@
 import { adviceHead } from '../lib/advisor'
 import { face, isLive } from '../lib/crew'
 import { ago, basename, duration, fit, tokens, usd } from '../lib/format'
+import { pickStatus } from '../lib/jev'
 import { addUp } from '../lib/ledger'
 import {
   STATE_LABELS,
@@ -138,25 +139,21 @@ const lastComm = (data: AgentsData, parties: readonly string[]): DeckComm | unde
 const commText = (kit: Kit, comm: DeckComm | undefined): string =>
   comm === undefined ? '' : `${kit.icon[COMM_ICON[comm.kind]]} ${comm.kind}: ${comm.text}`
 
-const youCard = (kit: Kit, data: AgentsData, columns: number): RenderElement => {
-  const { Box, Text, theme } = kit
-  const inner = Math.max(8, columns - 4)
+const youLine = (kit: Kit, data: AgentsData, columns: number): RenderElement => {
+  const { Text, theme } = kit
+  const owner = `${glyph(kit, 'user')}You · Owner`
+  const asks = ` · asks ${data.turns.length} · `
   const prompt = [...data.turns].reverse().find(turn => turn.text.trim() !== '')
+  const room = Math.max(0, columns - cells(owner) - cells(asks))
 
   return (
-    <Box key="org-you" flexDirection="column" borderStyle="round" borderColor={theme.user} paddingX={1} width={columns}>
-      <Box justifyContent="space-between">
-        <Text bold color={theme.user}>
-          {`${glyph(kit, 'user')}You · Owner`}
-        </Text>
-        <Text dimColor>{`asks ${data.turns.length}`}</Text>
-      </Box>
-      {prompt === undefined ? (
-        <Text dimColor>No prompt yet.</Text>
-      ) : (
-        <Text>{fit(`“${prompt.text}”`, inner)}</Text>
-      )}
-    </Box>
+    <Text key="org-you">
+      <Text bold color={theme.user}>
+        {owner}
+      </Text>
+      <Text dimColor>{asks}</Text>
+      {prompt === undefined ? <Text dimColor>{fit('no prompt yet', room)}</Text> : <Text>{fit(`“${prompt.text}”`, room)}</Text>}
+    </Text>
   )
 }
 
@@ -192,7 +189,6 @@ const coordinatorCard = (kit: Kit, data: AgentsData, actions: AgentsActions, col
   const since = status.state === 'idle' ? '' : ` (${duration(data.now - status.since)})`
   const isSelected = data.selected === 'coordinator'
   const chip = `${pulse(kit, isBusy, kit.icon.coordinator)} ${STATE_LABELS[status.state]}`
-  const said = commText(kit, [...data.comms].reverse().find(comm => comm.from === 'coordinator'))
   const modelText = data.model === '' ? 'model ?' : modelLabel(data.model)
 
   return (
@@ -213,7 +209,6 @@ const coordinatorCard = (kit: Kit, data: AgentsData, actions: AgentsActions, col
         <Text color={theme.coordinator}>now: </Text>
         <Text>{fit(`${now}${since}`, Math.max(0, inner - 5))}</Text>
       </Text>
-      {said !== '' && <Text dimColor>{fit(said, inner)}</Text>}
       {writes.length === 0 ? (
         <Text color={theme.good}>{`${glyph(kit, 'ok')}delegates only`}</Text>
       ) : (
@@ -332,7 +327,7 @@ const expanded = (
         <Text color={theme.warn}>{fit('Prompt unknown: found by the agent list, so Hire and Reload are off.', width * 2)}</Text>
       )}
       {answerTail !== '' && <Text dimColor>{fit(`${glyph(kit, 'report')}${answerTail}`, width * 2)}</Text>}
-      {pick !== undefined && (
+      {pick !== undefined && pickStatus(pick) === 'decided' && (
         <Text color={isMatch ? theme.muted : theme.warn}>
           {fit(
             `jev ${pick.tier} → ${modelLabel(pick.recommended)} (${pick.confidence.toFixed(2)}, ${pick.backend})${
@@ -390,19 +385,23 @@ const advisorSeat = (kit: Kit, data: AgentsData, actions: AgentsActions, members
   const detail = last === undefined ? '' : consultDetail(last)
   const status = isAdvising ? `${pulse(kit, true, kit.icon.advisor)} advising` : 'on call'
   const isSelected = data.selected === 'advisor'
+  const meta = `consults ${consults.length}${last === undefined ? '' : ` · ${ago(last.at, data.now)}`}`
+  const titleRoom = Math.max(4, inner - cells(status) - 3)
+  const title = `${glyph(kit, 'advisor')}Advisor · Board advisor`
+  const label = cells(title) + cells(meta) + 3 <= titleRoom ? title : `${glyph(kit, 'advisor')}Advisor`
 
   return (
     <Box key="org-advisor" flexDirection="column" borderStyle="round" borderColor={theme.advisor} paddingX={1} marginLeft={2} width={width}>
       <Box justifyContent="space-between">
-        <Button
-          key="sel-advisor"
-          plain
-          label={fit(`${glyph(kit, 'advisor')}Advisor · Board advisor`, Math.max(8, inner - cells(status) - 3))}
-          onPress={() => actions.select('advisor')}
-        />
+        <Box>
+          <Button key="sel-advisor" plain label={fit(label, titleRoom)} onPress={() => actions.select('advisor')} />
+          <Text dimColor>
+            {' · '}
+            {fit(meta, Math.max(0, titleRoom - cells(label) - 3))}
+          </Text>
+        </Box>
         {Chip(kit, status, isAdvising ? theme.advisor : theme.muted)}
       </Box>
-      <Text dimColor>{fit(`consults ${consults.length}${last === undefined ? '' : ` · last ${ago(last.at, data.now)}`}`, inner)}</Text>
       {detail !== '' && <Text dimColor>{fit(detail, inner)}</Text>}
       {last !== undefined && consultOutcome(kit, last, inner)}
       {members.flatMap((node, index) => memberRows(kit, data, actions, node, '', index === members.length - 1, inner))}
@@ -425,7 +424,7 @@ export const agentsTab = (kit: Kit, data: AgentsData, actions: AgentsActions, co
 
   return (
     <Box flexDirection="column">
-      {youCard(kit, data, columns)}
+      {youLine(kit, data, columns)}
       {connector(kit, data, isBusy, columns)}
       {coordinatorCard(kit, data, actions, columns)}
       {advisorSeat(kit, data, actions, org.advisors, columns)}

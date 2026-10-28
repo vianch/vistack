@@ -1,8 +1,9 @@
 import { duration, fit, percent, tokens, until } from '../lib/format'
 import { toolCounts } from '../lib/charts'
+import { histogram } from '../lib/org'
 import { modelLabel } from '../lib/pricing'
 import { padEnd, padStart, spinner } from '../lib/theme'
-import { Bars, Empty, Meter, Section, Tile } from './parts'
+import { Bars, Empty, Meter, Section, Spark, Tile, glyph } from './parts'
 
 import type { RenderElement } from 'claude-code'
 import type { Kit } from './parts'
@@ -17,6 +18,34 @@ export type SessionData = {
 }
 
 const LIMIT_LABEL: Readonly<Record<string, string>> = { five_hour: '5h', seven_day: '7d', spend_limit: '$' }
+
+const ACTIVITY_BUCKETS = 30
+const MINUTE = 60_000
+
+const activity = (kit: Kit, data: SessionData, columns: number): RenderElement[] => {
+  const { Box, Text, theme } = kit
+  const width = Math.min(ACTIVITY_BUCKETS, Math.max(8, columns - 16))
+  const counts = histogram(
+    data.tools.map(tool => tool.startedAt),
+    data.now,
+    width,
+    MINUTE,
+  )
+  const top = Math.max(0, ...counts)
+  const low = Math.min(...counts, top)
+
+  return [
+    Section(kit, `${glyph(kit, 'chart')}Activity`, columns, 'tool calls / min'),
+    <Box key="spark" columnGap={2} width={columns}>
+      {Spark(kit, counts, width, theme.tool)}
+      <Text dimColor>{fit(`min ${low} · max ${top} per min`, Math.max(0, columns - width - 2))}</Text>
+    </Box>,
+    <Box key="spark-axis" justifyContent="space-between" width={Math.min(columns, width)}>
+      <Text dimColor>{`${width}m ago`}</Text>
+      <Text dimColor>now</Text>
+    </Box>,
+  ]
+}
 
 export const sessionTab = (kit: Kit, data: SessionData, columns: number): RenderElement => {
   const { Box, Text, theme } = kit
@@ -86,6 +115,7 @@ export const sessionTab = (kit: Kit, data: SessionData, columns: number): Render
           })),
           columns,
         )}
+      {activity(kit, data, columns)}
       {Section(kit, 'Tools', columns, String(data.tools.length))}
       {recentTools.length === 0 && Empty(kit, 'No tool call yet.')}
       {recentTools.map(tool => {

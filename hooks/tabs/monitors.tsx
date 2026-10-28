@@ -3,7 +3,7 @@ import { ago, duration, fit } from '../lib/format'
 import { NO_END_REPORT, isLongRunning, isOpen, sortMonitors, stopAllCalls, stopCall } from '../lib/monitors'
 import { LOOP_INTERVALS, loopArgs, relaunchPlan } from '../lib/relaunch'
 import { cells } from '../lib/theme'
-import { Chip, Empty, Section, pulse } from './parts'
+import { Chip, Empty, Fold, Section, pulse } from './parts'
 
 import type { RenderElement } from 'claude-code'
 import type { Kit } from './parts'
@@ -23,6 +23,9 @@ export type MonitorsSectionData = {
   selected: string
   confirm: string
   now: number
+  hasHeader?: boolean
+  // Fold id → true while folded; read only when the actions carry `fold`.
+  folds?: Readonly<Record<string, boolean>>
 }
 
 export type MonitorAction = 'stop' | 'cancel' | 'relaunch' | 'stop-all'
@@ -35,11 +38,16 @@ export type MonitorsSectionActions = {
   createLoop?: (args: string) => void
   setLoop?: (draft: LoopDraft) => void
   relaunch?: (id: string) => void
+  fold?: (id: string) => void
 }
 
 export const STOP_ALL_ID = 'monitors'
 
 const FINISHED_SHOWN = 10
+
+const ENDED_FOLD = 'monitors-ended'
+
+const LOOP_FORM_FOLD = 'loop-form'
 
 type Glyph = DeckMonitorKind | 'long' | 'awake' | 'asleep' | 'cancel'
 
@@ -93,6 +101,15 @@ const HOTKEY: Readonly<Record<MonitorAction, string>> = { cancel: 'c', relaunch:
 const mark = (kit: Kit, name: Glyph): string => GLYPHS[kit.iconSet][name]
 
 export const selectKey = (id: string): string => `monitor:${id}`
+
+export const monitorCounts = (monitors: readonly DeckMonitor[]): string =>
+  `${monitors.filter(monitor => monitor.status === 'running').length} running · ${monitors.filter(monitor => monitor.status === 'active').length} active`
+
+const foldState = (data: MonitorsSectionData, actions: MonitorsSectionActions, id: string): { isFolded: boolean; onToggle: () => void } | null => {
+  const { fold } = actions
+
+  return fold === undefined ? null : { isFolded: data.folds?.[id] === true, onToggle: () => fold(id) }
+}
 
 const awakeChip = (kit: Kit, awake: DeckAwake, keepAwake: KeepAwake): RenderElement => {
   const { theme } = kit
@@ -171,10 +188,7 @@ const newLoopForm = (kit: Kit, data: MonitorsSectionData, actions: MonitorsSecti
     }
   }
 
-  return [
-    <Text key="mon-loop-title" bold>
-      {fit(`${kit.icon.new} New loop`, columns)}
-    </Text>,
+  const fields = [
     <Select
       key="mon-loop-interval"
       label="Every "
@@ -195,6 +209,18 @@ const newLoopForm = (kit: Kit, data: MonitorsSectionData, actions: MonitorsSecti
       <Button key="mon-loop-run" plain label={`${kit.icon.live} Run`} onPress={() => run(draft.prompt)} />
     </Box>,
   ]
+  const state = foldState(data, actions, LOOP_FORM_FOLD)
+
+  if (state === null) {
+    return [
+      <Text key="mon-loop-title" bold>
+        {fit(`${kit.icon.new} New loop`, columns)}
+      </Text>,
+      ...fields,
+    ]
+  }
+
+  return [Fold(kit, { id: LOOP_FORM_FOLD, title: 'New loop', ...state }, columns), ...(state.isFolded ? [] : fields)]
 }
 
 // The one action a row offers: Stop for running work, Cancel for active work, Relaunch for ended work.
@@ -343,6 +369,30 @@ const monitorRow = (kit: Kit, data: MonitorsSectionData, actions: MonitorsSectio
   ]
 }
 
+const endedBlock = (kit: Kit, data: MonitorsSectionData, actions: MonitorsSectionActions, ended: readonly DeckMonitor[], columns: number): RenderElement[] => {
+  const state = foldState(data, actions, ENDED_FOLD)
+  const rows = (shown: readonly DeckMonitor[]): RenderElement[] => shown.flatMap(monitor => monitorRow(kit, data, actions, monitor, columns))
+  const body = [...(ended.length === 0 ? [Empty(kit, 'Nothing has ended yet.')] : []), ...rows(ended.slice(0, FINISHED_SHOWN))]
+  const pinned = ended.filter(monitor => data.selected === selectKey(monitor.id))
+
+  if (state === null) {
+    return [Section(kit, `${kit.icon.ok} ${ended.length > FINISHED_SHOWN ? `Ended (last ${FINISHED_SHOWN})` : 'Ended'}`, columns, String(ended.length)), ...body]
+  }
+
+  const head = Fold(
+    kit,
+    {
+      id: ENDED_FOLD,
+      right: !state.isFolded && ended.length > FINISHED_SHOWN ? `last ${FINISHED_SHOWN}` : '',
+      title: state.isFolded ? `show ended (${ended.length})` : `Ended (${ended.length})`,
+      ...state,
+    },
+    columns,
+  )
+
+  return [head, ...(state.isFolded ? rows(pinned) : body)]
+}
+
 // The Board's Monitors section: keep-awake, a New loop form, then the rows by state.
 export const monitorsSection = (kit: Kit, data: MonitorsSectionData, actions: MonitorsSectionActions, columns: number): RenderElement => {
   const { Box, Button, Text } = kit
@@ -350,12 +400,11 @@ export const monitorsSection = (kit: Kit, data: MonitorsSectionData, actions: Mo
   const running = sorted.filter(monitor => monitor.status === 'running')
   const active = sorted.filter(monitor => monitor.status === 'active')
   const ended = sorted.filter(monitor => !isOpen(monitor))
-  const shownEnded = ended.slice(0, FINISHED_SHOWN)
   const stoppable = stopAllCalls(data.monitors).length
 
   return (
     <Box key="board-monitors" flexDirection="column" width={columns}>
-      {Section(kit, `${mark(kit, 'monitor')} Monitors`, columns, `${running.length} running · ${active.length} active`)}
+      {data.hasHeader !== false && Section(kit, `${mark(kit, 'monitor')} Monitors`, columns, monitorCounts(sorted))}
       {keepAwakeControls(kit, data, actions, columns)}
       {newLoopForm(kit, data, actions, columns)}
       {Section(kit, `${mark(kit, 'monitor')} Running`, columns, String(running.length))}
@@ -364,9 +413,7 @@ export const monitorsSection = (kit: Kit, data: MonitorsSectionData, actions: Mo
       {Section(kit, `${mark(kit, 'wakeup')} Active`, columns, String(active.length))}
       {active.length === 0 && Empty(kit, 'No wakeup or cron is waiting.')}
       {active.flatMap(monitor => monitorRow(kit, data, actions, monitor, columns))}
-      {Section(kit, `${kit.icon.ok} ${ended.length > FINISHED_SHOWN ? `Ended (last ${FINISHED_SHOWN})` : 'Ended'}`, columns, String(ended.length))}
-      {ended.length === 0 && Empty(kit, 'Nothing has ended yet.')}
-      {shownEnded.flatMap(monitor => monitorRow(kit, data, actions, monitor, columns))}
+      {endedBlock(kit, data, actions, ended, columns)}
       <Box key="mon-footer" flexDirection="row" columnGap={2} marginTop={1}>
         <Button key="mon-refresh" plain hotkey="r" label={`${kit.icon.refresh} Refresh`} onPress={() => actions.refresh()} />
         {stoppable === 0 ? (

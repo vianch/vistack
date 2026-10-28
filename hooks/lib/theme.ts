@@ -234,7 +234,7 @@ export type IconName =
   | 'tab-changes'
   | 'tab-timeline'
   | 'tab-workflow'
-  | 'tab-recall'
+  | 'tab-decisions'
   | 'tab-settings'
 
 export type IconSet = Readonly<Record<IconName, string>>
@@ -283,7 +283,7 @@ const EMOJI: IconSet = {
   'tab-board': '📋',
   'tab-changes': '📝',
   'tab-cost': '💰',
-  'tab-recall': '🔎',
+  'tab-decisions': '🎛️',
   'tab-session': '🧠',
   'tab-settings': '🎨',
   'tab-timeline': '🕒',
@@ -340,7 +340,7 @@ const UNICODE: IconSet = {
   'tab-board': '▤',
   'tab-changes': '±',
   'tab-cost': '¤',
-  'tab-recall': '⌕',
+  'tab-decisions': '⑂',
   'tab-session': '◆',
   'tab-settings': '⚙',
   'tab-timeline': '◷',
@@ -397,7 +397,7 @@ const ASCII: IconSet = {
   'tab-board': '=',
   'tab-changes': '+',
   'tab-cost': '$',
-  'tab-recall': '?',
+  'tab-decisions': 'Y',
   'tab-session': 'm',
   'tab-settings': '*',
   'tab-timeline': 't',

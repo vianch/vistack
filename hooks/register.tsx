@@ -34,6 +34,7 @@ import {
   statusArgs,
 } from './lib/jev'
 import { launchPlan, lazygitMarker, pickLauncher } from './lib/launch'
+import { promptNonSliceOf, skippedPick, spawnNonSliceOf } from './lib/non-slice'
 import {
   addUp,
   editDelta,
@@ -83,6 +84,7 @@ import { effectiveRealm, isInRealm, normalizeRemote, realmParts } from './lib/re
 import { relaunchPlan, withLoopArgs } from './lib/relaunch'
 import { carryWatch, isWatchLoop, parseWatchState, planWatch, watchLoopArgs } from './lib/review-watch'
 import { DEFAULT_SETTINGS, iconsOf, paletteOf, readSettings } from './lib/theme'
+import { historyTallyOf } from './lib/type-overview'
 import { gitdirOf, headBranch, isPrChange, lastLedgerRow, parsePrSearch, parseRun, prSearchArgs } from './lib/workflow'
 import { agentsTab } from './tabs/agents'
 import { WATCH_OFF_CONFIRM, boardTab } from './tabs/board'
@@ -128,6 +130,7 @@ import type {
   DeckForkLayer,
   DeckGit,
   DeckGitFile,
+  DeckHistoryTally,
   DeckLazygit,
   DeckMonitor,
   DeckPick,
@@ -167,7 +170,8 @@ type Job =
   | { kind: 'lazygit-check' }
   | { kind: 'lazygit-toggle' }
   | { kind: 'decide-turn'; turnId: string; text: string; at: number }
-  | { kind: 'decide-agent'; agentId: string; request: string; subject: string; model: string; at: number }
+  | { kind: 'decide-agent'; agentId: string; request: string; subject: string; model: string; at: number; subagentType: string; hasCallerModel: boolean }
+  | { kind: 'fork-history' }
   | { kind: 'settle'; pickId: string; result: string; usd: number | null }
   | { kind: 'kill'; agentId: string }
   | { kind: 'fire'; agentId: string }
@@ -265,6 +269,7 @@ const turns = atom({ plugin: 'vistack', key: 'turns' } as const, [] as DeckTurn[
 const agents = atom({ plugin: 'vistack', key: 'agents' } as const, [] as DeckAgent[])
 const picks = atom({ plugin: 'vistack', key: 'picks' } as const, [] as DeckPick[])
 const historyPicks = atom({ plugin: 'vistack', key: 'historyPicks' } as const, [] as DeckPick[])
+const historyTally = atom({ plugin: 'vistack', key: 'historyTally' } as const, null as DeckHistoryTally | null)
 const forkFilter = atom({ plugin: 'vistack', key: 'forkFilter' } as const, '')
 const skills = atom({ plugin: 'vistack', key: 'skills' } as const, [] as DeckSkill[])
 const todos = atom({ plugin: 'vistack', key: 'todos' } as const, [] as DeckTodo[])
@@ -624,26 +629,55 @@ const recordOutcome = async ($: Dollar, pick: DeckPick): Promise<void> => {
   }
 }
 
+type ForkAsk = Omit<Parameters<typeof decidingPick>[0], 'command' | 'history' | 'mode'>
+
 // The row shows while the script runs; its answer, or why there is none, settles it in place.
-const askFork = async ($: Dollar, ask: Omit<Parameters<typeof decidingPick>[0], 'command' | 'history'>, request: string, source: string): Promise<void> => {
+const askFork = async ($: Dollar, ask: ForkAsk, request: string, source: string): Promise<void> => {
   const call = await forkCall($, ask.decisionType)
 
-  await addPick($, decidingPick({ ...ask, ...call.shown }))
+  await addPick($, decidingPick({ ...ask, ...call.shown, mode: config.jevMode }))
 
   const asked = await decide($, call.argv, request, source, ask.decisionType)
   const ladder = (await read($, forkLayer))?.ladder ?? []
 
   await patchPick($, ask.id, pick => settledPick(pick, asked, roster, ladder))
+  if (call.shown.history !== undefined && call.shown.history !== 'off' && !jobs.some(job => job.kind === 'fork-history')) {
+    enqueue({ kind: 'fork-history' })
+  }
 }
+
+const skipFork = ($: Dollar, ask: ForkAsk, why: string): Promise<void> => addPick($, skippedPick(decidingPick({ ...ask, mode: config.jevMode }), why))
 
 const decideTurn = async ($: Dollar, turnId: string, text: string, at: number): Promise<void> => {
   const firstStep = (await read($, steps)).find(step => step.agentId === undefined && step.turnId === turnId)
   const ask = { at, id: `turn-${turnId}`, scope: 'main' as const, subject: text, trigger: 'prompt' as const, turnId }
+  const why = promptNonSliceOf(text)
 
+  if (why !== undefined) {
+    return skipFork($, ask, why)
+  }
   await askFork($, firstStep === undefined ? ask : { ...ask, actual: firstStep.model }, text, 'main-turn')
   if (isMatchPath(await read($, turns), turnId, text)) {
     await askFork($, { ...ask, decisionType: 'playbook-selection', id: `${ask.id}-playbook` }, text, 'main-turn')
+    await askFork($, { ...ask, decisionType: 'intake-analysis', id: `${ask.id}-intake` }, text, 'main-turn')
   }
+}
+
+const decideAgent = ($: Dollar, job: Extract<Job, { kind: 'decide-agent' }>): Promise<void> => {
+  const { agentId, at, hasCallerModel, model: actual, request, subagentType, subject } = job
+  const ask = { actual, agentId, at, hasCallerModel, id: `agent-${agentId}`, scope: 'agent' as const, subagentType, subject, trigger: 'spawn' as const }
+  const why = spawnNonSliceOf(subagentType)
+
+  return why === undefined ? askFork($, ask, request, 'agent-spawn') : skipFork($, ask, why)
+}
+
+const readHistory = async ($: Dollar): Promise<void> => {
+  const text = await readText($, `${cwd}/.claude/vistack/decision-history.jsonl`)
+  const startedAt = (await $.session.usage().catch(() => null))?.startedAt ?? Number.POSITIVE_INFINITY
+  const ladder = (await read($, forkLayer))?.ladder ?? []
+
+  await update($, historyPicks, () => historyPicksOf(text, startedAt, roster, ladder))
+  await update($, historyTally, () => historyTallyOf(text))
 }
 
 const settlePick = async ($: Dollar, pickId: string, result: string, cost: number | null): Promise<void> => {
@@ -673,10 +707,7 @@ const readForkLayer = async ($: Dollar): Promise<void> => {
   const layer = ran === null ? base : forkLayerOf(base, ran)
 
   await update($, forkLayer, () => layer)
-  const startedAt = (await $.session.usage().catch(() => null))?.startedAt ?? Number.POSITIVE_INFINITY
-  const history = historyPicksOf(await readText($, `${cwd}/.claude/vistack/decision-history.jsonl`), startedAt, roster, layer.ladder)
-
-  await update($, historyPicks, () => history)
+  await readHistory($)
 }
 
 const enqueueGit = (): void => {
@@ -1659,11 +1690,10 @@ const runJob = async ($: Dollar, job: Job): Promise<void> => {
       return toggleLazygit($)
     case 'decide-turn':
       return decideTurn($, job.turnId, job.text, job.at)
-    case 'decide-agent': {
-      const { agentId, at, model: actual, request, subject } = job
-
-      return askFork($, { actual, agentId, at, id: `agent-${agentId}`, scope: 'agent', subject, trigger: 'spawn' }, request, 'agent-spawn')
-    }
+    case 'decide-agent':
+      return decideAgent($, job)
+    case 'fork-history':
+      return readHistory($)
     case 'settle':
       return settlePick($, job.pickId, job.result, job.usd)
     case 'kill':
@@ -2082,9 +2112,11 @@ const renderTab = async ($: Dollar, kit: Kit, active: DeckTab, columns: number, 
           agents: await read($, agents),
           filter: await read($, forkFilter),
           forkLayer: await read($, forkLayer),
+          jevMode: config.jevMode,
           now: at,
           openId: await read($, openId),
           picks: mergePicks(await read($, picks), await read($, historyPicks)),
+          tally: await read($, historyTally),
         },
         {
           refresh: () => enqueue({ kind: 'fork-status' }),
@@ -2537,11 +2569,23 @@ export const register: Register = (on, options) => {
     }
     await addComm($, { at, from: e.parentAgentId ?? 'coordinator', kind: 'dispatch', text: tail(e.description), to: agentId })
     if (call !== null && asked !== null) {
-      const ask = decidingPick({ ...call.shown, actual: started.model, agentId, at, id: `agent-${agentId}`, scope: 'agent', subject, trigger: 'spawn-apply' })
+      const ask = decidingPick({
+        ...call.shown,
+        actual: started.model,
+        agentId,
+        at,
+        hasCallerModel: false,
+        id: `agent-${agentId}`,
+        mode: config.jevMode,
+        scope: 'agent',
+        subagentType: e.subagentType,
+        subject,
+        trigger: 'spawn-apply',
+      })
 
       await addPick($, { ...settledPick(ask, asked, roster, (await read($, forkLayer))?.ladder ?? []), isApplied: choice !== undefined })
     } else if (config.jevMode !== 'off') {
-      enqueue({ agentId, at, kind: 'decide-agent', model: started.model, request, subject })
+      enqueue({ agentId, at, hasCallerModel: e.model !== undefined, kind: 'decide-agent', model: started.model, request, subagentType: e.subagentType, subject })
     }
 
     return started

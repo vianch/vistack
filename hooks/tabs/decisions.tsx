@@ -1,17 +1,22 @@
-import { TIER_SELECTION, headlineOf, nextFilter, pickType, typesOf } from '../lib/fork-types'
+import { tierFinalOf } from '../lib/apply-reason'
+import { MARGIN_LEGEND, VOTE_KEYS, marginText, votesOf } from '../lib/fork-text'
+import { TIER_SELECTION, headlineOf, nextFilter, pickType } from '../lib/fork-types'
 import { ago, clockTime, duration, fit, usd } from '../lib/format'
 import { backendLabel, forkTally, pickStatus, pickTrigger } from '../lib/jev'
 import { modelFamily, modelLabel } from '../lib/pricing'
 import { cells } from '../lib/theme'
+import { askedHintOf, overviewHeadOf, overviewLineOf, typeOverviewOf } from '../lib/type-overview'
 import { Empty, PickRows, Section, glyph } from './parts'
 
 import type { RenderElement } from 'claude-code'
 import type { Kit } from './parts'
-import type { DeckAgent, DeckForkLayer, DeckLadderStep, DeckPick } from '../../types'
+import type { DeckAgent, DeckForkLayer, DeckHistoryTally, DeckLadderStep, DeckPick } from '../../types'
 
 export type DecisionsData = {
   picks: readonly DeckPick[]
   forkLayer: DeckForkLayer | null
+  tally: DeckHistoryTally | null
+  jevMode: string
   agents: readonly DeckAgent[]
   openId: string
   now: number
@@ -124,11 +129,10 @@ export const decisionsTab = (kit: Kit, data: DecisionsData, actions: DecisionsAc
   const isAsking = layer !== null && !isOff && layer.script !== undefined
   const history = [...data.picks].reverse().find(pick => pick.history !== undefined)?.history
   const hints = layer === null ? [] : [layer.cloudflare?.hint, layer.ollama?.hint].filter((hint): hint is string => hint !== undefined)
-  const historyTypes = layer?.forks?.byType ?? []
-  const sessionTypes = typesOf(data.picks)
+  const overview = typeOverviewOf(data.picks, data.tally, layer?.forks?.byType)
   const shown = data.filter === '' ? data.picks : data.picks.filter(pick => pickType(pick) === data.filter)
   const filterLabel = `type: ${data.filter === '' ? 'all' : data.filter}`
-  const right = layer === null ? 'not read yet' : `${layer.mode}${layer.forks === undefined ? '' : ` · ${layer.forks.forks} in history`}`
+  const right = `jevMode ${data.jevMode}${layer?.forks === undefined ? '' : ` · ${layer.forks.forks} in history`}`
   const sessionParts = [
     `${tally.asked} asked`,
     `${tally.sharp} sharp`,
@@ -136,6 +140,7 @@ export const decisionsTab = (kit: Kit, data: DecisionsData, actions: DecisionsAc
     ...tally.byBackend.map(([label, count]) => `${label} ${count}`),
     ...(tally.failed > 0 ? [`failed ${tally.failed}`] : []),
     ...(tally.deciding > 0 ? [`asking ${tally.deciding}`] : []),
+    ...(tally.skipped > 0 ? [`not asked ${tally.skipped}`] : []),
   ]
 
   // No color draws dim; PLAIN draws in the terminal's own color.
@@ -163,6 +168,14 @@ export const decisionsTab = (kit: Kit, data: DecisionsData, actions: DecisionsAc
     const took = pick.ms === undefined ? '' : ` · took ${duration(pick.ms)}`
     const request = pick.scope === 'main' ? `${Math.min(pick.subject.length, 2400)} chars` : 'description + prompt, ≤2400 chars'
     const isCli = pickTrigger(pick) === 'cli'
+
+    if (status === 'skipped') {
+      return [
+        ...row('asked', 'not asked', `${clockTime(pick.at)} on ${TRIGGER_TEXT[pickTrigger(pick)]} · ${pickType(pick)}`),
+        ...row('final', 'final', tierFinalOf(pick, marks.to), theme.accent),
+      ]
+    }
+
     const asked = [
       ...row('asked', 'asked', `${clockTime(pick.at)} on ${TRIGGER_TEXT[pickTrigger(pick)]} · ${pickType(pick)}${took}`),
       ...(isCli ? [] : row('sent', 'sent', `source=${pick.scope === 'main' ? 'main-turn' : 'agent-spawn'} · request ${request}`)),
@@ -193,7 +206,9 @@ export const decisionsTab = (kit: Kit, data: DecisionsData, actions: DecisionsAc
       ...(signals?.tierMismatch === true ? ['tier mismatch'] : []),
     ]
     const isMatch = pick.actual !== undefined && modelFamily(pick.actual) === modelFamily(pick.recommended)
-    const ran = pick.actual === undefined ? 'not yet' : `${modelLabel(pick.actual)} ${isMatch ? `${marks.good} match` : `${marks.bad} differs`}`
+    const verdict = pick.recommended === '' ? '' : ` ${isMatch ? `${marks.good} match` : `${marks.bad} differs`}`
+    const ran = pick.actual === undefined ? 'not yet' : `${modelLabel(pick.actual)}${verdict}`
+    const votes = votesOf(pick.outputs)
     const recorded = pick.decisionId === undefined ? '' : ` · ${pick.outcomeRecorded === true ? 'outcome recorded ' : ''}${fit(pick.decisionId, 12)}`
     const needs = pick.requiredEvidence ?? []
     const risks = pick.risks ?? []
@@ -201,7 +216,7 @@ export const decisionsTab = (kit: Kit, data: DecisionsData, actions: DecisionsAc
     const isTier = pickType(pick) === TIER_SELECTION
     const head = headlineOf(pick)
     const chosen = [head.lead, head.choice, head.model === undefined ? undefined : modelLabel(head.model)].filter(part => part !== undefined)
-    const outputs = Object.entries(pick.outputs ?? {})
+    const outputs = Object.entries(pick.outputs ?? {}).filter(([name]) => !VOTE_KEYS.has(name))
     const id = pick.decisionId === undefined ? 'no decision id' : fit(pick.decisionId, 20)
 
     return [
@@ -214,30 +229,42 @@ export const decisionsTab = (kit: Kit, data: DecisionsData, actions: DecisionsAc
           lines(
             `${pick.id}-rung-${step.tier}`,
             `${backendLabel(step.tier)}: `,
-            `${step.outcome}${step.note === undefined ? '' : ` ${step.note}`}${step.tier === pick.backend ? ` · ${pick.action ?? pick.tier} ${share(pick.confidence)}` : ''}`.split(' '),
+            `${step.outcome}${step.note === undefined ? '' : ` ${marginText(step.note)}`}${step.tier === pick.backend ? ` · ${pick.action ?? pick.tier} ${share(pick.confidence)}` : ''}`.split(' '),
             ' ',
             step.outcome === 'rejected' || step.outcome === 'unavailable' ? theme.warn : undefined,
             `${INDENT}  `,
           ),
         ),
+      ...(votes.length === 0 ? [] : row('votes', 'votes', votes.join(' · '))),
       ...(isTier ? [] : row('type', 'type', `${pickType(pick)} · action ${pick.action ?? '-'}`)),
       ...(isTier ? [] : outputs.slice(0, OUTPUT_ROWS).map(([name, value]) => line(`${pick.id}-out-${name}`, `out: ${name} ${value}`, PLAIN, INDENT))),
       ...(isTier || outputs.length <= OUTPUT_ROWS ? [] : [line(`${pick.id}-out-more`, `out: ${outputs.length - OUTPUT_ROWS} more`, undefined, INDENT)]),
       ...(odds.length === 0 ? [] : row('odds', 'P', odds.join(' · '))),
       ...(signalParts.length === 0 ? [] : row('signals', 'signals', signalParts.join(' · '))),
-      ...(isTier
-        ? row('final', 'final', `${pick.tier} ${marks.to} ${pick.role ?? '-'} ${marks.to} ${modelLabel(pick.recommended)} · ${pick.isApplied ? 'applied' : 'suggested, not applied'}`, theme.accent)
-        : row('final', 'final', `${chosen.join(` ${marks.to} `)} · advisory, the main session decides`, theme.accent)),
+      ...row('final', 'final', isTier ? tierFinalOf(pick, marks.to) : `${chosen.join(` ${marks.to} `)} · advisory, the main session decides`, theme.accent),
       ...(isTier ? row('ran', 'ran', `${ran} · ended: ${pick.result ?? 'running'}${pick.usd === undefined ? '' : ` · ${usd(pick.usd)}`}${recorded}`) : row('id', 'id', id)),
       ...(pick.alternatives ?? []).slice(0, 2).flatMap((alternative, index) => row(`else-${index}`, 'else', `${alternative.action}: "${alternative.reason}"`)),
       ...(needs.length === 0 ? [] : row('needs', 'needs', needs.join('; '))),
       ...(conditions.length === 0 ? [] : row('if', 'changes if', conditions.join('; '))),
-      ...(risks.length === 0 ? [] : row('risks', 'risks', risks.join('; '), theme.warn)),
+      ...(risks.length === 0 ? [] : row('risks', 'risks', marginText(risks.join('; ')), theme.warn)),
     ]
   }
 
   return (
     <Box flexDirection="column">
+      {Section(kit, 'Types', columns, `${overview.filter(entry => entry.session > 0).length} of ${overview.length} asked this session`)}
+      <Text dimColor>{overviewHeadOf(columns)}</Text>
+      {overview.map(entry => (
+        <Text key={`type-${entry.type}`} {...(entry.type === data.filter ? { color: theme.accent } : entry.isNeverAsked ? { dimColor: true } : {})}>
+          {overviewLineOf(entry, columns)}
+        </Text>
+      ))}
+      {lines(
+        'types-legend',
+        '',
+        ['now: this session', 'all: the whole history', 'margin: mean', 'fall: share the policy fallback answered', 'coord: the coordinator', 'see skills/laya-decision/SKILL.md'],
+        ' · ',
+      )}
       {Section(kit, 'Fork layer', columns, right)}
       {layer === null && Empty(kit, 'Status is read at session start; Refresh reads it now.')}
       {isOff && line('off', `${glyph(kit, 'warn')}model suggestions are off (jevMode)`, theme.warn)}
@@ -251,12 +278,13 @@ export const decisionsTab = (kit: Kit, data: DecisionsData, actions: DecisionsAc
           'asked on: ',
           [
             'each prompt: tier-selection',
-            'first prompt or "new task": playbook-selection',
             'each subagent spawn: tier-selection',
             ...(layer.mode === 'apply' ? ['apply: before a built-in spawn'] : []),
           ],
           ' · ',
         )}
+      {isAsking && lines('match-path', 'and on: ', 'the first prompt or "new task": playbook-selection, intake-analysis'.split(' '), ' ')}
+      {isAsking && lines('not-asked', 'not asked, no slice: ', 'a hand-back, a task notification, a read-only role spawn'.split(' '), ' ')}
       {lines('other-types', 'other types: ', ["the main session's own CLI calls", 'read from the decision history'], ', ')}
       {isAsking &&
         lines(
@@ -265,16 +293,9 @@ export const decisionsTab = (kit: Kit, data: DecisionsData, actions: DecisionsAc
           ['vistack-decision.py', 'decision', '<type>', '--backend', 'auto', '· stdin', '{source,', 'request≤2400}', '· history', history === undefined ? 'per call' : shortPath(history)],
           ' ',
         )}
-      {historyTypes.length > 0 &&
-        lines(
-          'history-types',
-          'history by type: ',
-          historyTypes.map(entry => `${entry.type} ${entry.forks}${entry.meanConfidence === undefined ? '' : ` ${share(entry.meanConfidence)}`}`),
-          ' · ',
-        )}
       {isAsking && hints.flatMap((hint, index) => lines(`hint-${index}`, 'hint: ', hint.split(' '), ' ', theme.warn))}
       {lines('session', 'this session: ', sessionParts, ' · ')}
-      {sessionTypes.length > 0 && lines('session-types', 'by type: ', sessionTypes.map(([type, count]) => `${type} ${count}`), ' · ')}
+      {line('margin-legend', MARGIN_LEGEND)}
       <Box justifyContent="space-between" width={columns}>
         <Text dimColor>{layer === null ? '' : fit(`read ${ago(layer.readAt, data.now)}`, Math.max(1, columns - 12))}</Text>
         <Button key="fork-refresh" plain label={`${glyph(kit, 'refresh')}Refresh`} onPress={() => actions.refresh()} />
@@ -284,8 +305,9 @@ export const decisionsTab = (kit: Kit, data: DecisionsData, actions: DecisionsAc
         <Text dimColor>{fit('t cycles the type · a row opens its chain', Math.max(1, columns - cells(filterLabel) - 2))}</Text>
         <Button key="fork-type" plain hotkey="t" label={filterLabel} onPress={() => actions.setFilter(nextFilter(data.filter, data.picks))} />
       </Box>
-      {data.picks.length === 0 && Empty(kit, isOff ? 'Nothing asked: suggestions are off.' : 'No fork asked yet: each prompt asks one.')}
-      {data.picks.length > 0 && shown.length === 0 && Empty(kit, `No ${data.filter} fork this session.`)}
+      {data.filter === '' && data.picks.length === 0 && Empty(kit, isOff ? 'Nothing asked: suggestions are off.' : 'No fork asked yet: each prompt asks one.')}
+      {data.filter !== '' && shown.length === 0 && Empty(kit, `No ${data.filter} fork this session.`)}
+      {data.filter !== '' && shown.length === 0 && lines('filter-hint', '', `${askedHintOf(data.filter).replace(/^t/, 'T')}.`.split(' '), ' ')}
       {[...shown]
         .reverse()
         .slice(0, ROW_CAP)

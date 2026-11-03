@@ -135,6 +135,21 @@ const FALLBACK_PICK = {
 
 const CROWDED_PICK = { ...FALLBACK_PICK, at: 2_500, id: 'agent-a1-long', subject: `Explore: ${'trace every caller of the fold map '.repeat(3)}` }
 
+const HAND_BACK_PICK = {
+  ...PICK,
+  at: 4_000,
+  backend: '',
+  confidence: 0,
+  id: 'turn-t9',
+  recommended: '',
+  scope: 'main',
+  skippedWhy: 'hand-back',
+  status: 'skipped',
+  subject: '<agent-message from="a1">',
+  tier: '',
+  trigger: 'prompt',
+}
+
 test('an open Monitors fold names its counts once: the section under it draws no header of its own', async ($, on) => {
   mock.clock(on, { now: 1_000 })
   mock.store(on)
@@ -188,7 +203,7 @@ test('the New loop form waits behind its fold while keep-awake stays in view, an
 
 test('Board, Cost and Decisions draw the same fork in the same two lines; a nickname follows the subject only when it fits', async ($, on) => {
   mock.clock(on, { now: 5_000 })
-  on('state.get', { key: 'picks', plugin: 'vistack' }, () => ({ value: { value: [CROWDED_PICK, FALLBACK_PICK], version: 1 } }))
+  on('state.get', { key: 'picks', plugin: 'vistack' }, () => ({ value: { value: [CROWDED_PICK, FALLBACK_PICK, HAND_BACK_PICK], version: 1 } }))
   on('state.get', { key: 'agents', plugin: 'vistack' }, () => ({ value: { value: [SHERLOCK], version: 1 } }))
 
   for (const surface of SURFACES) {
@@ -199,9 +214,12 @@ test('Board, Cost and Decisions draw the same fork in the same two lines; a nick
 
     expect(subject).toBeDefined()
     expect(result).toBeDefined()
+    expect(onBoard.some(text => /hand-back/.test(text))).toBe(false)
     await ui.press({ key: 'tab-cost' })
     expect(await texts(ui)).toEqual(expect.arrayContaining([subject, result]))
+    expect((await texts(ui)).some(text => /hand-back/.test(text))).toBe(false)
     await ui.press({ key: 'tab-decisions' })
+    expect(await texts(ui)).toContain('   not a slice · hand-back: the deck asked nothing')
     expect((await ui.find({ key: 'pick-agent-a1' }))?.text).toBe(subject)
     expect(await texts(ui)).toContain(result)
 

@@ -48,6 +48,9 @@ column. `task.request` is the user's original request, never the enhanced text.
 `tool-selection` and `file-selection` exit non-zero without `available_actions`, so skip
 them when the step has no explicit candidates.
 
+The deck's Types block lists every type above and shows `never asked` for a boundary call the
+coordinator skipped, so a missing call is visible (`docs/guide/deck.md`, The Types block).
+
 The answer is advisory and viStack stays authoritative. Each call is appended to the decision
 history in the state root (`.claude/vistack/decision-history.jsonl` on Claude Code), which the
 deck's Decisions tab reads, so never pass `--no-history`. A call that fails, times out, or is

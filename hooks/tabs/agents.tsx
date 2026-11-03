@@ -1,5 +1,6 @@
 import { adviceHead } from '../lib/advisor'
 import { face, isLive } from '../lib/crew'
+import { NOT_A_SLICE } from '../lib/fork-types'
 import { ago, basename, duration, fit, tokens, usd } from '../lib/format'
 import { pickStatus } from '../lib/jev'
 import { addUp } from '../lib/ledger'
@@ -314,7 +315,7 @@ const expanded = (
   const width = Math.max(8, columns - indent)
   const pick = data.picks.find(one => one.agentId === id)
   const model = data.steps.find(step => step.agentId === id)?.model ?? agent.model
-  const isMatch = pick === undefined || modelFamily(pick.recommended) === modelFamily(model)
+  const isMatch = pick === undefined || pick.recommended === '' || modelFamily(pick.recommended) === modelFamily(model)
   const answerTail = (agent.answer ?? '').trim().split('\n').filter(Boolean).slice(-2).join(' ')
   const hasPrompt = agent.prompt !== undefined && agent.prompt.trim() !== ''
 
@@ -330,7 +331,7 @@ const expanded = (
       {pick !== undefined && pickStatus(pick) === 'decided' && (
         <Text color={isMatch ? theme.muted : theme.warn}>
           {fit(
-            `jev ${pick.tier} → ${modelLabel(pick.recommended)} (${pick.confidence.toFixed(2)}, ${pick.backend})${
+            `jev ${pick.recommended === '' ? NOT_A_SLICE : `${pick.tier} → ${modelLabel(pick.recommended)}`} (${pick.confidence.toFixed(2)}, ${pick.backend})${
               isMatch ? '' : ` · ran ${modelLabel(model)}`
             }${pick.isApplied ? ' · applied' : ''}`,
             width,

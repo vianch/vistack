@@ -47,6 +47,16 @@ overrode a confident deterministic answer the override was wrong (6 of 6), and d
 accuracy fell from 100% to 91%. `--consult always` still asks the ladder on sharp forks and
 records its answer in `outputs.model_opinion` for evaluation, without applying it.
 
+A `tier-selection` fork whose request is not an implementation slice never reaches the
+ladder, not even under `--consult always`. The policy sets `outputs.slice_like`, a boolean:
+`true` when it sees a tier signal (complex or mechanical terms, a flag, a named pattern, or a
+reported mismatch) or the request's leading task class is implementation work (`bug-fix`,
+`design-implementation`, `feature`, `perf-issue`, `prototype`, `refactor`). When it is
+`false` (a question, a hand-back, chat), the policy answers `complex` at 0.60 as a split fork,
+its rationale says the request is not an implementation slice, and no model is asked:
+no model can say which implementer owns work that is not there, and hosted Jev's confidence
+is flat on such text. The deck leads those rows with `not a slice`.
+
 ## Protocol and model references
 
 The integration follows the published interfaces.
@@ -97,6 +107,12 @@ taken to mean the key or credits are gone: Jev is skipped for an hour, recorded 
 `~/.cache/vistack/jev-status.json`, and the Ollama model answers instead. A 429 or 529 is a
 normal transient failure. `decisions status --probe` makes one single-question call to
 prove the key and remaining credits. That call is billed.
+
+**Confidence is a margin.** Jev's choice confidence is the margin between its top two
+probabilities, so a .73 and .27 split reads .46 (a live probe), while real slices read 1.0
+and .98. It is not the chance of being right, and it is not Ollama's entropy scale, below.
+The 0.65 floor stays: letting Jev override a sharp policy answer was wrong 6 of 6 times, so
+any floor change goes through the held-out hillclimb below, not an edit to the number.
 
 The TypeSafe agent skill is not installed: both of its install paths clone from a GitHub
 organisation outside the allowed origin realm. This adapter follows the published API
@@ -405,6 +421,21 @@ Every response is a `Decision` with `decision_id`, `decision_type`, `action`, bo
 and fallback metadata, and `fork`: `sharp` runs in code, `split` goes to the main session.
 `authority` is always `advisory-only`.
 
+### Outputs the ladder adds
+
+- `outputs.backend_model` names the model that served a tier's settled answer: the response's
+  own model name, else the one the backend asked for. `jev-latest` is unpinned, so this is the
+  record of what ran.
+- On a `deterministic-fallback`, `outputs.corroborated_by`, `outputs.dissent`, and
+  `outputs.margins` record the tiers whose answer was valid and passed every gate except its
+  confidence floor: the tiers that named the policy's action, the tiers that named another,
+  and each tier's margin. The tier's note in `fallback_reason` ends `; agrees: <action>` or
+  `; dissents: <action>`. A tier that was unavailable, malformed, or failed a gate appears in
+  neither list. The action, confidence, and fork do not change: no held-out evidence shows
+  that agreement under a floor is right more often than the policy alone.
+- `fallback_reason` carries why no tier settled the fork; `risks` holds only the policy's own
+  risks.
+
 ### Inputs the deterministic policy reads
 
 Routing scores word-boundary signals for each task class. The request, title, description,
@@ -418,7 +449,7 @@ may not change a `state` or `handoff` route or invent an unattended one.
 |---|---|---|
 | `grooming` | `task.open_questions`, `task.estimated_changed_lines` | Open questions return `needs-decision`; an estimate above 500 returns `split`. |
 | `decomposition` | `task.slices[].files`, `task.slices[].depends_on`, `task.dependencies` | Overlapping slice files or a dependency return `sequence`; `outputs.shared_files` names the overlap. Textual estimates such as `"about 300"` are parsed. |
-| `tier-selection` | `task.pattern`, `task.changes_data_shape`, `task.changes_public_contract`, `task.crosses_boundary`, `current_state.tier_mismatch` | A reported mismatch, a flag, or complex-work terms in the request return `complex` with `outputs.role` `senior-implementer`. Mechanical terms or a named pattern return `mechanical` with `implementer`. Neither returns `complex` below the refinement threshold, a split fork a model may settle either way; a model never lowers evidenced complex work. |
+| `tier-selection` | `task.pattern`, `task.changes_data_shape`, `task.changes_public_contract`, `task.crosses_boundary`, `current_state.tier_mismatch` | A reported mismatch, a flag, or complex-work terms in the request return `complex` with `outputs.role` `senior-implementer`. Mechanical terms or a named pattern return `mechanical` with `implementer`. Neither returns `complex` below the refinement threshold, a split fork a model may settle either way. A request with `outputs.slice_like` false is never asked of a model. A model never lowers evidenced complex work. |
 | `model-selection` | `task.role`, `task.estimated_changed_lines`, `task.writable_files`, `task.acceptance_criteria`, `task.pattern`, the three tier flags, `current_state.retries`, `constraints.host`; `task.model` and `task.effort` for a role with no agent file | Retries or a tier flag return `step-up`; a large job (over 300 lines, 10 files, or 8 acceptance criteria) with no cheaper signal returns `step-up`; size, pattern, and mechanical work together return `step-down`; anything weaker is split. `outputs.dispatch_model` and `outputs.dispatch_effort` are absolute, and `outputs.changed` says whether they differ from the frontmatter. Model selection, below, has the ladder and gates. |
 | `tool-selection`, `file-selection` | `available_actions` (required), `task.tools` or `task.file_summaries`, `current_state.failed_tools` or `failed_files` | One option, or a request that names exactly one option (a file by path or basename), is sharp. Anything else is split with the first unfailed option as a placeholder. An option whose name or description is irreversible (merge, production deploy, data deletion) is never chosen in code or by a model. Choices are capped at 10 options. |
 | `runtime-progress` | `current_state.attempts`, `identical_results`, `unblock_exhausted`, `next_action`, `credentials_missing`, `credentials_expired`, `contract_ambiguity` | Each fence returns `escalate` with `outputs.fence` set to 1-4. Twenty attempts or three identical results is FENCE 1; an irreversible `next_action` such as a merge is FENCE 3. |

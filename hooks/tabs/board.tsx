@@ -1,6 +1,7 @@
 import { pending } from '../lib/board'
 import { face, isLive } from '../lib/crew'
 import { ago, basename, duration, fit, until, usd } from '../lib/format'
+import { pickStatus } from '../lib/jev'
 import { addUp } from '../lib/ledger'
 import { STATE_LABELS, codeWrites, coordinatorStatus, doingNow, isOnStaff, teamStatus } from '../lib/org'
 import { ARM_RETRY_MS, CLEAN_TEXT, CRON_LIFE_MS, ROTATE_BEFORE_MS } from '../lib/review-watch'
@@ -385,7 +386,7 @@ const nowBlock = (kit: Kit, data: BoardData, columns: number): RenderElement[] =
 }
 
 const forkBlock = (kit: Kit, data: BoardData, columns: number): RenderElement[] => {
-  const picks = data.picks ?? []
+  const picks = (data.picks ?? []).filter(pick => pickStatus(pick) !== 'skipped')
   const last = picks[picks.length - 1]
 
   return [

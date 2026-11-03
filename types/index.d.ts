@@ -178,7 +178,8 @@ export type DeckPickStatus = 'deciding' | 'decided' | 'failed' | 'skipped'
 // One fork the deck asked the fork layer, or one the main session asked through the CLI (`cli`),
 // read from the decision history. Fields past `at` fill in as the process returns.
 export type DeckPick = {
-  // `turn-<turnId>`, `turn-<turnId>-playbook`, `agent-<agentId>`, or `history-<decision id>`.
+  // `turn-<turnId>`, `turn-<turnId>-playbook`, `turn-<turnId>-intake`, `agent-<agentId>`, or
+  // `history-<decision id>`.
   id: string
   scope: 'main' | 'agent'
   // The prompt, `<type>: <description>`, or the CLI call's request.
@@ -189,7 +190,7 @@ export type DeckPick = {
   ms?: number
   // Exit code and first stderr line, "parse failed", or "script not found".
   error?: string
-  // 'jevMode off' or 'empty request'.
+  // Why the deck asked nothing: 'hand-back', 'task notification' or 'read-only role', each no slice.
   skippedWhy?: string
   trigger: 'prompt' | 'spawn' | 'spawn-apply' | 'cli'
   decisionType: string
@@ -224,6 +225,11 @@ export type DeckPick = {
   decisionId?: string
   agentId?: string
   turnId?: string
+  // Absent on a pick an earlier deck saved.
+  subagentType?: string
+  hasCallerModel?: boolean
+  // The jevMode option when the fork was asked.
+  mode?: string
   isApplied: boolean
   result?: string
   usd?: number | null
@@ -253,6 +259,13 @@ export type DeckForkLayer = {
 
 // One decision type's line of `decisions status`'s `forks.by_type`, across the whole history.
 export type DeckForkType = { type: string; forks: number; sharp: number; meanConfidence?: number }
+
+// One decision type across the whole decision history, one row per decision id. `fallbacks`
+// counts the rows the policy fallback answered; `lastAction` is the newest row's.
+export type DeckTypeTally = { forks: number; confidenceSum: number; fallbacks: number; lastAction?: string }
+
+// `hasHistory` is false when the file could not be read: absent, or past the 4 MiB read limit.
+export type DeckHistoryTally = { hasHistory: boolean; byType: Record<string, DeckTypeTally> }
 
 // The repo's working tree, read inside the realm only. Paths are relative to the repo root.
 export type DeckGitFile = {
@@ -454,6 +467,7 @@ declare module 'claude-code' {
       picks: DeckPick[]
       // This session's forks the main session asked through the CLI, from the decision history.
       historyPicks: DeckPick[]
+      historyTally: DeckHistoryTally | null
       // The Decisions tab's type filter; '' shows every type.
       forkFilter: string
       skills: DeckSkill[]

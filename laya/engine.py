@@ -33,6 +33,7 @@ from .schema import (
     default_actions,
     utc_now,
 )
+from .tier_report import NearMiss, near_miss_note, served_model, tally
 
 
 BACKENDS = ("auto", "deterministic", "jev", "cloudflare", "ollama")
@@ -383,9 +384,9 @@ class DecisionEngine:
         *,
         reason: str,
         decision_id: str,
+        near_misses: tuple[NearMiss, ...] = (),
     ) -> Decision:
-        risks = tuple(draft.risks) + (f"Laya refinement was not used: {reason}.",)
-        fallback_draft = replace(draft, risks=risks, outputs={**dict(draft.outputs), "fallback": True})
+        fallback_draft = replace(draft, outputs={**dict(draft.outputs), "fallback": True, **tally(draft.action, near_misses)})
         return self._decision(
             context,
             fallback_draft,
@@ -694,10 +695,10 @@ class DecisionEngine:
         backend: Any,
         questions: Mapping[str, Mapping[str, Any]],
         states: dict[int, dict[str, Any]],
-    ) -> tuple[PolicyDraft | None, str | None]:
+    ) -> tuple[PolicyDraft | None, str | None, NearMiss | None]:
         open_until = self._open_until.get(backend_name, 0.0)
         if open_until > time.monotonic():
-            return None, f"skipped for {open_until - time.monotonic():.0f}s after repeated failures"
+            return None, f"skipped for {open_until - time.monotonic():.0f}s after repeated failures", None
         try:
             raw = self._ask(context, backend, questions, states)
         except Exception as exc:  # An advisory engine must not break orchestration.
@@ -705,35 +706,44 @@ class DecisionEngine:
             self._failures[backend_name] = failures
             if failures >= self.failure_threshold:
                 self._open_until[backend_name] = time.monotonic() + self.cooldown_s
-            return None, str(exc) or type(exc).__name__
+            return None, str(exc) or type(exc).__name__, None
         self._failures[backend_name] = 0
         self._open_until.pop(backend_name, None)
         try:
             model_draft, error = self._model_draft(context, raw, baseline, backend_name)
         except Exception as exc:
-            return None, f"malformed typed model output: {exc}"
+            return None, f"malformed typed model output: {exc}", None
         if model_draft is None:
-            return None, error or "invalid typed model output"
+            return None, error or "invalid typed model output", None
+        served = served_model(raw, backend)
+        if served:
+            model_draft = replace(model_draft, outputs={**dict(model_draft.outputs), "backend_model": served})
         floor = _tier_floor(backend)
         threshold = self.min_confidence if floor is None else max(self.min_confidence, floor)
         safe, safety_error = self._safe_model_draft(context, baseline, model_draft, threshold)
         if not safe:
-            return None, safety_error or "safety gate rejected model output"
-        return model_draft, None
+            if model_draft.confidence < threshold and self._safe_model_draft(context, baseline, model_draft, 0.0)[0]:
+                miss = NearMiss(backend_name, model_draft.action, model_draft.confidence)
+                return None, f"{safety_error}; {near_miss_note(miss, baseline.action)}", miss
+            return None, safety_error or "safety gate rejected model output", None
+        return model_draft, None, None
 
     def _climb(
         self,
         context: DecisionContext,
         baseline: PolicyDraft,
         ladder: list[tuple[str, Any]],
-    ) -> tuple[PolicyDraft | None, str | None, list[str]]:
+    ) -> tuple[PolicyDraft | None, str | None, list[str], tuple[NearMiss, ...]]:
         """Ask each tier in order; return the first answer that clears every gate."""
 
         questions = questions_for(context)
         states: dict[int, dict[str, Any]] = {}
         errors: list[str] = []
+        near_misses: list[NearMiss] = []
         for name, backend in ladder:
-            draft, error = self._try_backend(context, baseline, name, backend, questions, states)
+            draft, error, miss = self._try_backend(context, baseline, name, backend, questions, states)
+            if miss is not None:
+                near_misses.append(miss)
             if draft is not None:
                 if draft.action == baseline.action:
                     # Two independent reads of the same fork; keep the policy's explanation.
@@ -742,9 +752,9 @@ class DecisionEngine:
                         confidence=max(draft.confidence, baseline.confidence),
                         rationale=f"{baseline.rationale} {name} agreed at {draft.confidence:.2f}.",
                     )
-                return draft, name, errors
+                return draft, name, errors, tuple(near_misses)
             errors.append(f"{name} unavailable or rejected: {error}")
-        return None, None, errors
+        return None, None, errors, tuple(near_misses)
 
     def _opinion(self, context: DecisionContext, baseline: PolicyDraft, ladder: list[tuple[str, Any]]) -> dict[str, Any]:
         """A model's answer on a sharp fork, recorded for evaluation and never applied."""
@@ -779,7 +789,7 @@ class DecisionEngine:
         decision_id = self._id(request_id)
         baseline = evaluate(ctx)
         sharp = baseline.confidence >= self.min_confidence
-        ladder = self.ladder()
+        ladder = [] if baseline.outputs.get("slice_like") is False else self.ladder()
         final: Decision
         if sharp or not ladder:
             # A sharp fork runs in code without a model turn. ``consult=always`` still asks the
@@ -797,7 +807,7 @@ class DecisionEngine:
                 fork="sharp" if sharp else "split",
             )
         else:
-            model_draft, name, errors = self._climb(ctx, baseline, ladder)
+            model_draft, name, errors, near_misses = self._climb(ctx, baseline, ladder)
             if model_draft is not None and name is not None:
                 final = self._decision(
                     ctx,
@@ -809,7 +819,7 @@ class DecisionEngine:
                     fork="sharp",
                 )
             else:
-                final = self._fallback(ctx, baseline, reason="; ".join(errors), decision_id=decision_id)
+                final = self._fallback(ctx, baseline, reason="; ".join(errors), decision_id=decision_id, near_misses=near_misses)
         if self.history:
             self.history.append_decision(final, ctx)
         return final

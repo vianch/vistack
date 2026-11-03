@@ -207,7 +207,7 @@ describe('jev', () => {
       old as typeof base,
     ]
 
-    expect(forkTally(picks)).toEqual({ asked: 5, byBackend: [['policy', 2], ['jev', 1]], deciding: 1, failed: 1, sharp: 2, split: 1 })
+    expect(forkTally(picks)).toEqual({ asked: 5, byBackend: [['policy', 2], ['jev', 1]], deciding: 1, failed: 1, sharp: 2, skipped: 0, split: 1 })
     expect(backendLabel('cloudflare:clef-flash')).toBe('cloudflare')
     expect(backendLabel('')).toBe('-')
   })

@@ -1,4 +1,5 @@
-import { TIER_SELECTION, headlineOf, pickType } from '../lib/fork-types'
+import { applyReasonOf } from '../lib/apply-reason'
+import { NOT_A_SLICE, TIER_SELECTION, headlineOf, isNotSlice, pickType } from '../lib/fork-types'
 import { bar, clockTime, duration, fit } from '../lib/format'
 import { backendLabel, pickStatus, pickTrigger } from '../lib/jev'
 import { bars, commLabel, sparkline } from '../lib/org'
@@ -263,7 +264,7 @@ const pickResult = (kit: Kit, pick: DeckPick, columns: number): RenderElement =>
     return (
       <Text key={key} dimColor>
         {PICK_INDENT}
-        {fit(`skipped: ${pick.skippedWhy ?? 'no reason given'}`, room)}
+        {fit(isNotSlice(pick) ? `${NOT_A_SLICE} · ${applyReasonOf(pick)}` : `skipped: ${pick.skippedWhy ?? 'no reason given'}`, room)}
       </Text>
     )
   }

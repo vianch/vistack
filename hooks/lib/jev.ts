@@ -1,7 +1,7 @@
 // Decisions from viStack's fork layer through scripts/vistack-decision.py (deterministic policy,
 // then the tiers the person opted into with /vistack:decisions-on, Jev first). A tier maps to
 // the model the matching agent file pins, so the suggestion and viStack's own dispatch agree.
-import { TIER_SELECTION, sortByType } from './fork-types'
+import { TIER_SELECTION, sliceLikeOf, sortByType } from './fork-types'
 import { fit } from './format'
 
 import type { DeckForkLayer, DeckForkType, DeckLadderStep, DeckPick, DeckPickStatus, DeckTurn } from '../../types'
@@ -50,6 +50,7 @@ export type ForkTally = {
   split: number
   failed: number
   deciding: number
+  skipped: number
   byBackend: [string, number][]
 }
 
@@ -218,8 +219,13 @@ export const parseDecision = (stdout: string, expectedType = TIER_SELECTION): De
   return root === null ? null : decisionOf(root, expectedType)
 }
 
-export const rosterModel = (roster: Roster, decision: Decision): string | undefined =>
-  decision.tier === undefined ? decision.model : roster[decision.tier]
+export const rosterModel = (roster: Roster, decision: Decision): string | undefined => {
+  if (sliceLikeOf(decision.decisionType, decision.outputs) === false) {
+    return undefined
+  }
+
+  return decision.tier === undefined ? decision.model : roster[decision.tier]
+}
 
 export const askedOf = (ran: Ran, ms: number, expectedType = TIER_SELECTION): Asked => {
   if (typeof ran === 'string') {
@@ -405,7 +411,7 @@ export const pickTrigger = (pick: DeckPick): DeckPick['trigger'] => pick.trigger
 
 export const decidingPick = (
   input: Pick<DeckPick, 'id' | 'scope' | 'subject' | 'at' | 'trigger' | 'command' | 'history'> &
-    Partial<Pick<DeckPick, 'turnId' | 'agentId' | 'actual' | 'decisionType'>>,
+    Partial<Pick<DeckPick, 'turnId' | 'agentId' | 'actual' | 'decisionType' | 'subagentType' | 'hasCallerModel' | 'mode'>>,
 ): DeckPick => ({
   decisionType: TIER_SELECTION,
   ...input,
@@ -450,12 +456,15 @@ export const settledPick = (current: DeckPick, asked: Asked, roster: Roster, lad
 
 export const forkTally = (picks: readonly DeckPick[]): ForkTally => {
   const byBackend = new Map<string, number>()
-  const tally: ForkTally = { asked: picks.length, byBackend: [], deciding: 0, failed: 0, sharp: 0, split: 0 }
+  const tally: ForkTally = { asked: picks.length, byBackend: [], deciding: 0, failed: 0, sharp: 0, skipped: 0, split: 0 }
 
   for (const pick of picks) {
     const status = pickStatus(pick)
 
-    if (status === 'failed') {
+    if (status === 'skipped') {
+      tally.asked -= 1
+      tally.skipped += 1
+    } else if (status === 'failed') {
       tally.failed += 1
     } else if (status === 'deciding') {
       tally.deciding += 1

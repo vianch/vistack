@@ -11,7 +11,7 @@ terminal and the desktop app's Code tab. Codex, Grok Build, and OpenCode do not 
 - `/deck` opens the pane, or closes it when it is open.
 - `/deck cost`, `/deck 3`, or any other tab name or number opens the pane on that tab.
 - In the pane, keys `1` to `9` switch tabs, `g` opens or closes lazygit, and `t` cycles the
-  Decisions tab's type filter.
+  Decisions tab's type filter through all 12 decision types.
 
 When a session starts, the deck opens on its own if the terminal is at least 144 columns
 wide. Below that width it waits until you run `/deck` or widen the terminal. Turn this off
@@ -31,7 +31,7 @@ fullscreen layout it opens inline above the prompt. A mod cannot place a pane on
 | 5 | Changes | The working tree, laid out like lazygit's Files panel and read-only. A header gives the branch with ahead and behind counts, then the last commit's short hash, subject, and age. Below it come the groups Staged, Unstaged, Untracked, and Conflicts, each with its file count and one row per file: a status letter, the path, and lines added and removed. A file with both staged and unstaged changes appears in both groups. A `·` marks a file the session edited. Pressing a row opens a diff preview of up to 24 lines under it, and pressing it again closes it. A Refresh button and the lazygit button sit above. A **This session** list follows: files edited, read from the Edit, MultiEdit, Write, and NotebookEdit calls, with lines added and removed, edit count, and how long ago. Outside the realm the working tree says why it is off, and the session list still shows |
 | 6 | Timeline | Where the latest turn's time went: a strip of model, tool, and failed spans, totals for model, each tool, and idle, and the slowest steps. An advisor consult adds no span: its time is inside the request that made it |
 | 7 | Flow | The workspace (directory, repository root, branch, remote, realm), viStack runs from `.claude/state/` and `.codex/vistack/state/` with each slice's phase, agent, model, PR, and blockers plus the last ledger row, and the slice worktrees |
-| 8 | Decisions | The fork layer: its mode, its ladder with each tier's readiness, how and when forks are asked, and this session's tally by backend and by type, then every fork of every decision type this session, the deck's and the main session's, newest first, filtered by type with `t`. Pressing a row shows the whole chain. See [Decisions](#decisions) |
+| 8 | Decisions | A Types block with one row per decision type, then the fork layer: its mode, its ladder with each tier's readiness, how and when forks are asked, and this session's tally by backend and by type, then every fork of every decision type this session, the deck's and the main session's, newest first, filtered by type with `t`. Pressing a row shows the whole chain. See [Decisions](#decisions) |
 | 9 | Settings | Where the pane docks, theme, icon set, animations, the git realm, and a reset to defaults |
 
 ## Monitors and loops
@@ -143,16 +143,30 @@ also appear as rows in the `/config` menu.
 
 ## Decisions
 
-The deck asks the fork layer itself at three moments:
+The deck asks the fork layer itself at three moments, for three of the 12 decision types:
 
 - **Every prompt**, `tier-selection`: when a turn starts, the deck asks about the prompt.
-- **The match path**, `playbook-selection` as well: on the session's first prompt, or a prompt
-  that begins with `new task`, the deck also asks which playbook fits the prompt as typed.
+- **The match path**, `playbook-selection` and `intake-analysis` as well: on the session's
+  first prompt, or a prompt that begins with `new task`, the deck also asks which playbook
+  fits the prompt as typed and what intake makes of it.
 - **Every subagent spawn**, `tier-selection`: the deck asks about the spawn's description and
   prompt. In `apply` mode it decides before the spawn, because the answer sets the model.
 
-The other ten types come from the main session's own calls at the boundaries in
-`skills/laya-decision/SKILL.md`, which the deck reads from the decision history (below).
+The other nine types come from the coordinator's own calls at the boundaries in
+`skills/laya-decision/SKILL.md`, which the deck reads from the decision history (below). The
+deck does not ask them because each needs fields only the coordinator holds.
+`dispatch-readiness` is the clearest case. The deck has no brief, acceptance criteria,
+verification command, or writable files to send, so the policy would answer `hold` at .99 for
+every request, a confident and misleading answer.
+
+Three inputs are not asked, because the engine sees only the request text and would tier them
+as slices: a subagent's hand-back (a prompt that opens with `<agent-message`), a background
+task's end (`<task-notification`), and the spawn of a read-only role (advisor, analyst,
+groomer, health-check, planner, researcher, reviewer, whatever prefix it carries).
+Each leaves a row led by `not a slice`, with the reason on its final line. It counts as
+`not asked` in this session's tally, never as a fork asked, and the Types block leaves it out.
+A fork the engine itself marks `outputs.slice_like` false (`docs/guide/decision-engine.md`)
+also leads with `not a slice`; that one was asked, so it counts.
 
 Each question the deck asks is one call:
 
@@ -170,6 +184,10 @@ therefore agree on the default, which the coordinator's `model-selection` may mo
 The decisions run on the session's timer, never inside a hook, so a slow tier does not hold
 a prompt or a spawn. The exception is `apply`, which has to decide before the spawn.
 
+After each fork the deck asks with history on, it re-reads the history file once (a read
+already queued is not queued again), so the Types block and the main session's rows catch up without waiting for
+the next Bash call.
+
 When the consuming repository has `.claude/vistack/`, the decision and its outcome are written
 to `decision-history.jsonl` there, so the fork layer's review (`vistack-decision feedback`)
 sees them. Elsewhere the deck runs the decision with `--no-history`.
@@ -182,23 +200,55 @@ type, stamped at or after the second the session started, one per decision id, m
 Rows the deck wrote (`metadata.source` `main-turn` or `agent-spawn`) and lines that are not
 JSON are skipped. A history over 4 MiB, the read limit, shows nothing.
 
+### The Types block
+
+The top of the tab lists all 12 decision types in the engine's order, plus any other type the
+history holds, so a type nobody asked is visible. The heading counts the types asked this
+session. Each row has these columns:
+
+| Column | Shows |
+|---|---|
+| `type` | The decision type |
+| `now` | Forks asked this session. The deck's skipped inputs are not counted |
+| `all` | Forks in the whole history file; `-` when the file could not be read and the status gave no count |
+| `margin` | Mean confidence over the history, read as a margin (see the legend below) |
+| `fall` | Share of those forks the deterministic fallback answered, meaning no tier settled them |
+| `by` | Who asks the type: `deck` for the three above, `coord` for the other nine |
+| `last` | The last action, or `never asked` when the session and the history hold no fork of that type. A `tier-selection` the engine marked not a slice reads `not a slice` |
+
+A row with no forks is dim, and the row for the active filter is in the accent color. A pane
+too narrow for `last` cuts each row at its width. A legend line under the block explains the
+columns. Filtering to a type with no fork this session says who asks it and when
+(`the coordinator asks it before each dispatched ledger row`), so an empty filter reads as a
+call not yet made, not as a bug. The coordinator's side is in `skills/laya-decision/SKILL.md`,
+Boundaries: a boundary call it skipped shows here as `never asked`.
+
 ### The fork layer block
 
-The top of the tab shows the fork layer as the deck last read it:
+Below the Types block, the block shows the fork layer as the deck last read it:
 
-- **Mode**, from the `jevMode` option, with the number of forks in the engine's history.
+- **Mode**, from the `jevMode` option, in the `Fork layer` heading as `jevMode <mode>`, with
+  the number of forks in the engine's history (`· N in history`).
 - **Ladder**, the tiers in the order they are tried, each with its readiness: policy; Jev with
   its key present or missing, or a recent refusal; Cloudflare with the Neurons used out of the
   daily cap, or a missing token or account; Ollama reachable, down, or its model not pulled.
   Jev and Cloudflare show as off until you opt in. When the models are off, the block says
   the policy answers alone and names `/vistack:decisions-on`.
-- **Asked on**: each prompt, the match path, each subagent spawn, and in `apply` mode before a
-  built-in spawn, each with its type. **Other types** names the main session's CLI calls.
+- **Asked on**: each prompt and each subagent spawn with `tier-selection`, and in `apply` mode
+  before a built-in spawn. **And on** the first prompt or `new task`: `playbook-selection` and
+  `intake-analysis`. **Not asked, no slice** names the three skipped inputs. **Other types**
+  names the coordinator's CLI calls, read from the decision history, and shows even when the
+  status failed.
 - **How**: the command, the stdin shape, and the history file in use.
 - **History by type**: forks per type across the whole history, with the mean confidence,
   from `decisions status`'s `forks.by_type`.
 - **This session**: forks asked, how many were sharp and how many split, a count per answering
-  tier, the count of failed and still-asking forks, and a count per type.
+  tier, the count of failed and still-asking forks, and `not asked` for the skipped inputs.
+  The per-type count is the Types block's `now` column.
+- **A legend line**, `confidence = the margin between a model's top two odds`. Jev's
+  confidence is that margin (a .73 and .27 split reads .46), not a chance of being right, so a
+  rejection note reads `margin 0.300 is below 0.650`, where the engine's text says
+  `confidence`.
 
 The deck reads this with `python3 scripts/vistack-decision.py decisions status`, which sends
 nothing off the machine and never probes a backend. It runs at session start, on the deck's
@@ -234,8 +284,9 @@ deck set that model:
 Other types lead with a short label and the action (`intake`, `grooming`, `slices`,
 `dispatch`, `progress`, `verify`), the chosen option (`tool`, `file`), or the action alone
 (`skill-improvement`). A pick saved by an earlier deck, with no action, reads as a tier row.
-`t`, or the `type:` button, cycles the filter: all, then each type this session holds. The
-deck keeps the choice in its store.
+`t`, or the `type:` button, cycles the filter: all, then each of the 12 types in the
+engine's order, whether or not this session holds one, then any other type seen. The deck
+keeps the choice in its store.
 
 - `asking the fork layer…` means the process has not returned yet.
 - `failed: …` means there is no answer: the exit code and the first line of its error, `parse
@@ -250,19 +301,44 @@ Pressing a row shows the whole chain:
   file.
 - **policy**: whether the deterministic policy answered sharp or split, and its rationale.
 - **ladder**: one mark per rung, then a line for each rung that was rejected or unavailable,
-  with the reason, or that answered, with its tier and confidence.
+  with the reason, or that answered, with its tier and confidence. A rung that answered under
+  its floor ends its line with `agrees: <action>` or `dissents: <action>`, against the
+  policy's action.
+- **votes**, when the engine reported any: `corroborated by` the tiers that agreed under their
+  floors, `dissent` from the tiers that did not, `margins` per tier, and `model`, the model
+  that served the answer (`jev-latest` is unpinned, so this is the record). These keys are
+  left out of the `out` lines.
 - **P** and **signals**: the probability for each tier, the contract-change score, the signals
   that pointed to complex or mechanical, the flags, and whether a pattern or a tier mismatch
   was found.
 - **type** and **out**, for any type but `tier-selection`: the type and action, then one line
   per output key with its value, eight at most, each cut to the line.
-- **final**: tier, then role, then model, and whether it was applied or only suggested. For
-  any other type, what was chosen, marked advisory.
+- **final**: tier, then role, then model, then the apply reason (below). For a request that is
+  not a slice, `not a slice` and either the skip reason or `no model to suggest`. For any
+  other type, what was chosen, marked advisory.
 - **ran**: the model that actually ran and whether it matched, how the unit ended, its cost,
   and, once the outcome reached `decision-history.jsonl`, `outcome recorded` with the
   decision id. Any other type shows its decision **id** instead.
 - **else**, **needs**, **changes if**, and **risks**: the alternatives the engine weighed, the
   evidence it wants before the choice holds, what would change it, and its risks.
+
+### The apply reason
+
+The last part of the final row says why the suggested model was or was not set. The deck
+checks in this order, and the first match is the reason:
+
+| Case | Reason shown |
+|---|---|
+| a skipped input | `<reason>: the deck asked nothing` |
+| the deck set the model | `applied` |
+| the fork came from a prompt | `advisory: a prompt has no model to set` |
+| the main session asked it by CLI | `advisory: the main session asked it and decides` |
+| a pick saved by an earlier deck, with no subagent type | `suggested; an earlier deck kept no reason` |
+| the caller named a model | `kept the caller's model` |
+| a viStack role (`vistack:` prefix) | `the coordinator picks this role's model (model-selection)` |
+| a subagent type outside `general-purpose`, `Explore`, `Plan` | `the deck sets only general-purpose, Explore, Plan` |
+| `jevMode` is not `apply` | `suggest mode; jevMode=apply would set it` |
+| none of the above | `not applied: the answer named no model` |
 
 ### How the ladder line is derived
 
@@ -315,7 +391,7 @@ deck:
   file edit, after a Bash `git` command that changes the tree, and on Refresh. It never
   stages, commits, stashes, or checks out. Outside the realm it reads only `.git/HEAD`;
 - runs `python3 scripts/vistack-decision.py decision tier-selection` for each fork,
-  `decision playbook-selection` on the match path, and
+  `decision playbook-selection` and `decision intake-analysis` on the match path, and
   `python3 scripts/vistack-decision.py decisions status` for the fork layer block, and reads
   `.claude/vistack/decision-history.jsonl` with it. The status call sends nothing and never
   probes a backend. It also runs `pgrep` or `pkill` for lazygit;

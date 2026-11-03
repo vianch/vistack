@@ -1,5 +1,6 @@
 import { duration, fit, percent, tokens, usd } from '../lib/format'
 import { stepCosts } from '../lib/charts'
+import { pickStatus } from '../lib/jev'
 import { departmentOf } from '../lib/org'
 import { addUp, byModel, cacheShare, executions } from '../lib/ledger'
 import { modelLabel } from '../lib/pricing'
@@ -52,7 +53,7 @@ export const costTab = (kit: Kit, data: CostData, columns: number): RenderElemen
   const labelWidth = Math.max(8, columns - 34)
   const tileWidth = Math.max(12, Math.floor((columns - 1) / 2))
   const members = memberCosts(kit, data)
-  const newestPicks = [...data.picks].reverse().slice(0, PICKS_SHOWN)
+  const newestPicks = data.picks.filter(pick => pickStatus(pick) !== 'skipped').reverse().slice(0, PICKS_SHOWN)
   const kindIcon = (run: { id: string; kind: 'turn' | 'agent' }): string => {
     const agent = run.kind === 'agent' ? data.agents.find(one => one.agentId === run.id) : undefined
 

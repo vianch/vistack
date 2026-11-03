@@ -62,9 +62,28 @@ const PLAYBOOK_DECISION = JSON.stringify({
   risks: [],
 })
 
+const INTAKE_DECISION = JSON.stringify({
+  action: 'investigate',
+  alternatives: [],
+  backend: 'deterministic',
+  confidence: 0.88,
+  decision_id: 'dec_0000000000000003',
+  decision_type: 'intake-analysis',
+  fork: 'sharp',
+  outputs: { classification: 'investigation', readiness: 'needs-investigation' },
+  probabilities: { investigate: 0.88 },
+  rationale: 'The request asks what exists before any change.',
+  required_evidence: [],
+  risks: [],
+})
+
 type ForkAnswer = { exitCode: number; stderr: string; stdout: string }
 
-const answered = (type: string): ForkAnswer => ({ exitCode: 0, stderr: '', stdout: type === 'playbook-selection' ? PLAYBOOK_DECISION : FORK_DECISION })
+const ANSWERS: Readonly<Record<string, string>> = { 'intake-analysis': INTAKE_DECISION, 'playbook-selection': PLAYBOOK_DECISION }
+
+const answered = (type: string): ForkAnswer => ({ exitCode: 0, stderr: '', stdout: ANSWERS[type] ?? FORK_DECISION })
+
+const forkTypes = (ran: string[][]) => ran.filter(argv => argv[2] === 'decision').map(argv => argv[3])
 
 // A started session, its decision script on disk unless `isScriptFound` is false: `decisions status`
 // answers at once and each fork 500 ms later with `answer` for its decision type. Resolves to every
@@ -123,24 +142,72 @@ test('a prompt asks the fork layer: its row shows while the script runs, reads t
   await ui.press({ key: 'tab-decisions' })
   expect(await ui.find({ text: /ladder: policy ▸ jev ✓key ▸ cloudflare 1\.8k\/9k ▸ ollama ✓/ })).toBeDefined()
   expect(await ui.find({ text: /asking the fork layer/ })).toBeDefined()
-  await clock.advance(1_200)
+  await clock.advance(2_000)
   expect(await ui.find({ text: /asking the fork layer/ })).toBeUndefined()
   expect(await ui.find({ text: /complex ▸ Opus 5\.5 · \.94 · jev · sharp · 0\.5s/ })).toBeDefined()
   expect(await ui.find({ text: /playbook ▸ investigation · \.92 · policy · sharp · 0\.5s/ })).toBeDefined()
+  expect(await ui.find({ text: /intake ▸ investigate · \.88 · policy · sharp · 0\.5s/ })).toBeDefined()
   expect(await ui.find({ text: / playbook-selection we already implemented a deck/ })).toBeDefined()
-  expect(await ui.find({ text: /this session: 2 asked · 2 sharp · 0 split · jev 1$/ })).toBeDefined()
-  expect(await ui.find({ text: /^by type: playbook-selection 1 · tier-selection 1$/ })).toBeDefined()
+  expect(await ui.find({ text: /this session: 3 asked · 3 sharp · 0 split/ })).toBeDefined()
+  expect(await ui.find({ text: /^intake-analysis +1 +- +\.88 +0% deck +investigate$/ })).toBeDefined()
+  expect(await ui.find({ text: /^grooming +0 +- +- +- coord never asked$/ })).toBeDefined()
   expect(ran.filter(argv => argv[2] === 'decision')).toEqual([
     ['python3', expect.any(String), 'decision', 'tier-selection', '--backend', 'auto', '--no-history'],
     ['python3', expect.any(String), 'decision', 'playbook-selection', '--backend', 'auto', '--no-history'],
+    ['python3', expect.any(String), 'decision', 'intake-analysis', '--backend', 'auto', '--no-history'],
   ])
   await ui.press({ key: 'pick-turn-t1' })
   expect(await ui.find({ text: /on prompt · tier-selection · took 0\.5s/ })).toBeDefined()
   expect(await ui.find({ text: /jev: agreed at 0\.94 · complex \.94/ })).toBeDefined()
-  expect(await ui.find({ text: /final: complex → senior-implementer → Opus 5\.5/ })).toBeDefined()
+  expect(await ui.find({ text: /final: complex → senior-implementer → Opus 5\.5 ·$/ })).toBeDefined()
+  expect(await ui.find({ text: /^ +advisory: a prompt has no model to set$/ })).toBeDefined()
+  expect(await ui.find({ text: /suggested, not applied/ })).toBeUndefined()
   await $.command.run({ args: '', command: 'vistack:decisions-off', origin: { kind: 'composer' }, presentation: { columns: 80, isFullscreen: false } })
   await clock.advance(300)
   expect(statusCalls(ran)).toHaveLength(2)
+  await ui.unmount()
+})
+
+test('intake-analysis joins the match path only; a hand-back and a read-only role are settled without the CLI', async ($, on) => {
+  const clock = mock.clock(on, { now: 1_000 })
+
+  on('agent.spawn', (_engine, e) => ({ agentId: e.subagentType === 'vistack:analyst' ? 'a2' : 'a1', model: 'claude-sonnet-5-5' }))
+
+  const ran = await forkSession($, on, clock, answered)
+  const turn = async (turnId: string, text: string): Promise<void> => {
+    await $.turn.start({ text, turnId })
+    await clock.advance(2_000)
+  }
+
+  await turn('t1', 'map the deck panel')
+  expect(forkTypes(ran)).toEqual(['tier-selection', 'playbook-selection', 'intake-analysis'])
+  await turn('t2', 'and its tests too')
+  expect(forkTypes(ran)).toHaveLength(4)
+  await turn('t3', 'new task: port the parser')
+  expect(forkTypes(ran).slice(4)).toEqual(['tier-selection', 'playbook-selection', 'intake-analysis'])
+  await turn('t4', '<agent-message from="a9">\n[Subagent hand-back] The text below is the final report of a subagent.')
+  await turn('t5', '<task-notification>\n<task-type>artifact-watch-lifecycle</task-type>')
+  await $.agent.spawn({ description: 'map the call sites', prompt: 'Map every call site.', subagentType: 'vistack:analyst' } as never)
+  await $.agent.spawn({ description: 'list the hooks', prompt: 'List the hooks.', subagentType: 'Explore' } as never)
+  await clock.advance(2_000)
+  expect(forkTypes(ran)).toHaveLength(8)
+
+  const ui = await $.ui.mount(pane('terminal'))
+
+  await ui.press({ key: 'tab-decisions' })
+  expect(await ui.find({ text: /^ {3}not a slice · hand-back: the deck asked nothing$/ })).toBeDefined()
+  expect(await ui.find({ text: /^ {3}not a slice · task notification: the deck asked nothing$/ })).toBeDefined()
+  expect(await ui.find({ text: /^ {3}not a slice · read-only role: the deck asked nothing$/ })).toBeDefined()
+  expect(await ui.find({ text: /this session: 8 asked · 8 sharp · 0 split/ })).toBeDefined()
+  expect(await ui.find({ text: / · not asked 3$/ })).toBeDefined()
+  expect(await ui.find({ text: /^tier-selection +4 +- +\.94 +0% deck +complex$/ })).toBeDefined()
+  await ui.press({ key: 'pick-turn-t4' })
+  expect(await ui.find({ text: /not asked: \d\d:\d\d:\d\d on prompt · tier-selection$/ })).toBeDefined()
+  expect(await ui.find({ text: /final: not a slice · hand-back: the deck asked nothing/ })).toBeDefined()
+  expect(await ui.find({ text: /sent: |advisory: a prompt/ })).toBeUndefined()
+  await ui.press({ key: 'pick-agent-a1' })
+  expect(await ui.find({ text: /final: complex → senior-implementer → Opus 5\.5 · suggest$/ })).toBeDefined()
+  expect(await ui.find({ text: /^ +mode; jevMode=apply would set it$/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -149,13 +216,13 @@ test('a fork whose script exits non-zero reads failed with the exit code and the
   const ran = await forkSession($, on, clock, { exitCode: 2, stderr: 'TYPESAFE_KEY unset\nTraceback (most recent call last):', stdout: '' })
 
   await $.turn.start({ text: 'fix the typo in README', turnId: 't2' })
-  await clock.advance(1_400)
+  await clock.advance(2_000)
 
   const ui = await $.ui.mount(pane('terminal'))
 
   await ui.press({ key: 'tab-decisions' })
   expect(await ui.find({ text: /failed: exit 2: TYPESAFE_KEY unset · 0\.5s/ })).toBeDefined()
-  expect(await ui.find({ text: /this session: 2 asked · 0 sharp · 0 split · failed 2/ })).toBeDefined()
+  expect(await ui.find({ text: /this session: 3 asked · 0 sharp · 0 split · failed 3/ })).toBeDefined()
   await ui.press({ key: 'fork-refresh' })
   await clock.advance(300)
   expect(statusCalls(ran)).toHaveLength(2)

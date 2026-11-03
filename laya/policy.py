@@ -7,6 +7,7 @@ import re
 from typing import Any, Mapping
 
 from .schema import DECISION_TYPES, DecisionContext, Evidence, PLAYBOOKS, ROLES, TIER_ROLES
+from .slice import NOT_A_SLICE, slice_like
 
 
 @dataclass(frozen=True)
@@ -659,6 +660,7 @@ def evaluate(context: DecisionContext) -> PolicyDraft:
             "pattern": pattern,
             "tier_mismatch": mismatch,
         }
+        base["slice_like"] = slice_like(base, score_classes(context).ranked())
         if mismatch:
             return _common(
                 context,
@@ -720,7 +722,7 @@ def evaluate(context: DecisionContext) -> PolicyDraft:
             context,
             action="complex",
             confidence=0.6,
-            rationale="No pattern or mechanical signal is evidenced; an unclear tier is complex.",
+            rationale="No pattern or mechanical signal is evidenced; an unclear tier is complex." if base["slice_like"] else NOT_A_SLICE,
             required=("the pattern to follow, or the reason none exists",),
             alternatives=(("mechanical", "Use once a named pattern covers the whole slice."),),
             outputs=_tier_outputs(base, "complex"),

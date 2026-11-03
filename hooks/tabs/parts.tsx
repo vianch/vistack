@@ -1,3 +1,4 @@
+import { TIER_SELECTION, headlineOf, pickType } from '../lib/fork-types'
 import { bar, clockTime, duration, fit } from '../lib/format'
 import { backendLabel, pickStatus, pickTrigger } from '../lib/jev'
 import { bars, commLabel, sparkline } from '../lib/org'
@@ -221,9 +222,9 @@ export const CommRow = (kit: Kit, comm: DeckComm, agents: readonly DeckAgent[], 
 }
 
 const TRIGGER_MARKS: Readonly<Record<DeckIcons, Readonly<Record<DeckPick['trigger'], string>>>> = {
-  ascii: { prompt: '>', spawn: '+', 'spawn-apply': '+' },
-  emoji: { prompt: '⌨', spawn: '◇', 'spawn-apply': '◆' },
-  unicode: { prompt: '⌨', spawn: '◇', 'spawn-apply': '◆' },
+  ascii: { cli: '$', prompt: '>', spawn: '+', 'spawn-apply': '+' },
+  emoji: { cli: '$', prompt: '⌨', spawn: '◇', 'spawn-apply': '◆' },
+  unicode: { cli: '$', prompt: '⌨', spawn: '◇', 'spawn-apply': '◆' },
 }
 
 const confidenceText = (confidence: number): string => {
@@ -267,8 +268,10 @@ const pickResult = (kit: Kit, pick: DeckPick, columns: number): RenderElement =>
     )
   }
 
-  const model = modelLabel(pick.recommended)
-  const lead = `${PICK_INDENT}${pick.tier} ▸ ${model} · `
+  const head = headlineOf(pick)
+  const choice = head.choice === undefined ? undefined : fit(head.choice, Math.max(8, Math.floor(columns / 2)))
+  const model = head.model === undefined ? undefined : modelLabel(head.model)
+  const lead = `${PICK_INDENT}${[head.lead, choice, model].filter(part => part !== undefined).join(' ▸ ')} · `
   const rest = [confidenceText(pick.confidence), backendLabel(pick.backend), pick.fork ?? '', took, pick.isApplied ? 'applied' : '']
     .filter(part => part !== '')
     .join(' · ')
@@ -276,9 +279,11 @@ const pickResult = (kit: Kit, pick: DeckPick, columns: number): RenderElement =>
   return (
     <Text key={key}>
       <Text>{PICK_INDENT}</Text>
-      <Text color={theme.accent}>{pick.tier}</Text>
-      <Text color={theme.muted}> ▸ </Text>
-      <Text color={theme.model}>{model}</Text>
+      <Text color={theme.accent}>{head.lead}</Text>
+      {choice !== undefined && <Text color={theme.muted}> ▸ </Text>}
+      {choice !== undefined && <Text>{choice}</Text>}
+      {model !== undefined && <Text color={theme.muted}> ▸ </Text>}
+      {model !== undefined && <Text color={theme.model}>{model}</Text>}
       <Text dimColor> · </Text>
       <Text dimColor>{fit(rest, Math.max(0, columns - cells(lead)))}</Text>
     </Text>
@@ -286,7 +291,8 @@ const pickResult = (kit: Kit, pick: DeckPick, columns: number): RenderElement =>
 }
 
 const pickSubject = (kit: Kit, pick: DeckPick, agents: readonly DeckAgent[], columns: number): string => {
-  const lead = fit(`${clockTime(pick.at).slice(0, 5)} ${TRIGGER_MARKS[kit.iconSet][pickTrigger(pick)]} ${pick.subject}`, columns)
+  const type = pickType(pick) === TIER_SELECTION ? '' : `${pickType(pick)} `
+  const lead = fit(`${clockTime(pick.at).slice(0, 5)} ${TRIGGER_MARKS[kit.iconSet][pickTrigger(pick)]} ${type}${pick.subject}`, columns)
   const nickname = pick.agentId === undefined ? undefined : agents.find(agent => agent.agentId === pick.agentId)?.nickname
   const named = `${lead} · ${nickname ?? ''}`
 

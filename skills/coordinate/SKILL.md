@@ -123,6 +123,11 @@ a ledger row did not happen.
   model that ran to the slice's `model`, and name the model, effort, and decision id in the
   `dispatched` row's `reason`. With the hook off or unavailable, the frontmatter applies. On
   Codex the thread runs one model, so skip the fork.
+- Call the fork layer at four more boundaries, each call and its context named in
+  `skills/laya-decision/SKILL.md`, Boundaries: `decomposition` once the slice plan exists,
+  `dispatch-readiness` before each `dispatched` row, `runtime-progress` at each monitor pass,
+  and `verification` before reporting merge-ready. A `hold`, `block`, or `request-evidence`
+  answer sends you back to the rule it advises on; a failed call never blocks a dispatch.
 - Run the advisor `plan` checkpoint before the first wave and the `done` checkpoint before
   reporting merge-ready (`skills/advisor/SKILL.md`). Record `advisor-consulted` or
   `advisor-unavailable`.
@@ -171,6 +176,9 @@ QA evidence, a reproduction video included, dispatches one.
   charges the lane.
 - **Its own evidence directory, no worktree:**
   `<state-root>/qa/<slug>/<slice-or-pr>/<head7>/`. Lanes share no evidence path.
+- **Playwright path.** The brief passes `--playwright` as the absolute path to the consuming
+  repository's Playwright package, because the lane's working directory is its evidence
+  directory under `<state-root>`, not the repository root.
 - **`doctor` once per run.** The first QA lane is the pilot: it runs `qa-video.mjs doctor`
   before any other lane starts, and later briefs name its JSON so their lanes skip the
   install.

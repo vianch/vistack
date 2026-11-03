@@ -66,7 +66,10 @@ values. This is FENCE 4.
    assertion point, named `<scenario>-<step>.png`. One screenshot at the end of a scenario
    does not cover earlier assertions. Run each browser scenario through
    `skills/qa-video/SKILL.md`, which records its video and takes those screenshots in the
-   same pass. When no video can be made, write `none: <reason>` in its place.
+   same pass. `doctor`, `login`, and `record` pass `--playwright <absolute path to this
+   repository's Playwright package>`, and `doctor` runs from the evidence directory with it.
+   Write `no video: <reason>` in the video's place only when the scenario's `.webm` is
+   missing, empty, or failed; a skipped MP4 or GIF leaves the `.webm` as the video.
 5. Record the scenario, assertion point, steps, expected result, actual result, pass or
    fail, screenshot, video reference, and diff hunk.
 6. Record a pass only when the screenshot exists and shows the claimed state. A missing,
@@ -79,7 +82,7 @@ values. This is FENCE 4.
    Keep existing screenshot embeds; use native attachments for new uploads. Ask the user
    for images only when the running interface cannot be reached.
 8. Re-read the posted PR comment and verify that it contains one row per assertion point,
-   every row has an embedded screenshot and a video reference or its `none` reason, and the
+   every row has an embedded screenshot and a video reference or its `no video:` reason, and the
    reported PR head matches the tested head.
 9. A failed assertion returns to its owning slice with the evidence attached. Do not fix
    product code from the verifier role. Triage a failing automated check through
@@ -92,7 +95,7 @@ the user. The lane runs in the background with no channel to the user, so the co
 through files in the lane's evidence directory, `<dir>` below
 (`<state-root>/qa/<slug>/<slice-or-pr>/<head7>/`).
 
-`node "${CLAUDE_PLUGIN_ROOT}/skills/qa-video/scripts/qa-video.mjs" login --scenario <module> --out <dir> --url <target> [--otp-timeout <seconds>]`
+`node "${CLAUDE_PLUGIN_ROOT}/skills/qa-video/scripts/qa-video.mjs" login --scenario <module> --out <dir> --url <target> --playwright <path> [--otp-timeout <seconds>]`
 runs the module's `login` export once in a context that is not recorded, waits for the code,
 and saves the Playwright storage state to `<dir>/auth.json` with mode 0600. Every scenario
 then records with `record ... --storage-state <dir>/auth.json` and skips the login, so one
@@ -151,13 +154,14 @@ at run exit, pause, or fence.
 |---|---|---|---|---|---|---|---|---|
 | `<name>` | `<step>` | `<actions>` | `<predicate>` | `<observation>` | `pass` | `![<step>](<uploaded-image-url>)` | `<scenario>.mp4 @ 00:04-00:09` | `<file:line>` |
 
-A video's `@ start-end` comes from the scenario's manifest.
+A video's `@ start-end` comes from the scenario's manifest. The video cell names the file
+`finish` picked in `attach.path`: the `.webm` when no `.mp4` was produced.
 
 ## Exit criteria
 
 Every required assertion point has a screenshot captured on the tested PR head, every row
 maps to a diff hunk, every screenshot is embedded in the posted PR results table, every
-browser scenario cites a video that passed `check` or the reason it has none, and the
+browser scenario cites a video that passed `check` or its `no video:` reason, and the
 comment has been verified after posting. Any failure remains open and blocks merge-ready
 status.
 

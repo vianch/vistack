@@ -12,7 +12,7 @@ from .config import Settings, default_history_path, read_settings, resolve_confi
 from .feedback import analyze, fork_summary, proposals
 from .history import HistoryStore
 from .ollama_models import OLLAMA_MODELS, describe, supported_ollama_model, unsupported_reason
-from .schema import DECISION_TYPES
+from .schema import DECISION_TYPES, OPEN_ACTION_TYPES
 from .server import serve
 
 
@@ -65,6 +65,22 @@ def _json_context(args: argparse.Namespace) -> dict:
         raise ValueError("context must be a JSON object")
     value.setdefault("decision_type", args.decision_type)
     return value
+
+
+def _require_options(decision_type: str, context: dict) -> None:
+    """Exit with a usage error when an option-choosing decision type has no candidates to choose from."""
+
+    if decision_type not in OPEN_ACTION_TYPES:
+        return
+    if context.get("available_actions", []) != []:
+        return
+    example = {"available_actions": ["<option one>", "<option two>"], "task": {"request": "<the request>"}}
+    print(
+        f"vistack-decision: {decision_type} chooses among candidates you supply; "
+        f'pass "available_actions" in the context JSON, e.g. {json.dumps(example)}',
+        file=sys.stderr,
+    )
+    sys.exit(2)
 
 
 def _add_runtime_options(parser: argparse.ArgumentParser) -> None:
@@ -285,6 +301,7 @@ def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
     if args.command == "decision":
         context = _json_context(args)
+        _require_options(args.decision_type, context)
         result = _engine(args).decide(context, decision_type=args.decision_type, request_id=args.request_id)
         print(json.dumps(result.to_dict(), indent=2, sort_keys=True, ensure_ascii=False))
         return

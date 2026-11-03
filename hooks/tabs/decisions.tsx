@@ -1,3 +1,4 @@
+import { TIER_SELECTION, headlineOf, nextFilter, pickType, typesOf } from '../lib/fork-types'
 import { ago, clockTime, duration, fit, usd } from '../lib/format'
 import { backendLabel, forkTally, pickStatus, pickTrigger } from '../lib/jev'
 import { modelFamily, modelLabel } from '../lib/pricing'
@@ -14,9 +15,11 @@ export type DecisionsData = {
   agents: readonly DeckAgent[]
   openId: string
   now: number
+  // A decision type, or '' for every type.
+  filter: string
 }
 
-export type DecisionsActions = { toggle: (id: string) => void; refresh: () => void }
+export type DecisionsActions = { toggle: (id: string) => void; refresh: () => void; setFilter: (filter: string) => void }
 
 type Marks = { good: string; bad: string; step: string; to: string; skip: string }
 
@@ -26,11 +29,14 @@ const PLAIN = ''
 
 const ROW_CAP = 30
 
+const OUTPUT_ROWS = 8
+
 const ASCII_MARKS: Marks = { bad: 'x', good: 'v', skip: '-', step: '>', to: '->' }
 
 const MARKS: Marks = { bad: '✗', good: '✓', skip: '·', step: '▸', to: '→' }
 
 const TRIGGER_TEXT: Readonly<Record<DeckPick['trigger'], string>> = {
+  cli: 'main-session CLI call',
   prompt: 'prompt',
   spawn: 'subagent spawn',
   'spawn-apply': 'subagent spawn, before it started (apply)',
@@ -118,6 +124,10 @@ export const decisionsTab = (kit: Kit, data: DecisionsData, actions: DecisionsAc
   const isAsking = layer !== null && !isOff && layer.script !== undefined
   const history = [...data.picks].reverse().find(pick => pick.history !== undefined)?.history
   const hints = layer === null ? [] : [layer.cloudflare?.hint, layer.ollama?.hint].filter((hint): hint is string => hint !== undefined)
+  const historyTypes = layer?.forks?.byType ?? []
+  const sessionTypes = typesOf(data.picks)
+  const shown = data.filter === '' ? data.picks : data.picks.filter(pick => pickType(pick) === data.filter)
+  const filterLabel = `type: ${data.filter === '' ? 'all' : data.filter}`
   const right = layer === null ? 'not read yet' : `${layer.mode}${layer.forks === undefined ? '' : ` · ${layer.forks.forks} in history`}`
   const sessionParts = [
     `${tally.asked} asked`,
@@ -152,9 +162,10 @@ export const decisionsTab = (kit: Kit, data: DecisionsData, actions: DecisionsAc
     const status = pickStatus(pick)
     const took = pick.ms === undefined ? '' : ` · took ${duration(pick.ms)}`
     const request = pick.scope === 'main' ? `${Math.min(pick.subject.length, 2400)} chars` : 'description + prompt, ≤2400 chars'
+    const isCli = pickTrigger(pick) === 'cli'
     const asked = [
-      ...row('asked', 'asked', `${clockTime(pick.at)} on ${TRIGGER_TEXT[pickTrigger(pick)]} · ${pick.decisionType ?? 'tier-selection'}${took}`),
-      ...row('sent', 'sent', `source=${pick.scope === 'main' ? 'main-turn' : 'agent-spawn'} · request ${request}`),
+      ...row('asked', 'asked', `${clockTime(pick.at)} on ${TRIGGER_TEXT[pickTrigger(pick)]} · ${pickType(pick)}${took}`),
+      ...(isCli ? [] : row('sent', 'sent', `source=${pick.scope === 'main' ? 'main-turn' : 'agent-spawn'} · request ${request}`)),
       ...(pick.command === undefined ? [] : row('cmd', 'cmd', pick.command.replace(/\S*\/(vistack-decision\.py)/, '$1').replace(/\S*\/(\.claude\/)/g, '$1'))),
       ...(pick.history === undefined ? [] : row('history', 'history', shortPath(pick.history))),
     ]
@@ -186,6 +197,12 @@ export const decisionsTab = (kit: Kit, data: DecisionsData, actions: DecisionsAc
     const recorded = pick.decisionId === undefined ? '' : ` · ${pick.outcomeRecorded === true ? 'outcome recorded ' : ''}${fit(pick.decisionId, 12)}`
     const needs = pick.requiredEvidence ?? []
     const risks = pick.risks ?? []
+    const conditions = pick.changeConditions ?? []
+    const isTier = pickType(pick) === TIER_SELECTION
+    const head = headlineOf(pick)
+    const chosen = [head.lead, head.choice, head.model === undefined ? undefined : modelLabel(head.model)].filter(part => part !== undefined)
+    const outputs = Object.entries(pick.outputs ?? {})
+    const id = pick.decisionId === undefined ? 'no decision id' : fit(pick.decisionId, 20)
 
     return [
       ...asked,
@@ -197,18 +214,24 @@ export const decisionsTab = (kit: Kit, data: DecisionsData, actions: DecisionsAc
           lines(
             `${pick.id}-rung-${step.tier}`,
             `${backendLabel(step.tier)}: `,
-            `${step.outcome}${step.note === undefined ? '' : ` ${step.note}`}${step.tier === pick.backend ? ` · ${pick.tier} ${share(pick.confidence)}` : ''}`.split(' '),
+            `${step.outcome}${step.note === undefined ? '' : ` ${step.note}`}${step.tier === pick.backend ? ` · ${pick.action ?? pick.tier} ${share(pick.confidence)}` : ''}`.split(' '),
             ' ',
             step.outcome === 'rejected' || step.outcome === 'unavailable' ? theme.warn : undefined,
             `${INDENT}  `,
           ),
         ),
+      ...(isTier ? [] : row('type', 'type', `${pickType(pick)} · action ${pick.action ?? '-'}`)),
+      ...(isTier ? [] : outputs.slice(0, OUTPUT_ROWS).map(([name, value]) => line(`${pick.id}-out-${name}`, `out: ${name} ${value}`, PLAIN, INDENT))),
+      ...(isTier || outputs.length <= OUTPUT_ROWS ? [] : [line(`${pick.id}-out-more`, `out: ${outputs.length - OUTPUT_ROWS} more`, undefined, INDENT)]),
       ...(odds.length === 0 ? [] : row('odds', 'P', odds.join(' · '))),
       ...(signalParts.length === 0 ? [] : row('signals', 'signals', signalParts.join(' · '))),
-      ...row('final', 'final', `${pick.tier} ${marks.to} ${pick.role ?? '-'} ${marks.to} ${modelLabel(pick.recommended)} · ${pick.isApplied ? 'applied' : 'suggested, not applied'}`, theme.accent),
-      ...row('ran', 'ran', `${ran} · ended: ${pick.result ?? 'running'}${pick.usd === undefined ? '' : ` · ${usd(pick.usd)}`}${recorded}`),
+      ...(isTier
+        ? row('final', 'final', `${pick.tier} ${marks.to} ${pick.role ?? '-'} ${marks.to} ${modelLabel(pick.recommended)} · ${pick.isApplied ? 'applied' : 'suggested, not applied'}`, theme.accent)
+        : row('final', 'final', `${chosen.join(` ${marks.to} `)} · advisory, the main session decides`, theme.accent)),
+      ...(isTier ? row('ran', 'ran', `${ran} · ended: ${pick.result ?? 'running'}${pick.usd === undefined ? '' : ` · ${usd(pick.usd)}`}${recorded}`) : row('id', 'id', id)),
       ...(pick.alternatives ?? []).slice(0, 2).flatMap((alternative, index) => row(`else-${index}`, 'else', `${alternative.action}: "${alternative.reason}"`)),
       ...(needs.length === 0 ? [] : row('needs', 'needs', needs.join('; '))),
+      ...(conditions.length === 0 ? [] : row('if', 'changes if', conditions.join('; '))),
       ...(risks.length === 0 ? [] : row('risks', 'risks', risks.join('; '), theme.warn)),
     ]
   }
@@ -222,23 +245,48 @@ export const decisionsTab = (kit: Kit, data: DecisionsData, actions: DecisionsAc
       {layer?.error !== undefined && lines('status-error', 'decisions status failed: ', layer.error.split(' '), ' ', theme.bad)}
       {isAsking && layer.enabled === false && lines('models-off', 'models off here: ', ['the policy answers alone', '/vistack:decisions-on adds them'], ' · ')}
       {isAsking && layer.ladder.length > 0 && lines('ladder', 'ladder: ', layer.ladder.map(tier => rungState(layer, tier, marks)), ` ${marks.step} `, theme.accent)}
-      {isAsking && lines('asked-on', 'asked on: ', ['each prompt', 'each subagent spawn', ...(layer.mode === 'apply' ? ['apply: before a built-in spawn'] : [])], ' · ')}
+      {isAsking &&
+        lines(
+          'asked-on',
+          'asked on: ',
+          [
+            'each prompt: tier-selection',
+            'first prompt or "new task": playbook-selection',
+            'each subagent spawn: tier-selection',
+            ...(layer.mode === 'apply' ? ['apply: before a built-in spawn'] : []),
+          ],
+          ' · ',
+        )}
+      {lines('other-types', 'other types: ', ["the main session's own CLI calls", 'read from the decision history'], ', ')}
       {isAsking &&
         lines(
           'how',
           'how: ',
-          ['vistack-decision.py', 'decision', 'tier-selection', '--backend', 'auto', '· stdin', '{source,', 'request≤2400}', '· history', history === undefined ? 'per call' : shortPath(history)],
+          ['vistack-decision.py', 'decision', '<type>', '--backend', 'auto', '· stdin', '{source,', 'request≤2400}', '· history', history === undefined ? 'per call' : shortPath(history)],
           ' ',
+        )}
+      {historyTypes.length > 0 &&
+        lines(
+          'history-types',
+          'history by type: ',
+          historyTypes.map(entry => `${entry.type} ${entry.forks}${entry.meanConfidence === undefined ? '' : ` ${share(entry.meanConfidence)}`}`),
+          ' · ',
         )}
       {isAsking && hints.flatMap((hint, index) => lines(`hint-${index}`, 'hint: ', hint.split(' '), ' ', theme.warn))}
       {lines('session', 'this session: ', sessionParts, ' · ')}
+      {sessionTypes.length > 0 && lines('session-types', 'by type: ', sessionTypes.map(([type, count]) => `${type} ${count}`), ' · ')}
       <Box justifyContent="space-between" width={columns}>
         <Text dimColor>{layer === null ? '' : fit(`read ${ago(layer.readAt, data.now)}`, Math.max(1, columns - 12))}</Text>
         <Button key="fork-refresh" plain label={`${glyph(kit, 'refresh')}Refresh`} onPress={() => actions.refresh()} />
       </Box>
-      {Section(kit, 'Forks', columns, 'newest first')}
+      {Section(kit, 'Forks', columns, data.filter === '' ? 'newest first' : `${data.filter} · newest first`)}
+      <Box justifyContent="space-between" width={columns}>
+        <Text dimColor>{fit('t cycles the type · a row opens its chain', Math.max(1, columns - cells(filterLabel) - 2))}</Text>
+        <Button key="fork-type" plain hotkey="t" label={filterLabel} onPress={() => actions.setFilter(nextFilter(data.filter, data.picks))} />
+      </Box>
       {data.picks.length === 0 && Empty(kit, isOff ? 'Nothing asked: suggestions are off.' : 'No fork asked yet: each prompt asks one.')}
-      {[...data.picks]
+      {data.picks.length > 0 && shown.length === 0 && Empty(kit, `No ${data.filter} fork this session.`)}
+      {[...shown]
         .reverse()
         .slice(0, ROW_CAP)
         .map(pick => (

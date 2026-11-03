@@ -6,6 +6,10 @@ const secretName = /PASS|SECRET|TOKEN|KEY|COOKIE|BYPASS|CREDENTIAL/i;
 const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const camel = (flag) => flag.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
 
+export const errorText = (error) => String(error?.message ?? error).replace(/\x1b\[[0-9;]*m/g, "");
+export const clip = (text, limit) => (text.length > limit ? `${text.slice(0, limit - 1)}…` : text);
+export const firstLine = (text) => String(text ?? "").trim().split(/\r?\n/)[0];
+
 export const parseArgs = (argv, spec) => {
   const options = { help: false };
   for (const [flag, entry] of Object.entries(spec)) {
@@ -280,6 +284,10 @@ const fileProblem = (label, path, facts) => {
   return null;
 };
 
+export const producedProblem = (key, output, facts) =>
+  fileProblem(`output ${key}`, output.path, facts)
+  ?? (facts[output.path].bytes === output.bytes ? null : `output ${key} ${output.path} is ${facts[output.path].bytes} bytes, the manifest says ${output.bytes}`);
+
 export const checkManifest = (input, facts = {}, { maxBytes = 10 * 1024 * 1024 } = {}) => {
   const errors = [];
   const warnings = [];
@@ -330,9 +338,8 @@ export const checkManifest = (input, facts = {}, { maxBytes = 10 * 1024 * 1024 }
   for (const [key, output] of Object.entries(isObject(manifest.outputs) ? manifest.outputs : {})) {
     if (!isObject(output)) continue;
     if (output.status === "produced") {
-      const problem = fileProblem(`output ${key}`, output.path, facts);
+      const problem = producedProblem(key, output, facts);
       if (problem) errors.push(problem);
-      else if (facts[output.path].bytes !== output.bytes) errors.push(`output ${key} ${output.path} is ${facts[output.path].bytes} bytes, the manifest says ${output.bytes}`);
     }
     if (output.bytes > maxBytes) {
       warnings.push(`output ${key} ${output.path} is ${(output.bytes / 1048576).toFixed(1)} MB, over the attachment budget of ${(maxBytes / 1048576).toFixed(1)} MB`);

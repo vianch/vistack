@@ -463,7 +463,8 @@ at 0.72 and 0.76 across two runs, which the 0.85 floor sends back to the main se
 
 ## Integration points
 
-Use the hook only when a choice affects the workflow path.
+Use the hook only when a choice affects the workflow path. The exact call and context at each
+boundary are in `skills/laya-decision/SKILL.md`, Boundaries.
 
 | viStack owner | Decision type | Deterministic authority |
 |---|---|---|
@@ -510,10 +511,12 @@ repeating error, before done — are not forks (`skills/advisor/SKILL.md`).
 
 ## History and human overrides
 
-The CLI records JSONL history at `.codex/vistack/decision-history.jsonl` by default. Pass a
-different `--history` path for Claude state or a project-specific location. Add that path to
-the consuming repository's ignore rules. Sensitive-looking fields are redacted before they
-are written.
+The CLI records JSONL history in the host's state root by default:
+`.claude/vistack/decision-history.jsonl` under Claude Code (`CLAUDECODE=1`), else
+`.codex/vistack/decision-history.jsonl`. Pass `--history` for another location. Add that path
+to the consuming repository's ignore rules. Sensitive-looking fields are redacted before they
+are written. The deck's Decisions tab shows this session's rows of every type from the Claude
+Code file, beside the forks the deck asks itself (`docs/guide/deck.md`, Decisions).
 
 Record feedback without editing the skill:
 

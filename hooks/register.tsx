@@ -16,6 +16,7 @@ import {
   previewArgs,
   statusArgs as gitStatusArgs,
 } from './lib/git'
+import { historyPicksOf, mergePicks } from './lib/history'
 import {
   DEFAULT_ROSTER,
   askedOf,
@@ -24,8 +25,11 @@ import {
   forkCallOf,
   forkLayerOf,
   frontmatterModel,
+  isForkCall,
   isForkSwitch,
+  isMatchPath,
   mayApply,
+  rosterModel,
   settledPick,
   statusArgs,
 } from './lib/jev'
@@ -209,6 +213,7 @@ const STORE_KEY = 'deckSettings'
 const REALM_KEY = 'deckRealm'
 const KEEP_AWAKE_KEY = 'deckKeepAwake'
 const FOLDS_KEY = 'deckFolds'
+const FORK_FILTER_KEY = 'deckForkFilter'
 const DEFAULT_FOLDS: Readonly<Record<string, boolean>> = { 'loop-form': true, 'monitors-ended': true }
 const PROCESS_TIMEOUT_MS = 8000
 const GIT_POLL_MS = 10_000
@@ -259,6 +264,8 @@ const edits = atom({ plugin: 'vistack', key: 'edits' } as const, [] as DeckEdit[
 const turns = atom({ plugin: 'vistack', key: 'turns' } as const, [] as DeckTurn[])
 const agents = atom({ plugin: 'vistack', key: 'agents' } as const, [] as DeckAgent[])
 const picks = atom({ plugin: 'vistack', key: 'picks' } as const, [] as DeckPick[])
+const historyPicks = atom({ plugin: 'vistack', key: 'historyPicks' } as const, [] as DeckPick[])
+const forkFilter = atom({ plugin: 'vistack', key: 'forkFilter' } as const, '')
 const skills = atom({ plugin: 'vistack', key: 'skills' } as const, [] as DeckSkill[])
 const todos = atom({ plugin: 'vistack', key: 'todos' } as const, [] as DeckTodo[])
 const prs = atom({ plugin: 'vistack', key: 'prs' } as const, {
@@ -566,9 +573,9 @@ const decisionFlags = async ($: Dollar): Promise<string[]> => {
   return ['--history', `${stateDir}/decision-history.jsonl`, ...((await exists($, decisions)) ? ['--config', decisions] : [])]
 }
 
-const forkCall = async ($: Dollar) => forkCallOf(script, script === null ? [] : await decisionFlags($))
+const forkCall = async ($: Dollar, decisionType?: string) => forkCallOf(script, script === null ? [] : await decisionFlags($), decisionType)
 
-const decide = async ($: Dollar, argv: string[] | null, request: string, source: string): Promise<Asked> => {
+const decide = async ($: Dollar, argv: string[] | null, request: string, source: string, decisionType?: string): Promise<Asked> => {
   if (argv === null) {
     return askedOf('script not found', 0)
   }
@@ -578,7 +585,7 @@ const decide = async ($: Dollar, argv: string[] | null, request: string, source:
     .run(argv, { cwd, stdin: decisionContext(request, source), timeoutMs: 20_000 })
     .catch((error: unknown) => String(error))
 
-  return askedOf(ran, (await $.clock.now()) - startedAt)
+  return askedOf(ran, (await $.clock.now()) - startedAt, decisionType)
 }
 
 const addPick = async ($: Dollar, pick: DeckPick): Promise<void> => {
@@ -619,11 +626,11 @@ const recordOutcome = async ($: Dollar, pick: DeckPick): Promise<void> => {
 
 // The row shows while the script runs; its answer, or why there is none, settles it in place.
 const askFork = async ($: Dollar, ask: Omit<Parameters<typeof decidingPick>[0], 'command' | 'history'>, request: string, source: string): Promise<void> => {
-  const call = await forkCall($)
+  const call = await forkCall($, ask.decisionType)
 
   await addPick($, decidingPick({ ...ask, ...call.shown }))
 
-  const asked = await decide($, call.argv, request, source)
+  const asked = await decide($, call.argv, request, source, ask.decisionType)
   const ladder = (await read($, forkLayer))?.ladder ?? []
 
   await patchPick($, ask.id, pick => settledPick(pick, asked, roster, ladder))
@@ -634,6 +641,9 @@ const decideTurn = async ($: Dollar, turnId: string, text: string, at: number): 
   const ask = { at, id: `turn-${turnId}`, scope: 'main' as const, subject: text, trigger: 'prompt' as const, turnId }
 
   await askFork($, firstStep === undefined ? ask : { ...ask, actual: firstStep.model }, text, 'main-turn')
+  if (isMatchPath(await read($, turns), turnId, text)) {
+    await askFork($, { ...ask, decisionType: 'playbook-selection', id: `${ask.id}-playbook` }, text, 'main-turn')
+  }
 }
 
 const settlePick = async ($: Dollar, pickId: string, result: string, cost: number | null): Promise<void> => {
@@ -650,7 +660,7 @@ const settlePick = async ($: Dollar, pickId: string, result: string, cost: numbe
 }
 
 // `decisions status` sends nothing off the machine. Skipped while suggestions are off or no script
-// was found; the fork layer then says which.
+// was found; the fork layer then says which. The decision history is read either way.
 const readForkLayer = async ($: Dollar): Promise<void> => {
   const base = { ladder: [] as string[], mode: config.jevMode, readAt: await $.clock.now(), ...(script === null ? {} : { script }) }
   const switchFile = `${cwd}/.claude/vistack/decisions.json`
@@ -660,7 +670,13 @@ const readForkLayer = async ($: Dollar): Promise<void> => {
       ? null
       : await $.process.run(argv, { cwd, timeoutMs: PROCESS_TIMEOUT_MS }).catch((error: unknown) => String(error))
 
-  await update($, forkLayer, () => (ran === null ? base : forkLayerOf(base, ran)))
+  const layer = ran === null ? base : forkLayerOf(base, ran)
+
+  await update($, forkLayer, () => layer)
+  const startedAt = (await $.session.usage().catch(() => null))?.startedAt ?? Number.POSITIVE_INFINITY
+  const history = historyPicksOf(await readText($, `${cwd}/.claude/vistack/decision-history.jsonl`), startedAt, roster, layer.ladder)
+
+  await update($, historyPicks, () => history)
 }
 
 const enqueueGit = (): void => {
@@ -2064,13 +2080,15 @@ const renderTab = async ($: Dollar, kit: Kit, active: DeckTab, columns: number, 
         kit,
         {
           agents: await read($, agents),
+          filter: await read($, forkFilter),
           forkLayer: await read($, forkLayer),
           now: at,
           openId: await read($, openId),
-          picks: await read($, picks),
+          picks: mergePicks(await read($, picks), await read($, historyPicks)),
         },
         {
           refresh: () => enqueue({ kind: 'fork-status' }),
+          setFilter: filter => void update($, forkFilter, () => filter).then(() => $.store.set(FORK_FILTER_KEY, filter)).catch(() => undefined),
           toggle: id => void update($, openId, current => (current === id ? '' : id)),
         },
         columns,
@@ -2230,6 +2248,9 @@ export const register: Register = (on, options) => {
     const savedFolds = Object.entries(typeof storedFolds === 'object' && storedFolds !== null ? storedFolds : {})
 
     await update($, folds, () => ({ ...DEFAULT_FOLDS, ...Object.fromEntries(savedFolds.filter(([, value]) => typeof value === 'boolean')) }))
+    const storedFilter = await $.store.get(FORK_FILTER_KEY).catch(() => undefined)
+
+    await update($, forkFilter, () => (typeof storedFilter === 'string' ? storedFilter : ''))
     enqueue({ kind: 'script' })
     enqueue({ kind: 'fork-status' })
     enqueue({ kind: 'about' })
@@ -2476,7 +2497,7 @@ export const register: Register = (on, options) => {
     const request = `${e.description}\n\n${e.prompt}`
     const call = !isOwn && mayApply(config.jevMode, e.subagentType, e.model) ? await forkCall($) : null
     const asked = call === null ? null : await decide($, call.argv, request, 'agent-spawn')
-    const choice = asked === null || asked.decision === null ? undefined : roster[asked.decision.tier]
+    const choice = asked === null || asked.decision === null ? undefined : rosterModel(roster, asked.decision)
     const started = await next(choice === undefined ? e : { ...e, model: choice })
 
     if (started.deny !== undefined || started.agentId === undefined) {
@@ -2664,7 +2685,7 @@ export const register: Register = (on, options) => {
       const command = String(field(e, 'command') ?? '')
       const post = reviewPostOf(command)
 
-      if (isForkSwitch(command)) {
+      if (isForkSwitch(command) || isForkCall(command)) {
         enqueue({ kind: 'fork-status' })
       }
       if (isGitChange(command)) {

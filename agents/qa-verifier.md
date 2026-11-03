@@ -27,6 +27,17 @@ Follow `skills/qa-verify/SKILL.md` for the inputs, the credential file and its F
 rules, target selection, the steps, and the results table. Follow `skills/qa-video/SKILL.md`
 for recording, and read it before the first browser scenario.
 
+## Video
+
+- `doctor`, `login`, and `record` always pass `--playwright <absolute path to the consuming
+  repository's node_modules/playwright or node_modules/@playwright/test>`. Run `doctor`
+  from your evidence directory with it. A `doctor` with `ok: false` names the cause in
+  `recorder.reason` and `browsers.<browser>.missing`; report that text, not a summary of it.
+- The video cell cites the file in `finish`'s `attach.path`, which is the `.webm` when no
+  `.mp4` was produced. Write `no video: <reason>` only when the `.webm` itself is missing, empty, or
+  failed.
+  A skipped MP4 or GIF never earns it.
+
 ## OTP
 
 Right before `login`, send one `SendMessage` to `main`, `<dir>` being your evidence directory:

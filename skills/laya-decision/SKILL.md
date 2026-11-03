@@ -21,35 +21,49 @@ before adding a decision type or changing the adapter.
 
 ## Boundaries
 
-Call the hook at these boundaries.
+The main session makes one call at each boundary below, with its working directory in the
+consuming repository:
 
-| Boundary | Decision type | Existing authority |
-|---|---|---|
-| intake and grooming | `intake-analysis`, `grooming` | readiness fields and FENCE 2 |
-| route match | `playbook-selection` | the route table in `skills/vistack/SKILL.md` and the matched playbook |
-| slice planning | `decomposition`, `tier-selection` | file ownership, conflict matrix, the 500-line limit, and the planner's tier rule |
-| pre-dispatch and monitoring | `dispatch-readiness`, `runtime-progress` | coordinator state, dependencies, monitor, and ledger |
-| each dispatch | `model-selection` | the agent file's default model and effort, and the Dispatch rules in `skills/coordinate/SKILL.md` |
-| QA | `verification` | captured artifacts tied to each acceptance criterion |
-| a step inside a slice | `tool-selection`, `file-selection` | the slice's writable files and the fences |
-| retrospective review | `skill-improvement` | explicit human review; no automatic skill edits |
+```
+echo '<context>' | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/vistack-decision.py" decision <type> --backend auto
+```
+
+Every context carries `"metadata": {"source": "main-session"}` and the keys in the Context
+column. `task.request` is the user's original request, never the enhanced text.
+
+| Boundary | Decision type | Context | Existing authority |
+|---|---|---|---|
+| intake playbook, before grooming | `intake-analysis` | `task.request` | readiness fields and FENCE 2 |
+| intake playbook, grooming | `grooming` | `task.request`, `task.acceptance_criteria`, `task.finish_condition`, `task.open_questions` | readiness fields and FENCE 2 |
+| router Step 2, before the match | `playbook-selection` | `task.request`; `current_state.phase` on a resumed run | the route table in `skills/vistack/SKILL.md` and the matched playbook |
+| after `slice-plan` | `decomposition` | `task.request`, `task.slices` (each with `files` and `depends_on`), `task.estimated_changed_lines` | file ownership, conflict matrix, and the 500-line limit |
+| a slice with no planner tier | `tier-selection` | Dispatch rules in `skills/coordinate/SKILL.md` | the planner's tier rule |
+| each dispatch | `model-selection` | Dispatch rules in `skills/coordinate/SKILL.md` | the agent file's default model and effort |
+| before each `dispatched` ledger row | `dispatch-readiness` | `task.brief`, `task.acceptance_criteria`, `task.verification_command`, `task.writable_files`, `task.dependencies`, `current_state.dependencies_satisfied` | coordinator state, dependencies, and the conflict matrix |
+| each monitor pass | `runtime-progress` | `current_state.phase`, `attempts`, `identical_results`, `stalled`, `blockers` | the stall rule, `unblock`, and the fences |
+| before merge-ready | `verification` | `task.acceptance_criteria`, one `evidence` entry per artifact (`kind`, `ref`, `criterion`, `status`) | captured artifacts tied to each acceptance criterion |
+| after a `correction-recorded` row | `skill-improvement` | `current_state.human_overrides`, `current_state.repeated_pattern` | explicit human review; no automatic skill edits |
+| a step inside a slice | `tool-selection`, `file-selection` | `available_actions`, the candidate tools or files, described by `task.tools` or `task.file_summaries` | the slice's writable files and the fences |
+
+`tool-selection` and `file-selection` exit non-zero without `available_actions`, so skip
+them when the step has no explicit candidates.
+
+The answer is advisory and viStack stays authoritative. Each call is appended to the decision
+history in the state root (`.claude/vistack/decision-history.jsonl` on Claude Code), which the
+deck's Decisions tab reads, so never pass `--no-history`. A call that fails, times out, or is
+skipped never blocks the run: the existing authority decides and the run goes on.
 
 ## Calling it
 
 `${CLAUDE_PLUGIN_ROOT}` is the plugin root on Claude Code. On Codex, use the installed plugin
 path, as the Host adapter in `skills/vistack/SKILL.md` sets out.
 
-The hook is enabled by default. Run
-`python3 "${CLAUDE_PLUGIN_ROOT}/scripts/vistack-decision.py" decision <decision-type>` with the
-current task, state, evidence, constraints, history, and available actions. The engine takes
-that bounded `DecisionContext` and returns a typed `Decision`; read its `fork` every time.
-With no model configured, `auto` returns the deterministic policy.
+The hook is enabled by default. The engine takes the bounded `DecisionContext` on stdin and
+returns a typed `Decision`; read its `fork` every time. With no model configured, `auto`
+returns the deterministic policy.
 
-`tool-selection` and `file-selection` take the candidate tools or files in
-`available_actions`, described by `task.tools` or `task.file_summaries`.
-
-Record the returned decision id, backend, confidence, fallback status, and evidence pointer
-in the decision history or run ledger when the consuming project has enabled it.
+The CLI writes each decision, its backend, confidence, and fallback status to the decision
+history itself. Name the returned decision id in the run ledger row the decision fed.
 
 Use the long-lived `serve` command for repeated decisions. Use the `override`, `outcome`,
 and `feedback` commands to record human corrections and reviewable improvement proposals.

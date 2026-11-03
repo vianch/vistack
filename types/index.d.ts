@@ -171,16 +171,17 @@ export type KeepAwake = 'off' | 'while-working' | 'always'
 
 export type DeckAwake = { isHeld: boolean; how?: string; reason?: string }
 
-// A value from an earlier deck version lacks `status`, `trigger` and `decisionType`: read them as
-// 'decided', 'prompt' for scope 'main' else 'spawn', and 'tier-selection'.
+// A value from an earlier deck version lacks `status`, `trigger`, `decisionType` and `action`: read
+// them as 'decided', 'prompt' for scope 'main' else 'spawn', 'tier-selection', and the tier.
 export type DeckPickStatus = 'deciding' | 'decided' | 'failed' | 'skipped'
 
-// One fork the deck asked the fork layer. Fields past `at` fill in as the process returns.
+// One fork the deck asked the fork layer, or one the main session asked through the CLI (`cli`),
+// read from the decision history. Fields past `at` fill in as the process returns.
 export type DeckPick = {
-  // `turn-<turnId>` or `agent-<agentId>`.
+  // `turn-<turnId>`, `turn-<turnId>-playbook`, `agent-<agentId>`, or `history-<decision id>`.
   id: string
   scope: 'main' | 'agent'
-  // The prompt, or `<type>: <description>`.
+  // The prompt, `<type>: <description>`, or the CLI call's request.
   subject: string
   at: number
   status: DeckPickStatus
@@ -190,15 +191,20 @@ export type DeckPick = {
   error?: string
   // 'jevMode off' or 'empty request'.
   skippedWhy?: string
-  trigger: 'prompt' | 'spawn' | 'spawn-apply'
+  trigger: 'prompt' | 'spawn' | 'spawn-apply' | 'cli'
   decisionType: string
+  action?: string
   // The argv joined, for the detail view.
   command?: string
   // The history path, or 'off'.
   history?: string
+  // '' for a type that picks no tier.
   tier: string
-  // The roster's model for the tier.
+  // The model for the tier, or model-selection's dispatch model; '' for a type that names none.
   recommended: string
+  // The decision's outputs, each value as JSON text cut to a line.
+  outputs?: Record<string, string>
+  changeConditions?: string[]
   role?: string
   actual?: string
   backend: string
@@ -241,9 +247,12 @@ export type DeckForkLayer = {
   jev?: { enabled: boolean; hasKey: boolean; refused?: string }
   cloudflare?: { enabled: boolean; hasToken: boolean; hasAccount: boolean; used?: number; cap?: number; hint?: string }
   ollama?: { model?: string; reachable?: boolean; missing?: boolean | null; hint?: string }
-  forks?: { forks: number; sharp: number; split: number }
+  forks?: { forks: number; sharp: number; split: number; byType?: DeckForkType[] }
   error?: string
 }
+
+// One decision type's line of `decisions status`'s `forks.by_type`, across the whole history.
+export type DeckForkType = { type: string; forks: number; sharp: number; meanConfidence?: number }
 
 // The repo's working tree, read inside the realm only. Paths are relative to the repo root.
 export type DeckGitFile = {
@@ -443,6 +452,10 @@ declare module 'claude-code' {
       turns: DeckTurn[]
       agents: DeckAgent[]
       picks: DeckPick[]
+      // This session's forks the main session asked through the CLI, from the decision history.
+      historyPicks: DeckPick[]
+      // The Decisions tab's type filter; '' shows every type.
+      forkFilter: string
       skills: DeckSkill[]
       todos: DeckTodo[]
       prs: DeckPrs

@@ -20,7 +20,8 @@ the reason is written down. A missing video is never silent.
 
 API-only scenarios and unit tests get no video. When a non-browser control skill can record
 (a simulator or device recorder), use it. Otherwise the results row says
-`none: <reason>`.
+`no video: <reason>`. That token means the `.webm` itself is missing, empty, or failed. A
+skipped MP4 or GIF never earns it.
 
 ## Tools and the script
 
@@ -34,9 +35,27 @@ API-only scenarios and unit tests get no video. When a non-browser control skill
 | `finish` | writes captions and the requested MP4, GIF, slideshow, or contact sheet |
 | `check` | verifies a manifest against the files on disk |
 
-Run it from the consuming repository so that
-Playwright resolves from that project's `node_modules`; a lane that runs elsewhere, such as a
-Codex QA lane under `-C <lane dir>`, passes `--playwright <absolute path>` instead. Run
+Every QA lane passes `--playwright <absolute path>` to `doctor`, `login`, and `record`,
+naming the consuming repository's `node_modules/playwright` or
+`node_modules/@playwright/test`. The lane runs from its evidence directory, and a monorepo
+can hoist a second Playwright whose browsers are not installed. Without the flag the script
+looks in this order and stops at the first hit:
+
+1. `QA_VIDEO_PLAYWRIGHT`. An explicit path that does not resolve is final, like
+   `--playwright`.
+2. The declared package (`project-root`). The nearest `package.json` at or above the
+   working directory that declares `playwright`, `@playwright/test`, or `playwright-core`
+   names the package, and it is looked up in each `node_modules` from that directory up. A
+   nearer copy that no `package.json` declares, such as a transitive or hoisted one, is
+   skipped and listed as `skipped` in `candidatesTried`. A declared package that is not
+   installed stops the search with that reason. Install the project's dependencies.
+3. Only when nothing declares Playwright: each `node_modules` from the working directory up,
+   nearest first (`cwd`, or `repo-root` for the directory that holds `.claude` or
+   `.codex`), then `NODE_PATH`, then the global module directories
+   (`QA_VIDEO_GLOBAL_MODULES` replaces that list).
+
+ffmpeg, ffprobe, and ImageMagick come from `PATH`, then `/opt/homebrew/bin`,
+`/usr/local/bin`, and `/opt/local/bin` (`QA_VIDEO_TOOL_DIRS` replaces that list). Run
 `--help` on any command for its flags.
 
 | Host | How to run it |
@@ -47,8 +66,28 @@ Codex QA lane under `-C <lane dir>`, passes `--playwright <absolute path>` inste
 | OpenCode | the `vistack_qa_video` tool from `integrations/opencode/vistack.js`, with `command` and `args_json` |
 
 Only the browser recording is guaranteed.
-Playwright writes a `.webm` without any system tool. MP4, GIF, slideshow, and contact sheet
-each need a tool that `doctor` must find first.
+Playwright writes a `.webm` without any system tool, using the `ffmpeg-<rev>` build in its
+browsers cache. MP4, GIF, slideshow, and contact sheet each need a tool that `doctor` must
+find first.
+
+## Doctor
+
+`doctor` exits 0 only when it recorded a real one-second `recordVideo` clip of
+`about:blank`. Read its JSON in this order:
+
+| Key | What it says |
+|---|---|
+| `ok`, `outputs.webm` | the recorder works on this machine; `record` will write a `.webm` |
+| `recorder` | `{ ok, reason }`: the probe's own failure text, such as `Executable doesn't exist at …/ffmpeg-1011/…` |
+| `playwright` | `path`, `version`, `source`, and `resolvedFrom` (`flag`, `env`, `cwd`, `repo-root`, `project-root`, `node-path`, `global`); `candidatesTried` lists every location with its outcome |
+| `browsers` | `cache` and `cacheFrom`; `<browser>` and `ffmpeg` each give the `expected` revision from the loaded Playwright's `browsers.json`, whether it is `present`, and the `missing` directories |
+| `encoders` | `mp4`, `gif`, `slideshow`, `sheet`, and `reasons`, which say not found, failed (with the exit code and first stderr line), or lacks a named encoder or filter |
+| `ffmpeg`, `ffprobe`, `imagemagick` | the tools found, and `ffmpeg.error` from the probe |
+| `hints` | one fix per problem: the Playwright to point at, or the exact `node <playwright>/cli.js install <browser>` |
+
+A `browsers.<browser>.missing` entry means the Playwright that loaded is not the one whose
+browsers are installed. Pass `--playwright` for the project's own package, or run the hinted
+install with it.
 
 ## Evidence directory
 
@@ -93,7 +132,7 @@ When no code arrives within `--otp-timeout` seconds (default 300), the script ad
 OTP before `--otp-timeout`.
 
 Run `login` once per run per target.
-`login --scenario <dir>/<scenario>.mjs --out <dir> --url <target>` saves the session to
+`login --scenario <dir>/<scenario>.mjs --out <dir> --url <target> --playwright <path>` saves the session to
 `<dir>/auth.json`, or to `--save-storage-state <path>`. Every `record` after it passes
 `--storage-state <dir>/auth.json` and skips the scenario's `login`, so one code covers every
 scenario. When that file is missing, `record` runs `login` itself, which asks for a new code,
@@ -101,12 +140,13 @@ and writes a warning to the manifest.
 
 ## Steps
 
-1. Run `doctor` once per run, in the pilot QA lane, and keep its JSON; a lane whose brief
-   names that JSON skips this step. When Playwright is present but its browser is not,
-   install the browser with the project's own Playwright (`npx playwright install
-   chromium`). When the Playwright package itself is missing, do not add a dependency from
-   the QA lane. Record `none: playwright not installed` and continue with screenshots from
-   the approved control skill.
+1. Run `doctor --playwright <path>` once per run, from the pilot QA lane's evidence
+   directory, and keep its JSON; a lane whose brief names that JSON skips this step. When
+   `browsers.<browser>.missing` or `recorder.reason` names a missing build, run the install
+   command from `hints`, which uses that same Playwright, then run `doctor` again. When the
+   Playwright package itself is missing, do not add a dependency from the QA lane. Record
+   `no video: playwright not installed` and continue with screenshots from the approved
+   control skill.
 2. Write one scenario module per scenario from `skills/qa-video/assets/scenario.example.mjs`.
    - Put the deployment-protection wall and the app login in `login`. It runs in a context
      that is not recorded.
@@ -117,20 +157,25 @@ and writes a warning to the manifest.
      fixed sleep.
 3. Record against the resolved target and the PR head, after the once-per-run `login` from
    Login and OTP:
-   `record --scenario <dir>/<scenario>.mjs --out <dir> --url <target> --head <sha> --title-card --storage-state <dir>/auth.json`.
+   `record --scenario <dir>/<scenario>.mjs --out <dir> --url <target> --head <sha> --title-card --storage-state <dir>/auth.json --playwright <path>`.
    Without `--storage-state`, `record` runs the scenario's login and asks for a new code.
    Add `--actions` when the reviewer needs to see where each click landed. Exit 1 means a
    step failed. The video, screenshot, and manifest are still written, and the row is a fail.
-4. Finish: `finish --manifest <dir>/<scenario>.manifest.json --mp4 --sheet`. Add `--gif` for
-   a clip short enough to preview inline, and `--slideshow` when the screenshots tell the
-   story better than the live recording. An output skipped for a missing tool stays
-   `skipped`, and the `.webm` remains the evidence.
+4. Finish: `finish --manifest <dir>/<scenario>.manifest.json --mp4 --gif --sheet`. Add
+   `--slideshow` when the screenshots tell the story better than the live recording. Each
+   output in the manifest reads `produced`, `over-budget`, `skipped`, or `failed`, and every
+   status but `produced` carries a `reason`. A skipped MP4 leaves the `.webm` as the
+   evidence. `finish` also checks the `.webm` against `--max-mb`.
 5. Run `check --manifest <dir>/<scenario>.manifest.json`. A row cites the video only after
-   `check` returns `ok: true`.
-6. Cite the video in its results row as `<file> @ <start>-<end>` from the manifest's step
-   times. Attach the `.mp4` when it was produced, otherwise the `.webm`, following
-   [GitHub attachments](../../docs/guide/github-attachments.md). The scenario's
-   `qa-scenario` ledger row carries the video path, or `no video: <reason>`.
+   `check` returns `ok: true`. `check` reports each output again with its status and reason,
+   as verified on disk.
+6. Attach the file named by `attach.path` in the `finish` or `check` JSON: the `.mp4`, else
+   the `.webm`, else the `.gif`, whichever is the first produced within budget. Cite it in
+   the results row as `<file> @ <start>-<end>` from the manifest's step times, following
+   [GitHub attachments](../../docs/guide/github-attachments.md). When `attach.path` is null
+   and `attach.reason` does not start with `no video:`, every video is over budget. Cite the
+   `.webm` without attaching it, and re-record shorter. The scenario's `qa-scenario` ledger
+   row carries the video path, or `attach.reason` when it starts with `no video:`.
 
 ## Secrets
 
@@ -155,12 +200,14 @@ and writes a warning to the manifest.
 
 ## Upload budget
 
-`--max-mb` defaults to 10. `finish` re-encodes an over-budget MP4 once at a bitrate computed
-from the duration, then marks it `over-budget`. Split a long scenario into shorter ones
-instead of attaching a file the forge may reject. Raise the budget only when the
-repository's forge is known to accept larger files. The assumption that GitHub attachments
-accept `.mp4` and `.webm` has not been verified from this plugin. When an upload is
-rejected, attach the slideshow or the contact sheet and record the rejection.
+GitHub attaches `.mp4`, `.mov`, and `.webm` videos up to 10 MB on free plans and 100 MB on
+paid plans, and a `.gif` up to 10 MB. `--max-mb` defaults to 10, the limit every plan
+accepts. `finish` re-encodes an over-budget MP4 once at a bitrate computed from the duration,
+then marks it `over-budget`. A `.webm` over the budget is marked `over-budget` with the
+fix: re-record a shorter scenario, or attach the GIF. Split a long scenario instead of
+attaching a file the forge may reject. Raise the budget only when the repository is on a
+paid plan. When an upload is still rejected, attach the slideshow or the contact sheet and
+record the rejection.
 
 ## Other recording surfaces
 
@@ -188,9 +235,15 @@ Write edited output next to the original. Never overwrite the recorded evidence.
   `encoding` and `format`, which are not Playwright screenshot options (Playwright uses
   `type`). Screenshot latency caps a loop like that near a few frames per second anyway.
   Record with `page.screencast` or `recordVideo` instead.
-- Playwright's bundled ffmpeg (`ms-playwright/ffmpeg-*`) is VP8-only on the machine that
-  built this skill. It has no libx264, no GIF encoder, no PNG decoder, and no concat
-  demuxer. It cannot make MP4 or GIF, so `doctor` ignores it.
+- Playwright's bundled ffmpeg (`ms-playwright/ffmpeg-<rev>`) is VP8-only on the machine
+  that built this skill. It has no libx264, no GIF encoder, no PNG decoder, and no concat
+  demuxer. The recorder needs it, so `doctor` reports the revision the loaded Playwright
+  expects under `browsers.ffmpeg`, but `finish` never uses it.
+- QA runs reported "video encoder unavailable", a phrase no script prints, and wrote no
+  video even where a `.webm` existed. One cause reproduces: a monorepo held Playwright
+  1.56.1, which expects `chromium-1194`, beside 1.62.1, whose `chromium-1234` was the build
+  installed. The wrong one loaded and the browser never launched. `doctor` names that gap in
+  `browsers.chromium.missing`. A non-empty `.webm` is always the evidence.
 - A VP8 `.webm` cannot be stream-copied into an `.mp4`, and `-c copy` fails. Re-encode to
   H.264, which is what `finish --mp4` does.
 - `recordVideo` starts at page creation, and the recorder shows about a second of blank

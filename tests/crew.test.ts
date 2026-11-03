@@ -3,7 +3,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import { face, nickname, NAMES, roleOf, RUNNING } from '../hooks/lib/crew'
 import type { Role } from '../hooks/lib/crew'
 
-const MIN_POOL = 14
+const MIN_POOL = 50
 const MIN_FRAMES = 6
 const MAX_CELLS = 16
 const TYPE_OF: Readonly<Record<Role, string>> = {
@@ -27,7 +27,7 @@ describe('crew name pools', () => {
     }
   })
 
-  test('each pool holds at least 14 unique, ASCII names of at most 16 cells', async () => {
+  test('each pool holds at least 50 unique, ASCII names of at most 16 cells', async () => {
     for (const role of ROLES) {
       const pool = NAMES[role]
 
@@ -37,6 +37,24 @@ describe('crew name pools', () => {
       for (const name of pool) {
         expect(/^[\x20-\x7e]+$/.test(name)).toBe(true)
         expect(name.length).toBeLessThanOrEqual(MAX_CELLS)
+      }
+    }
+  })
+})
+
+describe('crew name catalogue', () => {
+  test('names are unique across every role, ignoring case', async () => {
+    const everyName = ROLES.flatMap(role => [...NAMES[role]])
+    const lowered = everyName.map(name => name.toLowerCase())
+
+    expect(new Set(lowered).size).toBe(everyName.length)
+  })
+
+  test('every name is printable ASCII of 1 to 16 characters with no edge spaces', async () => {
+    for (const role of ROLES) {
+      for (const name of NAMES[role]) {
+        expect(/^[\x20-\x7e]{1,16}$/.test(name)).toBe(true)
+        expect(name).toBe(name.trim())
       }
     }
   })
@@ -57,6 +75,17 @@ describe('nickname', () => {
       }
 
       expect(new Set(taken).size).toBe(pool.length)
+    }
+  })
+
+  test('skips a taken name and still lands in the pool', async () => {
+    for (const role of ROLES) {
+      const first = nickname(TYPE_OF[role], 'agent-7', [])
+      const second = nickname(TYPE_OF[role], 'agent-7', [first])
+
+      expect(NAMES[role]).toContain(first)
+      expect(NAMES[role]).toContain(second)
+      expect(second).not.toBe(first)
     }
   })
 

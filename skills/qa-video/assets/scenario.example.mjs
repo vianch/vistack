@@ -1,8 +1,8 @@
-// Copy into the QA lane's evidence directory (for example .claude/state/qa/<slug>/<slice-or-pr>/<head7>/checkout.mjs), then from the project root,
-// with QA_USER and QA_PASSWORD exported from the approved credential file, run login once per run per target:
-//   node <plugin>/skills/qa-video/scripts/qa-video.mjs login --scenario <dir>/checkout.mjs --out <dir> --url http://localhost:3000
+// Copy into the QA lane's evidence directory (for example .claude/state/qa/<slug>/<slice-or-pr>/<head7>/checkout.mjs), then,
+// with QA_USER and QA_PASSWORD exported from the approved credential file and PW set to the project's node_modules/playwright, run login once per run per target:
+//   node <plugin>/skills/qa-video/scripts/qa-video.mjs login --scenario <dir>/checkout.mjs --out <dir> --url http://localhost:3000 --playwright "$PW"
 // It waits for the asker to write the code to <dir>/otp.txt and saves the session to <dir>/auth.json. Then record each scenario with it:
-//   node <plugin>/skills/qa-video/scripts/qa-video.mjs record --storage-state <dir>/auth.json \
+//   node <plugin>/skills/qa-video/scripts/qa-video.mjs record --storage-state <dir>/auth.json --playwright "$PW" \
 //     --scenario <dir>/checkout.mjs --out <dir> --url http://localhost:3000 --head <sha> --actions --title-card
 // Secrets come from process.env only; never put them in argv, captions, or step names. The OTP comes from otp.txt, never from a flag.
 // `sensitive` hides the action overlay, which prints filled values; it does not hide what the page renders.

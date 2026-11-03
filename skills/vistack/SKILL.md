@@ -51,6 +51,10 @@ Add a second task-list item for the match, then copy every numbered step from th
 playbook into the task list verbatim: no paraphrase, reorder, merge, or silent omission. A
 skipped step stays in the list as `skip: <reason>`.
 
+Before matching, call `playbook-selection` with the original request
+(`skills/laya-decision/SKILL.md`, Boundaries). Its answer is advisory; the table below
+decides, and a failed call changes nothing.
+
 | Playbook | Match when |
 |---|---|
 | `intake` | The request is raw or its ticket has not passed readiness. |
@@ -233,7 +237,9 @@ What crosses levels:
 
 Laya is the fork layer. It takes the choices that need no thinker, such as which playbook,
 file, tool, tier, or model, and whether to dispatch or retry. When to call it, its boundaries, its
-off switches, and its commands are in `skills/laya-decision/SKILL.md`.
+off switches, and its commands are in `skills/laya-decision/SKILL.md`. Its Boundaries table
+names the call and context for each of the twelve decision types; every call lands in the
+decision history the deck's Decisions tab reads, and none blocks the run.
 
 ## Reuse existing skills
 

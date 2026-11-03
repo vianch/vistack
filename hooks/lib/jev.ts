@@ -1,15 +1,19 @@
-// Model suggestions from viStack's fork layer: a `tier-selection` decision through
-// scripts/vistack-decision.py (deterministic policy, then the tiers the person opted into
-// with /vistack:decisions-on, Jev first). The tier maps to the model the matching agent
-// file pins, so the suggestion and viStack's own dispatch agree.
+// Decisions from viStack's fork layer through scripts/vistack-decision.py (deterministic policy,
+// then the tiers the person opted into with /vistack:decisions-on, Jev first). A tier maps to
+// the model the matching agent file pins, so the suggestion and viStack's own dispatch agree.
+import { TIER_SELECTION, sortByType } from './fork-types'
 import { fit } from './format'
 
-import type { DeckForkLayer, DeckLadderStep, DeckPick, DeckPickStatus } from '../../types'
+import type { DeckForkLayer, DeckForkType, DeckLadderStep, DeckPick, DeckPickStatus, DeckTurn } from '../../types'
 
 export type Tier = 'mechanical' | 'complex'
 
 export type Decision = {
-  tier: Tier
+  decisionType: string
+  action: string
+  tier?: Tier
+  // model-selection's outputs.dispatch_model.
+  model?: string
   confidence: number
   backend: string
   decisionId?: string
@@ -19,12 +23,18 @@ export type Decision = {
   fallbackReason?: string
   probabilities?: Record<string, number>
   role?: string
-  signals: NonNullable<DeckPick['signals']>
+  signals?: NonNullable<DeckPick['signals']>
   contractChange?: number
   alternatives: { action: string; reason: string }[]
   requiredEvidence: string[]
+  changeConditions: string[]
+  outputs: Record<string, string>
   risks: string[]
 }
+
+const OUTPUT_CAP = 120
+
+const OUTPUT_KEYS = 16
 
 // `error` is set exactly when `decision` is null.
 export type Asked = { decision: Decision | null; ms: number; error?: string }
@@ -56,16 +66,16 @@ const NOTE_CAP = 60
 
 const REJECTION = /gate|below|malformed|invalid|rejected|not available in the context|missing typed/i
 
-const record = (value: unknown): Record<string, unknown> =>
+export const record = (value: unknown): Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
 
-const text = (value: unknown): string | undefined => (typeof value === 'string' && value !== '' ? value : undefined)
+export const text = (value: unknown): string | undefined => (typeof value === 'string' && value !== '' ? value : undefined)
 
 const number = (value: unknown): number | undefined => (typeof value === 'number' && Number.isFinite(value) ? value : undefined)
 
 const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [])
 
-const parseObject = (stdout: string): Record<string, unknown> | null => {
+export const parseObject = (stdout: string): Record<string, unknown> | null => {
   try {
     const value: unknown = JSON.parse(stdout)
 
@@ -81,11 +91,11 @@ export const decisionContext = (request: string, source: string): string =>
     task: { request: request.slice(0, 2400) },
   })
 
-export const decisionArgs = (script: string, flags: readonly string[]): string[] => [
+export const decisionArgs = (script: string, flags: readonly string[], decisionType = TIER_SELECTION): string[] => [
   'python3',
   script,
   'decision',
-  'tier-selection',
+  decisionType,
   '--backend',
   'auto',
   ...flags,
@@ -114,29 +124,45 @@ export const failureOf = (exitCode: number, stderr: string): string => {
   return line === undefined ? `exit ${exitCode}` : `exit ${exitCode}: ${line}`
 }
 
-export const forkCallOf = (script: string | null, flags: readonly string[]): { argv: string[] | null; shown: Pick<DeckPick, 'command' | 'history'> } => {
+export const forkCallOf = (
+  script: string | null,
+  flags: readonly string[],
+  decisionType = TIER_SELECTION,
+): { argv: string[] | null; shown: Pick<DeckPick, 'command' | 'history'> } => {
   if (script === null) {
     return { argv: null, shown: {} }
   }
 
-  const argv = decisionArgs(script, flags)
+  const argv = decisionArgs(script, flags, decisionType)
 
   return { argv, shown: { command: argv.join(' '), history: historyOf(flags) } }
 }
 
 export const isForkSwitch = (command: string): boolean => /vistack-decision\.py["']?\s+(?:decisions|laya)\s+(?:on|off)\b/.test(command)
 
-export const parseDecision = (stdout: string): Decision | null => {
-  const root = parseObject(stdout)
+export const isForkCall = (command: string): boolean => /vistack-decision\.py["']?\s+decision\s+[a-z]/.test(command)
 
-  if (root === null) {
-    return null
-  }
+// The router's match path: the session's first prompt, or one that starts a new task.
+export const isMatchPath = (turns: readonly DeckTurn[], turnId: string, request: string): boolean =>
+  turns[0]?.turnId === turnId || /^\s*new task\b/i.test(request)
 
+const isTierName = (value: string): value is Tier => value === 'mechanical' || value === 'complex'
+
+const outputsOf = (outputs: Record<string, unknown>): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(outputs)
+      .slice(0, OUTPUT_KEYS)
+      .map(([key, value]) => [key, fit(typeof value === 'string' ? value : (JSON.stringify(value) ?? String(value)), OUTPUT_CAP)]),
+  )
+
+// Unknown keys are kept as text; a tier-selection answer must name a tier.
+export const decisionOf = (root: Record<string, unknown>, expectedType = TIER_SELECTION): Decision | null => {
+  const decisionType = text(root.decision_type) ?? expectedType
   const outputs = record(root.outputs)
-  const action = typeof outputs.tier === 'string' ? outputs.tier : root.action
+  const isTier = decisionType === TIER_SELECTION
+  const action = isTier && typeof outputs.tier === 'string' ? outputs.tier : root.action
 
-  if (action !== 'mechanical' && action !== 'complex') {
+  if (typeof action !== 'string' || action === '' || (isTier && !isTierName(action))) {
     return null
   }
 
@@ -144,43 +170,63 @@ export const parseDecision = (stdout: string): Decision | null => {
   const fork = root.fork === 'sharp' || root.fork === 'split' ? root.fork : undefined
   const decisionId = text(root.decision_id)
   const fallbackReason = text(root.fallback_reason)
-  const role = text(outputs.role)
-  const contractChange = number(record(outputs.model_contract_change).noul)
+  const isModel = isTier || decisionType === 'model-selection'
+  const role = isModel ? text(outputs.role) : undefined
+  const model = decisionType === 'model-selection' ? text(outputs.dispatch_model) : undefined
+  const contractChange = isTier ? number(record(outputs.model_contract_change).noul) : undefined
 
   return {
+    action,
     alternatives: (Array.isArray(root.alternatives) ? root.alternatives : [])
       .map(record)
       .filter(item => typeof item.action === 'string')
       .map(item => ({ action: String(item.action), reason: typeof item.reason === 'string' ? item.reason : '' })),
     backend: text(root.backend) ?? 'unknown',
+    changeConditions: strings(root.change_conditions),
     confidence: number(root.confidence) ?? 0,
+    decisionType,
+    outputs: outputsOf(outputs),
     rationale: typeof root.rationale === 'string' ? root.rationale : '',
     requiredEvidence: strings(root.required_evidence),
     risks: strings(root.risks),
-    signals: {
-      complex: strings(outputs.complex_signals),
-      flags: strings(outputs.flags),
-      mechanical: strings(outputs.mechanical_signals),
-      ...(typeof outputs.pattern === 'boolean' ? { pattern: outputs.pattern } : {}),
-      ...(typeof outputs.tier_mismatch === 'boolean' ? { tierMismatch: outputs.tier_mismatch } : {}),
-    },
-    tier: action,
+    ...(isTier && isTierName(action) ? { tier: action } : {}),
+    ...(isTier
+      ? {
+          signals: {
+            complex: strings(outputs.complex_signals),
+            flags: strings(outputs.flags),
+            mechanical: strings(outputs.mechanical_signals),
+            ...(typeof outputs.pattern === 'boolean' ? { pattern: outputs.pattern } : {}),
+            ...(typeof outputs.tier_mismatch === 'boolean' ? { tierMismatch: outputs.tier_mismatch } : {}),
+          },
+        }
+      : {}),
     ...(decisionId === undefined ? {} : { decisionId }),
     ...(fork === undefined ? {} : { fork }),
     ...(typeof root.fallback_used === 'boolean' ? { fallbackUsed: root.fallback_used } : {}),
     ...(fallbackReason === undefined ? {} : { fallbackReason }),
     ...(probabilities.length === 0 ? {} : { probabilities: Object.fromEntries(probabilities) }),
     ...(role === undefined ? {} : { role }),
+    ...(model === undefined ? {} : { model }),
     ...(contractChange === undefined ? {} : { contractChange }),
   }
 }
 
-export const askedOf = (ran: Ran, ms: number): Asked => {
+export const parseDecision = (stdout: string, expectedType = TIER_SELECTION): Decision | null => {
+  const root = parseObject(stdout)
+
+  return root === null ? null : decisionOf(root, expectedType)
+}
+
+export const rosterModel = (roster: Roster, decision: Decision): string | undefined =>
+  decision.tier === undefined ? decision.model : roster[decision.tier]
+
+export const askedOf = (ran: Ran, ms: number, expectedType = TIER_SELECTION): Asked => {
   if (typeof ran === 'string') {
     return { decision: null, error: ran, ms }
   }
 
-  const decision = ran.exitCode === 0 ? parseDecision(ran.stdout) : null
+  const decision = ran.exitCode === 0 ? parseDecision(ran.stdout, expectedType) : null
 
   return decision === null ? { decision, error: ran.exitCode === 0 ? 'parse failed' : failureOf(ran.exitCode, ran.stderr), ms } : { decision, ms }
 }
@@ -201,6 +247,16 @@ const refusalOf = (value: unknown, now: number | undefined): string | undefined 
   return refusal.status === undefined || refusal.status === null ? 'refused' : `refused (HTTP ${String(refusal.status)})`
 }
 
+const byTypeOf = (value: unknown): DeckForkType[] =>
+  sortByType(
+    Object.entries(record(value)).map(([type, bucket]): DeckForkType => {
+      const mean = number(record(bucket).mean_confidence)
+
+      return { forks: number(record(bucket).forks) ?? 0, sharp: number(record(bucket).sharp) ?? 0, type, ...(mean === undefined ? {} : { meanConfidence: mean }) }
+    }),
+    entry => entry.type,
+  )
+
 export const parseForkStatus = (stdout: string, now?: number): ForkStatus | null => {
   const root = parseObject(stdout)
 
@@ -220,6 +276,7 @@ export const parseForkStatus = (stdout: string, now?: number): ForkStatus | null
   const cloudflareHint = text(cloudflare.hint)
   const ollamaModel = text(ollama.model)
   const ollamaHint = text(ollama.hint)
+  const byType = byTypeOf(forks.by_type)
 
   return {
     ladder: strings(root.ladder),
@@ -252,7 +309,14 @@ export const parseForkStatus = (stdout: string, now?: number): ForkStatus | null
         }),
     ...(Object.keys(forks).length === 0
       ? {}
-      : { forks: { forks: number(forks.forks) ?? 0, sharp: number(forks.sharp) ?? 0, split: number(forks.split) ?? 0 } }),
+      : {
+          forks: {
+            forks: number(forks.forks) ?? 0,
+            sharp: number(forks.sharp) ?? 0,
+            split: number(forks.split) ?? 0,
+            ...(byType.length === 0 ? {} : { byType }),
+          },
+        }),
   }
 }
 
@@ -341,12 +405,12 @@ export const pickTrigger = (pick: DeckPick): DeckPick['trigger'] => pick.trigger
 
 export const decidingPick = (
   input: Pick<DeckPick, 'id' | 'scope' | 'subject' | 'at' | 'trigger' | 'command' | 'history'> &
-    Partial<Pick<DeckPick, 'turnId' | 'agentId' | 'actual'>>,
+    Partial<Pick<DeckPick, 'turnId' | 'agentId' | 'actual' | 'decisionType'>>,
 ): DeckPick => ({
+  decisionType: TIER_SELECTION,
   ...input,
   backend: '',
   confidence: 0,
-  decisionType: 'tier-selection',
   isApplied: false,
   recommended: '',
   status: 'deciding',
@@ -354,35 +418,35 @@ export const decidingPick = (
 })
 
 // Spreads `current`, so what changed the pick while the script ran survives.
-export const settledPick = (current: DeckPick, asked: Asked, roster: Roster, ladder: readonly string[]): DeckPick => {
-  const { decision } = asked
+export const decidedPick = (current: DeckPick, decision: Decision, roster: Roster, ladder: readonly string[]): DeckPick => ({
+  ...current,
+  action: decision.action,
+  alternatives: decision.alternatives,
+  backend: decision.backend,
+  changeConditions: decision.changeConditions,
+  confidence: decision.confidence,
+  decisionType: decision.decisionType,
+  ladder: ladderOf(ladder.length === 0 ? DEFAULT_LADDER : ladder, decision.backend, decision.fallbackReason, decision.rationale),
+  outputs: decision.outputs,
+  rationale: decision.rationale,
+  recommended: rosterModel(roster, decision) ?? '',
+  requiredEvidence: decision.requiredEvidence,
+  risks: decision.risks,
+  status: 'decided',
+  tier: decision.tier ?? '',
+  ...(decision.signals === undefined ? {} : { signals: decision.signals }),
+  ...(decision.decisionId === undefined ? {} : { decisionId: decision.decisionId }),
+  ...(decision.fork === undefined ? {} : { fork: decision.fork }),
+  ...(decision.fallbackReason === undefined ? {} : { fallbackReason: decision.fallbackReason }),
+  ...(decision.probabilities === undefined ? {} : { probabilities: decision.probabilities }),
+  ...(decision.role === undefined ? {} : { role: decision.role }),
+  ...(decision.contractChange === undefined ? {} : { contractChange: decision.contractChange }),
+})
 
-  if (decision === null) {
-    return { ...current, error: asked.error ?? 'parse failed', ms: asked.ms, status: 'failed' }
-  }
-
-  return {
-    ...current,
-    alternatives: decision.alternatives,
-    backend: decision.backend,
-    confidence: decision.confidence,
-    ladder: ladderOf(ladder.length === 0 ? DEFAULT_LADDER : ladder, decision.backend, decision.fallbackReason, decision.rationale),
-    ms: asked.ms,
-    rationale: decision.rationale,
-    recommended: roster[decision.tier],
-    requiredEvidence: decision.requiredEvidence,
-    risks: decision.risks,
-    signals: decision.signals,
-    status: 'decided',
-    tier: decision.tier,
-    ...(decision.decisionId === undefined ? {} : { decisionId: decision.decisionId }),
-    ...(decision.fork === undefined ? {} : { fork: decision.fork }),
-    ...(decision.fallbackReason === undefined ? {} : { fallbackReason: decision.fallbackReason }),
-    ...(decision.probabilities === undefined ? {} : { probabilities: decision.probabilities }),
-    ...(decision.role === undefined ? {} : { role: decision.role }),
-    ...(decision.contractChange === undefined ? {} : { contractChange: decision.contractChange }),
-  }
-}
+export const settledPick = (current: DeckPick, asked: Asked, roster: Roster, ladder: readonly string[]): DeckPick =>
+  asked.decision === null
+    ? { ...current, error: asked.error ?? 'parse failed', ms: asked.ms, status: 'failed' }
+    : { ...decidedPick(current, asked.decision, roster, ladder), ms: asked.ms }
 
 export const forkTally = (picks: readonly DeckPick[]): ForkTally => {
   const byBackend = new Map<string, number>()

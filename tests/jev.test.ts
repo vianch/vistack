@@ -13,6 +13,7 @@ import {
   forkTally,
   frontmatterModel,
   historyOf,
+  isForkCall,
   isForkSwitch,
   ladderOf,
   mayApply,
@@ -60,13 +61,26 @@ const STATUS = JSON.stringify({
 describe('jev', () => {
   test('reads every field of a tier decision', async () => {
     expect(parseDecision(DECISION)).toEqual({
+      action: 'complex',
       alternatives: [{ action: 'mechanical', reason: 'Use once a named pattern covers the whole slice.' }],
       backend: 'jev',
+      changeConditions: [],
       confidence: 0.94,
       contractChange: 0.42,
       decisionId: 'dec_ca1b0225c502449f',
+      decisionType: 'tier-selection',
       fallbackUsed: false,
       fork: 'sharp',
+      outputs: {
+        complex_signals: '[]',
+        flags: '["no-pattern"]',
+        mechanical_signals: '[]',
+        model_contract_change: '{"noul":0.42,"type":"noul"}',
+        pattern: 'false',
+        role: 'senior-implementer',
+        tier: 'complex',
+        tier_mismatch: 'false',
+      },
       probabilities: { complex: 0.97, mechanical: 0.03 },
       rationale: 'No pattern or mechanical signal is evidenced; an unclear tier is complex. jev agreed at 0.94.',
       requiredEvidence: ['the pattern to follow, or the reason none exists'],
@@ -77,6 +91,9 @@ describe('jev', () => {
     })
     expect(parseDecision('{"action":"mechanical","backend":"deterministic","confidence":0.8}')?.tier).toBe('mechanical')
     expect(parseDecision('{"action":"maybe"}')).toBeNull()
+    expect(parseDecision('{"action":"hold","decision_type":"dispatch-readiness"}')?.tier).toBeUndefined()
+    expect(parseDecision('{"action":"bug-fix"}', 'playbook-selection')?.decisionType).toBe('playbook-selection')
+    expect(parseDecision('{"action":""}', 'playbook-selection')).toBeNull()
     expect(parseDecision('not json')).toBeNull()
     expect(frontmatterModel('---\nname: implementer\nmodel: sonnet\n---\nbody')).toBe('sonnet')
   })
@@ -128,6 +145,7 @@ describe('jev', () => {
 
   test('builds the argv, names the history, and reads a failed run', async () => {
     expect(decisionArgs('/p/s.py', ['--no-history'])).toEqual(['python3', '/p/s.py', 'decision', 'tier-selection', '--backend', 'auto', '--no-history'])
+    expect(decisionArgs('/p/s.py', [], 'playbook-selection')).toEqual(['python3', '/p/s.py', 'decision', 'playbook-selection', '--backend', 'auto'])
     expect(statusArgs('/p/s.py')).toEqual(['python3', '/p/s.py', 'decisions', 'status'])
     expect(statusArgs('/p/s.py', '/w/d.json')).toEqual(['python3', '/p/s.py', 'decisions', 'status', '--config', '/w/d.json'])
     expect(historyOf(['--history', '/w/h.jsonl', '--config', '/w/d.json'])).toBe('/w/h.jsonl')
@@ -136,6 +154,8 @@ describe('jev', () => {
     expect(failureOf(1, '')).toBe('exit 1')
     expect(isForkSwitch('python3 "/x/scripts/vistack-decision.py" decisions on --jev')).toBe(true)
     expect(isForkSwitch('python3 /x/scripts/vistack-decision.py decisions status')).toBe(false)
+    expect(isForkCall(`echo '{}' | python3 "/x/scripts/vistack-decision.py" decision playbook-selection --backend auto`)).toBe(true)
+    expect(isForkCall('python3 /x/scripts/vistack-decision.py decisions status')).toBe(false)
   })
 
   test('reads a process result into an answer, and a status result into the fork layer', async () => {
@@ -153,6 +173,10 @@ describe('jev', () => {
       command: 'python3 /p/s.py decision tier-selection --backend auto --no-history',
       history: 'off',
     })
+    expect(forkCallOf('/p/s.py', ['--history', '/w/h.jsonl'], 'playbook-selection').shown.command).toBe(
+      'python3 /p/s.py decision playbook-selection --backend auto --history /w/h.jsonl',
+    )
+    expect(askedOf({ exitCode: 0, stderr: '', stdout: '{"action":"investigation","decision_type":"playbook-selection"}' }, 5).decision?.action).toBe('investigation')
   })
 
   test('a deciding pick settles to decided or failed and keeps what changed it meanwhile', async () => {

@@ -32,7 +32,9 @@
    stable `<scenario>-<step>.png` name. One screenshot at the end of a scenario does not
    cover earlier assertions. Record each browser scenario through `skills/qa-video/SKILL.md`:
    `doctor`, a scenario module with one step per assertion point, `record`, `finish`, and
-   `check`. A scenario with no video records `none: <reason>`.
+   `check`; `doctor`, `login`, and `record` take `--playwright <absolute path to the
+   repository's Playwright package>`. A scenario records `no video: <reason>` only when its
+   `.webm` is missing, empty, or failed.
 6. Record one results row per assertion point: scenario, assertion point, steps, expected
    result, actual result, pass or fail, screenshot path, video reference, and diff hunk.
 7. Triage a failing automated check with `skills/prove-it-works/SKILL.md` before routing it.
@@ -46,5 +48,5 @@
    Attach each new screenshot and scenario video with `gh --attach` and reference its local
    path in the matching table row. Keep historical hosted references. Re-read the PR comment
    and verify the tested head SHA, one row per assertion point, one attached image per row,
-   and a video or its `none` reason per browser scenario.
+   and a video or its `no video:` reason per browser scenario.
 9. Run the adversarial health check after QA. Update state, ledger, and session record.

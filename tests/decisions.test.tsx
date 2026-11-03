@@ -46,11 +46,36 @@ const FORK_DECISION = JSON.stringify({
   risks: [],
 })
 
+const PLAYBOOK_DECISION = JSON.stringify({
+  action: 'investigation',
+  alternatives: [],
+  backend: 'deterministic',
+  change_conditions: ['Change route when the request adds a different finish condition.'],
+  confidence: 0.92,
+  decision_id: 'dec_0000000000000002',
+  decision_type: 'playbook-selection',
+  fork: 'sharp',
+  outputs: { classification: 'investigation', playbook: 'investigation', route_source: 'signals' },
+  probabilities: { investigation: 0.92 },
+  rationale: 'The request asks for understanding and no code change.',
+  required_evidence: ["the matched playbook's finish predicate"],
+  risks: [],
+})
+
 type ForkAnswer = { exitCode: number; stderr: string; stdout: string }
 
+const answered = (type: string): ForkAnswer => ({ exitCode: 0, stderr: '', stdout: type === 'playbook-selection' ? PLAYBOOK_DECISION : FORK_DECISION })
+
 // A started session, its decision script on disk unless `isScriptFound` is false: `decisions status`
-// answers at once and a fork 500 ms later with `answer`. Resolves to every argv the deck ran.
-const forkSession = async ($: Engine, on: On, clock: MockClock, answer: ForkAnswer, isScriptFound = true): Promise<string[][]> => {
+// answers at once and each fork 500 ms later with `answer` for its decision type. Resolves to every
+// argv the deck ran.
+const forkSession = async (
+  $: Engine,
+  on: On,
+  clock: MockClock,
+  answer: ForkAnswer | ((type: string) => ForkAnswer),
+  isScriptFound = true,
+): Promise<string[][]> => {
   const ran: string[][] = []
 
   mock.store(on, { deckKeepAwake: 'off' })
@@ -72,7 +97,7 @@ const forkSession = async ($: Engine, on: On, clock: MockClock, answer: ForkAnsw
     if (verb === 'decision') {
       await clock.sleep(500)
 
-      return { value: { ...answer, isStderrTruncated: false, isStdoutTruncated: false } }
+      return { value: { ...(typeof answer === 'function' ? answer(noun ?? '') : answer), isStderrTruncated: false, isStdoutTruncated: false } }
     }
 
     return { value: { exitCode: 0, isStderrTruncated: false, isStdoutTruncated: false, stderr: '', stdout: verb === 'decisions' && noun === 'status' ? FORK_STATUS : '' } }
@@ -87,7 +112,7 @@ const statusCalls = (ran: string[][]) => ran.filter(argv => argv[2] === 'decisio
 
 test('a prompt asks the fork layer: its row shows while the script runs, reads the pick, and opens to the chain', async ($, on) => {
   const clock = mock.clock(on, { now: 1_000 })
-  const ran = await forkSession($, on, clock, { exitCode: 0, stderr: '', stdout: FORK_DECISION })
+  const ran = await forkSession($, on, clock, answered)
 
   expect(statusCalls(ran)).toHaveLength(1)
   await $.turn.start({ text: 'we already implemented a deck panel', turnId: 't1' })
@@ -98,11 +123,17 @@ test('a prompt asks the fork layer: its row shows while the script runs, reads t
   await ui.press({ key: 'tab-decisions' })
   expect(await ui.find({ text: /ladder: policy ▸ jev ✓key ▸ cloudflare 1\.8k\/9k ▸ ollama ✓/ })).toBeDefined()
   expect(await ui.find({ text: /asking the fork layer/ })).toBeDefined()
-  await clock.advance(600)
+  await clock.advance(1_200)
   expect(await ui.find({ text: /asking the fork layer/ })).toBeUndefined()
   expect(await ui.find({ text: /complex ▸ Opus 5\.5 · \.94 · jev · sharp · 0\.5s/ })).toBeDefined()
-  expect(await ui.find({ text: /this session: 1 asked · 1 sharp · 0 split · jev 1/ })).toBeDefined()
-  expect(ran.find(argv => argv[2] === 'decision')).toEqual(['python3', expect.any(String), 'decision', 'tier-selection', '--backend', 'auto', '--no-history'])
+  expect(await ui.find({ text: /playbook ▸ investigation · \.92 · policy · sharp · 0\.5s/ })).toBeDefined()
+  expect(await ui.find({ text: / playbook-selection we already implemented a deck/ })).toBeDefined()
+  expect(await ui.find({ text: /this session: 2 asked · 2 sharp · 0 split · jev 1$/ })).toBeDefined()
+  expect(await ui.find({ text: /^by type: playbook-selection 1 · tier-selection 1$/ })).toBeDefined()
+  expect(ran.filter(argv => argv[2] === 'decision')).toEqual([
+    ['python3', expect.any(String), 'decision', 'tier-selection', '--backend', 'auto', '--no-history'],
+    ['python3', expect.any(String), 'decision', 'playbook-selection', '--backend', 'auto', '--no-history'],
+  ])
   await ui.press({ key: 'pick-turn-t1' })
   expect(await ui.find({ text: /on prompt · tier-selection · took 0\.5s/ })).toBeDefined()
   expect(await ui.find({ text: /jev: agreed at 0\.94 · complex \.94/ })).toBeDefined()
@@ -118,13 +149,13 @@ test('a fork whose script exits non-zero reads failed with the exit code and the
   const ran = await forkSession($, on, clock, { exitCode: 2, stderr: 'TYPESAFE_KEY unset\nTraceback (most recent call last):', stdout: '' })
 
   await $.turn.start({ text: 'fix the typo in README', turnId: 't2' })
-  await clock.advance(900)
+  await clock.advance(1_400)
 
   const ui = await $.ui.mount(pane('terminal'))
 
   await ui.press({ key: 'tab-decisions' })
   expect(await ui.find({ text: /failed: exit 2: TYPESAFE_KEY unset · 0\.5s/ })).toBeDefined()
-  expect(await ui.find({ text: /this session: 1 asked · 0 sharp · 0 split · failed 1/ })).toBeDefined()
+  expect(await ui.find({ text: /this session: 2 asked · 0 sharp · 0 split · failed 2/ })).toBeDefined()
   await ui.press({ key: 'fork-refresh' })
   await clock.advance(300)
   expect(statusCalls(ran)).toHaveLength(2)

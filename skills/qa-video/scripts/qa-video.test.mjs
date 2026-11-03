@@ -1,87 +1,16 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
-import { fileURLToPath } from "node:url";
 
-const here = dirname(fileURLToPath(import.meta.url));
-const script = join(here, "qa-video.mjs");
-const scratch = mkdtempSync(join(tmpdir(), "qa-video-test-"));
-after(() => rmSync(scratch, { recursive: true, force: true }));
+import { assertNoSentinel, cliRunner, fakeTool, makeScratch, noTools, pngMagic, sentinel, startsWith, syntheticEvidence, webmMagic, writer } from "./fixtures.mjs";
 
-const sentinel = "sentinel-7f3a9c";
-const webmMagic = [0x1a, 0x45, 0xdf, 0xa3];
-const pngMagic = [0x89, 0x50, 0x4e, 0x47];
+const scratch = makeScratch();
+const runCli = cliRunner(scratch);
+const write = writer(scratch);
 const manifestKeys = ["version", "scenario", "target", "head", "recorded_at", "mode", "browser", "playwright", "size", "duration", "video", "steps", "outputs", "warnings"];
 const stepKeys = ["name", "caption", "start", "end", "result", "screenshot", "error", "sensitive"];
-
-const runCli = (args, extraEnv = {}) =>
-  new Promise((done) => {
-    const child = spawn(process.execPath, [script, ...args], { cwd: scratch, env: { ...process.env, QA_PASSWORD: sentinel, ...extraEnv } });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (chunk) => { stdout += chunk; });
-    child.stderr.on("data", (chunk) => { stderr += chunk; });
-    child.on("close", (status) => done({ status, stdout, stderr }));
-  });
-
-const startsWith = (path, bytes) => bytes.every((byte, index) => readFileSync(path)[index] === byte);
-const write = (name, content) => {
-  const path = join(scratch, name);
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, content);
-  return path;
-};
-const allFiles = (directory) =>
-  readdirSync(directory, { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? allFiles(join(directory, entry.name)) : [join(directory, entry.name)]));
-const assertNoSentinel = (directory, ...texts) => {
-  for (const text of texts) assert.ok(!text.includes(sentinel), "the sentinel leaked into process output");
-  for (const file of allFiles(directory)) assert.ok(!readFileSync(file, "latin1").includes(sentinel), `the sentinel leaked into ${file}`);
-};
-
-const syntheticEvidence = (folder, duration = 2) => {
-  const directory = join(scratch, folder);
-  mkdirSync(directory, { recursive: true });
-  writeFileSync(join(directory, "demo.webm"), Buffer.from([...webmMagic, 0, 0, 0, 0]));
-  writeFileSync(join(directory, "demo-one.png"), Buffer.from([...pngMagic, 0x0d, 0x0a, 0x1a, 0x0a]));
-  writeFileSync(join(directory, "demo-two.png"), Buffer.from([...pngMagic, 0x0d, 0x0a, 0x1a, 0x0a]));
-  const manifest = {
-    version: 1, scenario: "demo", target: null, head: null, recorded_at: "2026-10-02T00:00:00.000Z", mode: "context", browser: "chromium", playwright: "1.0.0",
-    size: { width: 640, height: 360 }, duration, video: "demo.webm",
-    steps: [
-      { name: "one", caption: "50% done", start: 0.25, end: 1.5, result: "pass", screenshot: "demo-one.png", error: null, sensitive: false },
-      { name: "two", caption: "@home", start: 1.5, end: 1.9, result: "fail", screenshot: "demo-two.png", error: "nope", sensitive: false },
-    ],
-    outputs: { webm: { path: "demo.webm", bytes: 8, status: "produced" } }, warnings: [],
-  };
-  const manifestPath = join(directory, "demo.manifest.json");
-  writeFileSync(manifestPath, JSON.stringify(manifest));
-  return { directory, manifestPath };
-};
-
-// Stands in for ffmpeg and magick: lists full capabilities, logs argv, and writes outputs per FAKE_MODE.
-const fakeTool = `#!/usr/bin/env node
-const { appendFileSync, writeFileSync } = require("node:fs");
-const args = process.argv.slice(2);
-const lists = {
-  "-encoders": " ------\\n V....D libx264  H.264\\n V....D gif  GIF\\n",
-  "-filters": " ... fps  V->V  x\\n ... palettegen  V->V  x\\n ... paletteuse  VV->V  x\\n ..C scale  V->V  x\\n ... split  V->N  x\\n",
-  "-decoders": " ------\\n VFS..D png  PNG\\n",
-  "-demuxers": " ---\\n D   concat  Virtual concatenation script\\n",
-};
-if (args[0] === "-version") { console.log("ffmpeg version 9.9-fake"); process.exit(0); }
-if (lists[args[1]]) { process.stdout.write(lists[args[1]]); process.exit(0); }
-appendFileSync(process.env.FAKE_LOG, JSON.stringify(args) + "\\n");
-const output = args.at(-1);
-const mode = process.env.FAKE_MODE;
-if (mode === "fail") { process.stderr.write("x".repeat(600) + " encoder rejected " + process.env.QA_PASSWORD + "\\n"); process.exit(1); }
-const head = output.endsWith(".gif") ? Buffer.from("GIF89a") : output.endsWith(".png") ? Buffer.from([0x89, 0x50, 0x4e, 0x47]) : Buffer.from([0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70]);
-const small = mode === "shrink" && args.includes("-b:v");
-writeFileSync(output, Buffer.concat([head, Buffer.alloc(small ? 100 : 2 * 1024 * 1024)]));
-`;
 
 describe("qa-video CLI without a browser", () => {
   test("--help lists commands and each command's flags, exit 0", async () => {
@@ -115,10 +44,10 @@ describe("qa-video CLI without a browser", () => {
   });
 
   test("doctor returns its JSON report", async () => {
-    const result = await runCli(["doctor"], { PATH: dirname(process.execPath), FFMPEG_PATH: "" });
+    const result = await runCli(["doctor"], noTools);
     const report = JSON.parse(result.stdout);
     assert.equal(result.status, report.ok ? 0 : 1);
-    assert.deepEqual(Object.keys(report), ["ok", "node", "playwright", "ffmpeg", "ffprobe", "imagemagick", "outputs", "hints"]);
+    assert.deepEqual(Object.keys(report), ["ok", "node", "playwright", "ffmpeg", "ffprobe", "imagemagick", "outputs", "hints", "browsers", "recorder", "encoders"]);
     assert.deepEqual(Object.keys(report.playwright.browser), ["name", "executable", "exists", "launch"]);
     assert.equal(report.ffmpeg.path, null);
     assert.deepEqual(report.outputs, { webm: report.ok, vtt: true, srt: true, mp4: false, gif: false, slideshow: false, sheet: false });
@@ -149,8 +78,8 @@ describe("qa-video CLI without a browser", () => {
   });
 
   test("finish writes captions and skips mp4 without ffmpeg; check passes it and fails a corrupted copy", async () => {
-    const { directory, manifestPath } = syntheticEvidence("synthetic");
-    const finished = await runCli(["finish", "--manifest", manifestPath, "--mp4", "--gif", "--sheet"], { PATH: dirname(process.execPath), FFMPEG_PATH: "" });
+    const { directory, manifestPath } = syntheticEvidence(scratch, "synthetic");
+    const finished = await runCli(["finish", "--manifest", manifestPath, "--mp4", "--gif", "--sheet"], noTools);
     assert.equal(finished.status, 0, finished.stderr);
     const { outputs } = JSON.parse(finished.stdout);
     assert.equal(outputs.vtt.status, "produced");
@@ -164,7 +93,10 @@ describe("qa-video CLI without a browser", () => {
 
     const checked = await runCli(["check", "--manifest", manifestPath]);
     assert.equal(checked.status, 0, checked.stdout);
-    assert.deepEqual(JSON.parse(checked.stdout), { ok: true, errors: [], warnings: ["1 step failed"], steps: 2, passed: 1, failed: 1 });
+    const { outputs: checkedOutputs, attach, ...summary } = JSON.parse(checked.stdout);
+    assert.deepEqual(summary, { ok: true, errors: [], warnings: ["1 step failed"], steps: 2, passed: 1, failed: 1 });
+    assert.equal(checkedOutputs.mp4.status, "skipped");
+    assert.equal(attach.path, "demo.webm");
 
     writeFileSync(join(directory, "demo.vtt"), "tampered");
     const tampered = await runCli(["check", "--manifest", manifestPath]);
@@ -179,9 +111,9 @@ describe("qa-video CLI without a browser", () => {
     for (const tool of ["ffmpeg", "magick"]) writeFileSync(join(bin, tool), fakeTool, { mode: 0o755 });
     const log = join(scratch, "fake.log");
     const calls = () => readFileSync(log, "utf8").trim().split("\n").map((line) => JSON.parse(line));
-    const toolEnv = (mode) => ({ PATH: `${bin}:${dirname(process.execPath)}`, FFMPEG_PATH: "", FAKE_LOG: log, FAKE_MODE: mode });
+    const toolEnv = (mode) => ({ ...noTools, PATH: `${bin}:${noTools.PATH}`, FAKE_LOG: log, FAKE_MODE: mode });
 
-    const { directory, manifestPath } = syntheticEvidence("it's here", 8);
+    const { directory, manifestPath } = syntheticEvidence(scratch, "it's here", { duration: 8 });
     writeFileSync(log, "");
     const shrink = await runCli(["finish", "--manifest", manifestPath, "--mp4", "--max-mb", "1"], toolEnv("shrink"));
     assert.equal(shrink.status, 0, shrink.stderr);
@@ -333,7 +265,7 @@ describe("qa-video record end to end", async () => {
 
   test("context mode records a webm, a PNG per step, and the manifest", { skip, timeout: 120000 }, async () => {
     const { summary, out } = await recordPassing("context");
-    const finished = await runCli(["finish", "--manifest", summary.manifest, "--mp4"], { PATH: dirname(process.execPath), FFMPEG_PATH: "" });
+    const finished = await runCli(["finish", "--manifest", summary.manifest, "--mp4"], noTools);
     assert.equal(finished.status, 0, finished.stderr);
     assert.equal(JSON.parse(finished.stdout).outputs.mp4.status, "skipped");
     const checked = await runCli(["check", "--manifest", summary.manifest]);

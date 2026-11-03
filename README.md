@@ -10,7 +10,7 @@ playbook, one role phase per slice, stopping at merge-ready.
 `vistack` is the identifier you install and invoke. **viStack** is what it is called in
 prose. Same thing. It runs on Claude Code, Codex, Grok Build, and OpenCode.
 
-**Version:** `0.30.0`
+**Version:** `0.31.0`
 
 **Contents:** [install](#install) · [usage](#usage) ·
 [QA evidence: screenshots and video](#qa-evidence-screenshots-and-video) ·
@@ -563,7 +563,7 @@ node "$QA" check --manifest "$DIR/checkout.manifest.json"
 
 | Command | Does | Needs |
 |---|---|---|
-| `doctor` | reports what this machine can produce | nothing |
+| `doctor` | reports the Playwright it loaded, a real `recordVideo` probe, and what else this machine can produce | nothing |
 | `record` | runs the scenario module, writes the `.webm`, one PNG per step, and the manifest | Playwright in the project, plus its browser |
 | `finish` | writes `.vtt` and `.srt` captions, plus the MP4 fitted to 10 MB, GIF, screenshot slideshow, and contact sheet when asked | ffmpeg with libx264 for video outputs, ImageMagick for the sheet |
 | `check` | validates the manifest, file signatures, step times, and the size budget | nothing |
@@ -954,7 +954,7 @@ run decided what it did. Delete them by hand if you want them gone.
 | **The QA step fails at login** | access ran before the PR target finished building, or the approved credential procedure is unavailable, or the one-time code was not entered before the timeout | wait for the target to finish, then check access. Do not substitute another environment or credential path; answer the code prompt, or log in once before an unattended run |
 | **`/plugin install vistack` cannot find it** | more than one registered marketplace carries the name, or the entry is missing from `marketplace.json` | qualify it: `/plugin install vistack`, using the `name` field from `.claude-plugin/marketplace.json` |
 | **A run stops to ask something every few minutes** | the request had no checkable finish condition, so nothing can settle a step | re-state it with `Done means <checkable condition>` and start again |
-| **`qa-video.mjs record` exits 2 with "Playwright not installed in <dir>"** | the script runs from the plugin, so it resolves Playwright from the current directory, not its own | run it from the consuming project, or set `QA_VIDEO_PLAYWRIGHT` to the Playwright package path |
+| **`qa-video.mjs doctor` or `record` exits 2 because Playwright or its browser is missing** | the script runs from the plugin, and a monorepo can hoist a second Playwright whose browsers are not installed. `doctor` names the Playwright it loaded and every candidate it tried, and whether the browser and ffmpeg revisions it expects are in the browsers cache | pass `--playwright <absolute path>` to the consuming repository's `node_modules/playwright`, or set `QA_VIDEO_PLAYWRIGHT`. QA lanes always pass it |
 | **The QA video stays `.webm` and `mp4` is `skipped`** | no system ffmpeg with libx264. Playwright's bundled ffmpeg only writes VP8 | install ffmpeg (`brew install ffmpeg`, or the platform package), then rerun `finish` |
 | **`finish` marks the MP4 `over-budget`** | the scenario is too long for the attachment budget even after the bitrate re-encode | split it into shorter scenarios, or attach the slideshow or contact sheet |
 

@@ -10,7 +10,8 @@ terminal and the desktop app's Code tab. Codex, Grok Build, and OpenCode do not 
 
 - `/deck` opens the pane, or closes it when it is open.
 - `/deck cost`, `/deck 3`, or any other tab name or number opens the pane on that tab.
-- In the pane, keys `1` to `9` switch tabs and `g` opens or closes lazygit.
+- In the pane, keys `1` to `9` switch tabs, `g` opens or closes lazygit, and `t` cycles the
+  Decisions tab's type filter.
 
 When a session starts, the deck opens on its own if the terminal is at least 144 columns
 wide. Below that width it waits until you run `/deck` or widen the terminal. Turn this off
@@ -30,7 +31,7 @@ fullscreen layout it opens inline above the prompt. A mod cannot place a pane on
 | 5 | Changes | The working tree, laid out like lazygit's Files panel and read-only. A header gives the branch with ahead and behind counts, then the last commit's short hash, subject, and age. Below it come the groups Staged, Unstaged, Untracked, and Conflicts, each with its file count and one row per file: a status letter, the path, and lines added and removed. A file with both staged and unstaged changes appears in both groups. A `·` marks a file the session edited. Pressing a row opens a diff preview of up to 24 lines under it, and pressing it again closes it. A Refresh button and the lazygit button sit above. A **This session** list follows: files edited, read from the Edit, MultiEdit, Write, and NotebookEdit calls, with lines added and removed, edit count, and how long ago. Outside the realm the working tree says why it is off, and the session list still shows |
 | 6 | Timeline | Where the latest turn's time went: a strip of model, tool, and failed spans, totals for model, each tool, and idle, and the slowest steps. An advisor consult adds no span: its time is inside the request that made it |
 | 7 | Flow | The workspace (directory, repository root, branch, remote, realm), viStack runs from `.claude/state/` and `.codex/vistack/state/` with each slice's phase, agent, model, PR, and blockers plus the last ledger row, and the slice worktrees |
-| 8 | Decisions | The fork layer: its mode, its ladder with each tier's readiness, how and when forks are asked, and this session's tally, then every fork the deck asked, newest first. Pressing a row shows the whole chain. See [Decisions](#decisions) |
+| 8 | Decisions | The fork layer: its mode, its ladder with each tier's readiness, how and when forks are asked, and this session's tally by backend and by type, then every fork of every decision type this session, the deck's and the main session's, newest first, filtered by type with `t`. Pressing a row shows the whole chain. See [Decisions](#decisions) |
 | 9 | Settings | Where the pane docks, theme, icon set, animations, the git realm, and a reset to defaults |
 
 ## Monitors and loops
@@ -142,16 +143,21 @@ also appear as rows in the `/config` menu.
 
 ## Decisions
 
-The deck asks the fork layer one `tier-selection` question at two moments:
+The deck asks the fork layer itself at three moments:
 
-- **Every prompt.** When a turn starts, the deck asks about the prompt.
-- **Every subagent spawn.** The deck asks about the spawn's description and prompt. In
-  `apply` mode it decides before the spawn, because the answer sets the model.
+- **Every prompt**, `tier-selection`: when a turn starts, the deck asks about the prompt.
+- **The match path**, `playbook-selection` as well: on the session's first prompt, or a prompt
+  that begins with `new task`, the deck also asks which playbook fits the prompt as typed.
+- **Every subagent spawn**, `tier-selection`: the deck asks about the spawn's description and
+  prompt. In `apply` mode it decides before the spawn, because the answer sets the model.
 
-Each question is one call:
+The other ten types come from the main session's own calls at the boundaries in
+`skills/laya-decision/SKILL.md`, which the deck reads from the decision history (below).
+
+Each question the deck asks is one call:
 
 ```
-python3 scripts/vistack-decision.py decision tier-selection --backend auto [--history <file> | --no-history] [--config <file>]
+python3 scripts/vistack-decision.py decision <type> --backend auto [--history <file> | --no-history] [--config <file>]
 ```
 
 with `{"metadata": {"source": "main-turn" | "agent-spawn"}, "task": {"request": "<text, at most 2400 characters>"}}`
@@ -168,6 +174,14 @@ When the consuming repository has `.claude/vistack/`, the decision and its outco
 to `decision-history.jsonl` there, so the fork layer's review (`vistack-decision feedback`)
 sees them. Elsewhere the deck runs the decision with `--no-history`.
 
+### Forks from the main session
+
+The deck reads the main session's CLI forks from the same file, with the status above and
+after each Bash call of `vistack-decision.py decision`: the last 200 `decision` rows of any
+type, stamped at or after the second the session started, one per decision id, marked `$`.
+Rows the deck wrote (`metadata.source` `main-turn` or `agent-spawn`) and lines that are not
+JSON are skipped. A history over 4 MiB, the read limit, shows nothing.
+
 ### The fork layer block
 
 The top of the tab shows the fork layer as the deck last read it:
@@ -178,10 +192,13 @@ The top of the tab shows the fork layer as the deck last read it:
   daily cap, or a missing token or account; Ollama reachable, down, or its model not pulled.
   Jev and Cloudflare show as off until you opt in. When the models are off, the block says
   the policy answers alone and names `/vistack:decisions-on`.
-- **Asked on**: each prompt, each subagent spawn, and in `apply` mode before a built-in spawn.
+- **Asked on**: each prompt, the match path, each subagent spawn, and in `apply` mode before a
+  built-in spawn, each with its type. **Other types** names the main session's CLI calls.
 - **How**: the command, the stdin shape, and the history file in use.
+- **History by type**: forks per type across the whole history, with the mean confidence,
+  from `decisions status`'s `forks.by_type`.
 - **This session**: forks asked, how many were sharp and how many split, a count per answering
-  tier, and the count of failed and still-asking forks.
+  tier, the count of failed and still-asking forks, and a count per type.
 
 The deck reads this with `python3 scripts/vistack-decision.py decisions status`, which sends
 nothing off the machine and never probes a backend. It runs at session start, on the deck's
@@ -197,10 +214,28 @@ reading `script not found`.
 ### A fork row
 
 A row appears when the fork is asked and changes in place as the process returns. It takes two
-lines. The first holds the time, a mark for the trigger, and the subject: the prompt, or for a
-subagent the nickname and its description. The second holds the answer: the tier, the model it
-maps to, the confidence, the tier that answered, whether the fork was sharp or split, how long
-the call took, and `applied` when the deck set that model.
+lines. The first holds the time, a mark for the trigger, the decision type unless it is
+`tier-selection`, and the subject: the prompt, the request, or for a subagent the nickname and
+its description. The second leads with what was chosen, then the confidence, the tier that
+answered, whether the fork was sharp or split, how long the call took, and `applied` when the
+deck set that model:
+
+```
+10:04 ⌨ fix the failing upload test
+   complex ▸ Opus 5.5 · .94 · jev · sharp · 0.5s
+10:04 ⌨ playbook-selection fix the failing upload test
+   playbook ▸ bug-fix · .92 · policy · sharp · 0.4s
+10:12 $ model-selection implement slice A
+   model ▸ step-up ▸ Opus 5.5 · .88 · policy · sharp
+10:13 $ dispatch-readiness implement slice A
+   dispatch ▸ hold · .99 · policy · sharp
+```
+
+Other types lead with a short label and the action (`intake`, `grooming`, `slices`,
+`dispatch`, `progress`, `verify`), the chosen option (`tool`, `file`), or the action alone
+(`skill-improvement`). A pick saved by an earlier deck, with no action, reads as a tier row.
+`t`, or the `type:` button, cycles the filter: all, then each type this session holds. The
+deck keeps the choice in its store.
 
 - `asking the fork layer…` means the process has not returned yet.
 - `failed: …` means there is no answer: the exit code and the first line of its error, `parse
@@ -219,12 +254,15 @@ Pressing a row shows the whole chain:
 - **P** and **signals**: the probability for each tier, the contract-change score, the signals
   that pointed to complex or mechanical, the flags, and whether a pattern or a tier mismatch
   was found.
-- **final**: tier, then role, then model, and whether it was applied or only suggested.
+- **type** and **out**, for any type but `tier-selection`: the type and action, then one line
+  per output key with its value, eight at most, each cut to the line.
+- **final**: tier, then role, then model, and whether it was applied or only suggested. For
+  any other type, what was chosen, marked advisory.
 - **ran**: the model that actually ran and whether it matched, how the unit ended, its cost,
   and, once the outcome reached `decision-history.jsonl`, `outcome recorded` with the
-  decision id.
-- **else**, **needs**, and **risks**: the alternatives the engine weighed, the evidence it
-  wants before the choice holds, and its risks.
+  decision id. Any other type shows its decision **id** instead.
+- **else**, **needs**, **changes if**, and **risks**: the alternatives the engine weighed, the
+  evidence it wants before the choice holds, what would change it, and its risks.
 
 ### How the ladder line is derived
 
@@ -276,10 +314,11 @@ deck:
   It reads the tree when the tab opens, every 10 seconds while the tab is showing, after a
   file edit, after a Bash `git` command that changes the tree, and on Refresh. It never
   stages, commits, stashes, or checks out. Outside the realm it reads only `.git/HEAD`;
-- runs `python3 scripts/vistack-decision.py decision tier-selection` for each fork, and
-  `python3 scripts/vistack-decision.py decisions status` for the fork layer block. The status
-  call sends nothing and never probes a backend. It also runs `pgrep` or `pkill` for
-  lazygit;
+- runs `python3 scripts/vistack-decision.py decision tier-selection` for each fork,
+  `decision playbook-selection` on the match path, and
+  `python3 scripts/vistack-decision.py decisions status` for the fork layer block, and reads
+  `.claude/vistack/decision-history.jsonl` with it. The status call sends nothing and never
+  probes a backend. It also runs `pgrep` or `pkill` for lazygit;
 - runs `sh -c 'grep …'` for the advisor's rows in this session's transcript,
   `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects/*/<session id>.jsonl`;
 - reads the review watch's `state.json` (under `VISTACK_REVIEW_WATCH_DIR`, else

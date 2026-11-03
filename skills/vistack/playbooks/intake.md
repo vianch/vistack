@@ -1,7 +1,8 @@
 # Playbook: intake
 
 **Match when the request is raw or its ticket is not ready.** Intake writes no product code.
-It ends by handing a specified unit to the matching execution playbook.
+It ends by handing a specified unit to the matching execution playbook. The `intake-analysis`
+and `grooming` fork calls are in the Boundaries table in `skills/laya-decision/SKILL.md`.
 
 ## Steps
 

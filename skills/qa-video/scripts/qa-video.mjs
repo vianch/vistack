@@ -2,24 +2,19 @@
 // Records QA screen evidence with Playwright, then derives captions, mp4, gif, a slideshow, and a contact sheet.
 // stdout carries one JSON document (or help text); diagnostics go to stderr. Exit 0 ok, 1 evidence failure, 2 usage or setup error, 3 no OTP before --otp-timeout.
 
-import { execFile } from "node:child_process";
-import { accessSync, closeSync, constants, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
-import { homedir } from "node:os";
-import { basename, delimiter, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { basename, extname, join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { setTimeout as sleep } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 
-import {
-  UsageError, budgetKbps, buildCaptions, checkManifest, compareVersions, formatCommands, formatUsage, gifArgs, labelText, montageArgs, mp4Args,
-  outputsAvailable, parseArgs, parseFfmpegCapabilities, parseFfmpegDuration, parseFfmpegVersion, parseSize, publicUrl, redact, redactDeep, slideshowArgs,
-  slideshowList, slugify,
-} from "./media.mjs";
+import { doctorReport } from "./doctor.mjs";
+import { bytesOf, check, finish, writeJsonAtomic } from "./evidence.mjs";
+import { UsageError, clip, errorText, formatCommands, formatUsage, parseArgs, parseSize, publicUrl, redact, redactDeep, slugify } from "./media.mjs";
+import { installHint, resolvePlaywright } from "./resolve.mjs";
 import { makeOtpHelper, pathsFor, readStorageState, runLogin, runtimeRedactor } from "./session.mjs";
 
 const program = "qa-video.mjs";
-const installHint = "npm i -D playwright && npx playwright install chromium (or set QA_VIDEO_PLAYWRIGHT)";
 const browsers = ["chromium", "firefox", "webkit"];
 // A copy, so an OTP added to the redaction set never reaches a child process.
 const env = { ...process.env };
@@ -28,154 +23,14 @@ class SetupError extends Error {}
 class StepFailed extends Error {}
 
 const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
-const message = (error) => String(error?.message ?? error).replace(/\x1b\[[0-9;]*m/g, "");
-const clip = (text, limit) => (text.length > limit ? `${text.slice(0, limit - 1)}…` : text);
 const emit = (value) => process.stdout.write(`${JSON.stringify(redactDeep(value, env), null, 2)}\n`);
 const say = (text) => process.stderr.write(`qa-video: ${redact(text, env)}\n`);
-const bytesOf = (path) => (existsSync(path) ? statSync(path).size : 0);
-
-const writeJsonAtomic = (path, value) => {
-  const temporary = `${path}.${process.pid}.tmp`;
-  writeFileSync(temporary, `${JSON.stringify(redactDeep(value, env), null, 2)}\n`);
-  renameSync(temporary, path);
-};
-
-const which = (name) => {
-  const extensions = process.platform === "win32" ? (env.PATHEXT ?? ".EXE;.CMD").split(";") : [""];
-  for (const directory of (env.PATH ?? "").split(delimiter).filter(Boolean)) {
-    for (const extension of extensions) {
-      const candidate = join(directory, `${name}${extension}`);
-      try {
-        accessSync(candidate, constants.X_OK);
-        if (statSync(candidate).isFile()) return candidate;
-      } catch {}
-    }
-  }
-  return null;
-};
-
-const locate = (value) => (/[\\/]/.test(value) ? (existsSync(resolve(value)) ? resolve(value) : null) : which(value));
-
-const runTool = (file, args) =>
-  new Promise((done) => {
-    execFile(file, args, { maxBuffer: 64 * 1024 * 1024, timeout: 15 * 60 * 1000 }, (error, stdout, stderr) => {
-      done({ code: error ? (typeof error.code === "number" ? error.code : 1) : 0, stdout: String(stdout ?? ""), stderr: String(stderr || (error ? message(error) : "")) });
-    });
-  });
-
-const packageDirOf = (file) => {
-  for (let directory = dirname(file); directory !== dirname(directory); directory = dirname(directory)) {
-    if (existsSync(join(directory, "package.json"))) return directory;
-  }
-  return null;
-};
-
-const resolvePlaywright = async (flag) => {
-  const source = flag ? "flag" : env.QA_VIDEO_PLAYWRIGHT ? "env" : "cwd";
-  const candidates = source === "cwd" ? ["playwright", "@playwright/test", "playwright-core"] : [resolve(flag ?? env.QA_VIDEO_PLAYWRIGHT)];
-  const requireFrom = createRequire(source === "cwd" ? join(process.cwd(), "package.json") : import.meta.url);
-  const result = { found: false, path: null, version: null, source, screencast: false, api: null, reason: null };
-  let entry = null;
-  for (const id of candidates) {
-    try {
-      entry = requireFrom.resolve(id);
-      break;
-    } catch {}
-  }
-  if (!entry) return { ...result, reason: source === "cwd" ? `not installed in ${process.cwd()}` : `cannot resolve ${candidates[0]}` };
-  result.path = packageDirOf(entry);
-  try {
-    result.version = JSON.parse(readFileSync(join(result.path, "package.json"), "utf8")).version ?? null;
-    const module = await import(pathToFileURL(entry).href);
-    result.api = module.chromium ? module : module.default;
-  } catch (error) {
-    return { ...result, reason: `cannot load ${entry}: ${message(error)}` };
-  }
-  if (!result.api?.chromium) return { ...result, api: null, reason: `${entry} exports no browser types` };
-  return { ...result, found: true, screencast: compareVersions(result.version, "1.59.0") >= 0 };
-};
-
-const probeFfmpeg = async (flag) => {
-  const path = flag ? locate(flag) ?? resolve(flag) : env.FFMPEG_PATH || which("ffmpeg");
-  if (!path) return null;
-  const version = await runTool(path, ["-version"]);
-  if (version.code !== 0) return { path, version: null, capabilities: parseFfmpegCapabilities(), error: clip(version.stderr.trim(), 200) };
-  const [encoders, filters, decoders, demuxers] = await Promise.all(["-encoders", "-filters", "-decoders", "-demuxers"].map((list) => runTool(path, ["-hide_banner", list])));
-  return {
-    path,
-    version: parseFfmpegVersion(version.stdout),
-    capabilities: parseFfmpegCapabilities({ encoders: encoders.stdout, filters: filters.stdout, decoders: decoders.stdout, demuxers: demuxers.stdout }),
-  };
-};
-
-const findMagick = (flag) => {
-  if (flag) {
-    const path = locate(flag);
-    return path ? { flavor: /^magick/i.test(basename(path)) ? "magick" : "montage", path } : null;
-  }
-  const magick = which("magick");
-  if (magick) return { flavor: "magick", path: magick };
-  const montage = which("montage");
-  return montage ? { flavor: "montage", path: montage } : null;
-};
-
-const bundledFfmpeg = () => {
-  const cacheRoot = env.PLAYWRIGHT_BROWSERS_PATH
-    || (process.platform === "darwin" ? join(homedir(), "Library", "Caches", "ms-playwright")
-      : process.platform === "win32" ? join(env.LOCALAPPDATA ?? homedir(), "ms-playwright") : join(homedir(), ".cache", "ms-playwright"));
-  try {
-    const found = readdirSync(cacheRoot).find((entry) => entry.startsWith("ffmpeg-"));
-    return found ? join(cacheRoot, found) : null;
-  } catch {
-    return null;
-  }
-};
-
-const toolInstall = (tools) => {
-  if (process.platform === "darwin") return `brew install ${tools.join(" ")}`;
-  if (process.platform === "linux") return `sudo apt-get install ${tools.join(" ")}`;
-  return `install ${tools.join(" and ")} and put them on PATH`;
-};
+const io = { env, emit };
 
 const doctor = async (options) => {
-  const playwright = await resolvePlaywright(options.playwright);
-  let executable = null;
-  try {
-    executable = playwright.api?.[options.browser]?.executablePath() ?? null;
-  } catch {}
-  const browser = { name: options.browser, executable, exists: Boolean(executable && existsSync(executable)), launch: null };
-  // Headless runs use a separate headless-shell binary, so only a real launch proves the recorder can start.
-  if (playwright.api?.[options.browser]) {
-    try {
-      const probe = await playwright.api[options.browser].launch({ headless: true, timeout: 30000 });
-      await probe.close();
-      browser.launch = "ok";
-    } catch (error) {
-      browser.launch = clip(message(error).split("\n")[0], 300);
-    }
-  }
-  const ffmpeg = await probeFfmpeg(options.ffmpeg);
-  const capabilities = ffmpeg?.capabilities ?? parseFfmpegCapabilities();
-  const magick = findMagick(options.magick);
-  const outputs = outputsAvailable({ webm: playwright.found && browser.launch === "ok", ffmpeg: capabilities, imagemagick: Boolean(magick) });
-  const hints = [];
-  if (!playwright.found) hints.push(`Playwright ${playwright.reason}: ${installHint}`);
-  else if (browser.launch !== "ok") hints.push(`the ${options.browser} build for Playwright ${playwright.version} does not launch (${browser.launch}): npx playwright install ${options.browser}`);
-  const missing = [...(outputs.mp4 && outputs.gif && outputs.slideshow ? [] : ["ffmpeg"]), ...(magick ? [] : ["imagemagick"])];
-  if (missing.length) hints.push(`for mp4, gif, slideshow, and sheet outputs: ${toolInstall(missing)}`);
-  const bundled = bundledFfmpeg();
-  if (!ffmpeg && bundled) hints.push(`the ffmpeg bundled with Playwright (${bundled}) is a minimal build without libx264 or gif and is not usable for finish`);
-  emit({
-    ok: outputs.webm,
-    node: process.version,
-    playwright: { found: playwright.found, path: playwright.path, version: playwright.version, source: playwright.source, screencast: playwright.screencast, browser },
-    ffmpeg: { path: ffmpeg?.path ?? null, version: ffmpeg?.version ?? null, ...capabilities },
-    ffprobe: { path: (ffmpeg && locate(join(dirname(ffmpeg.path), "ffprobe"))) || which("ffprobe") },
-    imagemagick: { flavor: magick?.flavor ?? null, path: magick?.path ?? null },
-    outputs,
-    hints,
-  });
-  return outputs.webm ? 0 : 1;
+  const report = await doctorReport(options, env);
+  emit(report);
+  return report.ok ? 0 : 1;
 };
 
 const recordedHead = (path) => {
@@ -197,7 +52,7 @@ const loadScenario = async (options) => {
   try {
     scenario = await import(pathToFileURL(scenarioPath).href);
   } catch (error) {
-    throw new SetupError(`cannot load scenario ${options.scenario}: ${message(error)}`);
+    throw new SetupError(`cannot load scenario ${options.scenario}: ${errorText(error)}`);
   }
   if (scenario.login !== undefined && typeof scenario.login !== "function") throw new SetupError("the scenario login export is not a function");
   if (scenario.contextOptions !== undefined && !isObject(scenario.contextOptions)) throw new SetupError("the scenario contextOptions export is not an object");
@@ -211,7 +66,7 @@ const login = async (options) => {
   if (!scenario.login) throw new SetupError("the scenario has no login export");
   const out = resolve(options.out);
   const savePath = resolve(options.saveStorageState ?? pathsFor(out).storageState);
-  const playwright = await resolvePlaywright(options.playwright);
+  const playwright = await resolvePlaywright(options.playwright, { env });
   if (!playwright.found) throw new SetupError(`Playwright ${playwright.reason}. Install: ${installHint}`);
   mkdirSync(out, { recursive: true });
   let browser;
@@ -219,7 +74,7 @@ const login = async (options) => {
     browser = await playwright.api.chromium.launch({ headless: true });
     await runLogin({ browser, contextOptions: shared, login: scenario.login, baseURL: options.url, otp: otpFor(options, out), savePath });
   } catch (error) {
-    throw error?.exitCode ? error : new SetupError(`cannot start chromium: ${message(error)}`);
+    throw error?.exitCode ? error : new SetupError(`cannot start chromium: ${errorText(error)}`);
   } finally {
     await browser?.close().catch(() => {});
   }
@@ -240,7 +95,7 @@ const record = async (options) => {
   if (priorHead && options.head && !sameHead(priorHead, options.head)) {
     throw new SetupError(`${files.manifest} is evidence for head ${priorHead}; record head ${options.head} into its own directory, <state-root>/qa/<slug>/<slice-or-pr>/<head7>/`);
   }
-  const playwright = await resolvePlaywright(options.playwright);
+  const playwright = await resolvePlaywright(options.playwright, { env });
   if (!playwright.found) throw new SetupError(`Playwright ${playwright.reason}. Install: ${installHint}`);
   const browserType = playwright.api[options.browser];
   if (!browserType) throw new SetupError(`Playwright ${playwright.version} has no ${options.browser} browser type`);
@@ -256,7 +111,7 @@ const record = async (options) => {
       await action();
       return true;
     } catch (error) {
-      session.warnings.push(`${label}: ${clip(redact(message(error), env), 500)}`);
+      session.warnings.push(`${label}: ${clip(redact(errorText(error), env), 500)}`);
       return false;
     }
   };
@@ -277,8 +132,8 @@ const record = async (options) => {
           await page.screencast.start({ path: files.video, size });
           session.mode = "screencast";
         } catch (error) {
-          if (options.mode === "screencast") throw new SetupError(`page.screencast.start failed: ${message(error)}`);
-          session.warnings.push(`page.screencast.start failed, recorded with recordVideo instead: ${clip(message(error), 300)}`);
+          if (options.mode === "screencast") throw new SetupError(`page.screencast.start failed: ${errorText(error)}`);
+          session.warnings.push(`page.screencast.start failed, recorded with recordVideo instead: ${clip(errorText(error), 300)}`);
         }
       } else if (options.mode === "screencast") {
         throw new SetupError(`Playwright ${playwright.version} has no page.screencast (added in 1.59); use --mode context`);
@@ -294,7 +149,7 @@ const record = async (options) => {
   } catch (error) {
     await browser?.close().catch(() => {});
     rmSync(files.tmp, { recursive: true, force: true });
-    throw error instanceof SetupError || error?.exitCode ? error : new SetupError(`cannot start ${options.browser}: ${message(error)}`);
+    throw error instanceof SetupError || error?.exitCode ? error : new SetupError(`cannot start ${options.browser}: ${errorText(error)}`);
   }
 
   const step = async (stepName, action, { caption, sensitive = false } = {}) => {
@@ -310,7 +165,7 @@ const record = async (options) => {
     try {
       value = await action();
     } catch (caught) {
-      error = clip(redact(message(caught), env), 500);
+      error = clip(redact(errorText(caught), env), 500);
     }
     let screenshot = `${name}-${slug}.png`;
     // hideOverlays leaves the action cursor in place, so actions are hidden separately for the PNG.
@@ -347,7 +202,7 @@ const record = async (options) => {
   } catch (error) {
     if (!(error instanceof StepFailed)) {
       session.scenarioError = true;
-      session.warnings.push(`scenario error outside a step: ${clip(redact(message(error), env), 500)}`);
+      session.warnings.push(`scenario error outside a step: ${clip(redact(errorText(error), env), 500)}`);
     }
   } finally {
     duration = elapsed();
@@ -366,153 +221,16 @@ const record = async (options) => {
     outputs: { webm: videoBytes > 0 ? { path: `${name}.webm`, bytes: videoBytes, status: "produced" } : { path: `${name}.webm`, bytes: 0, status: "failed", reason: "the recorder wrote no video" } },
     warnings: session.warnings,
   };
-  writeJsonAtomic(files.manifest, manifest);
+  writeJsonAtomic(files.manifest, manifest, env);
   const failed = session.steps.filter((recorded) => recorded.result === "fail").length;
   emit({ manifest: files.manifest, video: videoBytes > 0 ? files.video : null, steps: session.steps.length, passed: session.steps.length - failed, failed });
   return failed || session.scenarioError || session.steps.length === 0 || videoBytes === 0 ? 1 : 0;
 };
 
-const readManifest = (path) => {
-  let manifest;
-  try {
-    manifest = JSON.parse(readFileSync(path, "utf8"));
-  } catch (error) {
-    throw new SetupError(`cannot read manifest ${path}: ${error.code ?? message(error)}`);
-  }
-  if (!isObject(manifest) || typeof manifest.scenario !== "string" || !Array.isArray(manifest.steps)) throw new SetupError(`${path} is not a qa-video manifest`);
-  return manifest;
-};
-
-const inside = (directory, path) => {
-  const target = resolve(directory, path);
-  const offset = relative(directory, target);
-  return offset !== "" && !offset.startsWith("..") && !isAbsolute(offset) ? target : null;
-};
-
-const finish = async (options) => {
-  const manifestPath = resolve(options.manifest);
-  const manifest = readManifest(manifestPath);
-  const directory = dirname(manifestPath);
-  const name = slugify(manifest.scenario) || "evidence";
-  const maxBytes = options.maxMb * 1024 * 1024;
-  const outputs = { ...(isObject(manifest.outputs) ? manifest.outputs : {}) };
-  const at = (file) => join(directory, file);
-  let failed = false;
-  const settle = (key, file, note) => {
-    const bytes = bytesOf(at(file));
-    outputs[key] = bytes > maxBytes ? { path: file, bytes, status: "over-budget", reason: `${(bytes / 1048576).toFixed(1)} MB is over --max-mb ${options.maxMb}${note ?? ""}` } : { path: file, bytes, status: "produced" };
-  };
-  const run = async (key, file, tool, args) => {
-    const result = await runTool(tool, args);
-    if (result.code === 0) return result;
-    outputs[key] = { path: file, bytes: 0, status: "failed", reason: redact(result.stderr, env).trim().slice(-400) };
-    failed = true;
-    return null;
-  };
-
-  const captions = buildCaptions(manifest.steps);
-  for (const kind of ["vtt", "srt"]) {
-    writeFileSync(at(`${name}.${kind}`), redact(captions[kind], env));
-    settle(kind, `${name}.${kind}`);
-  }
-
-  const requested = ["mp4", "gif", "slideshow", "sheet"].filter((key) => options[key]);
-  const ffmpeg = requested.some((key) => key !== "sheet") ? await probeFfmpeg(options.ffmpeg) : null;
-  const magick = options.sheet ? findMagick(options.magick) : null;
-  const available = outputsAvailable({ webm: true, ffmpeg: ffmpeg?.capabilities, imagemagick: Boolean(magick) });
-  const video = inside(directory, manifest.video ?? "");
-  const shots = manifest.steps
-    .map((step, index) => ({ step, index, path: typeof step.screenshot === "string" ? inside(directory, step.screenshot) : null }))
-    .filter((shot) => shot.path && existsSync(shot.path));
-  const targets = { mp4: `${name}.mp4`, gif: `${name}.gif`, slideshow: `${name}-slideshow.mp4`, sheet: `${name}-sheet.png` };
-  const needs = { mp4: "an ffmpeg with libx264", gif: "an ffmpeg with the gif encoder and palettegen, paletteuse, split, fps, scale", slideshow: "an ffmpeg with libx264, the png decoder, and the concat demuxer", sheet: "ImageMagick (magick or montage)" };
-
-  for (const key of requested) {
-    const file = targets[key];
-    if (!available[key]) {
-      const tool = key === "sheet" ? (options.magick ? `ImageMagick not found at ${options.magick}` : "ImageMagick not found on PATH")
-        : !ffmpeg ? "ffmpeg not found (pass --ffmpeg, set FFMPEG_PATH, or put it on PATH)" : `ffmpeg at ${ffmpeg.path} lacks the needed encoders or filters`;
-      outputs[key] = { path: file, bytes: 0, status: "skipped", reason: `${tool}; ${key} needs ${needs[key]}` };
-      continue;
-    }
-    if ((key === "mp4" || key === "gif") && !(video && existsSync(video))) {
-      outputs[key] = { path: file, bytes: 0, status: "failed", reason: `video ${manifest.video} is missing` };
-      failed = true;
-      continue;
-    }
-    if ((key === "slideshow" || key === "sheet") && shots.length === 0) {
-      outputs[key] = { path: file, bytes: 0, status: "skipped", reason: "no step screenshots on disk" };
-      continue;
-    }
-    if (key === "mp4") {
-      const first = await run(key, file, ffmpeg.path, mp4Args({ input: video, output: at(file) }));
-      if (!first) continue;
-      // The recorder keeps writing frames after stop(), so the file can outlast the manifest's duration.
-      const seconds = Math.max(Number(manifest.duration) || 0, parseFfmpegDuration(first.stderr) ?? 0);
-      const kbps = bytesOf(at(file)) > maxBytes ? budgetKbps(maxBytes, seconds) : null;
-      if (kbps && !(await run(key, file, ffmpeg.path, mp4Args({ input: video, output: at(file), kbps })))) continue;
-      settle(key, file, kbps ? ` after one re-encode at ${kbps} kbps` : "");
-    } else if (key === "gif") {
-      if (await run(key, file, ffmpeg.path, gifArgs({ input: video, output: at(file), fps: options.gifFps, width: options.gifWidth }))) settle(key, file);
-    } else if (key === "slideshow") {
-      const list = at(`${name}.slideshow.txt`);
-      writeFileSync(list, slideshowList(shots.map((shot) => shot.path), options.hold));
-      if (await run(key, file, ffmpeg.path, slideshowArgs({ list, output: at(file) }))) settle(key, file);
-    } else {
-      const images = shots.map((shot) => ({ path: shot.path, label: redact(labelText(shot.index + 1, shot.step), env) }));
-      if (await run(key, file, magick.path, montageArgs({ images, output: at(file), flavor: magick.flavor }))) settle(key, file);
-    }
-  }
-
-  writeJsonAtomic(manifestPath, { ...manifest, outputs });
-  emit({ manifest: manifestPath, outputs });
-  return failed ? 1 : 0;
-};
-
-const fileFacts = (path) => {
-  try {
-    const stat = statSync(path);
-    if (!stat.isFile()) return { exists: false };
-    const head = Buffer.alloc(12);
-    const descriptor = openSync(path, "r");
-    try {
-      return { exists: true, bytes: stat.size, head: [...head.subarray(0, readSync(descriptor, head, 0, 12, 0))] };
-    } finally {
-      closeSync(descriptor);
-    }
-  } catch {
-    return { exists: false };
-  }
-};
-
-const check = async (options) => {
-  const manifestPath = resolve(options.manifest);
-  const directory = dirname(manifestPath);
-  let text = "";
-  try {
-    text = readFileSync(manifestPath, "utf8");
-  } catch (error) {
-    text = `cannot read ${manifestPath}: ${error.code ?? message(error)}`;
-  }
-  let manifest = text;
-  try {
-    manifest = JSON.parse(text);
-  } catch {}
-  const facts = {};
-  if (isObject(manifest)) {
-    const paths = [manifest.video, ...(Array.isArray(manifest.steps) ? manifest.steps.map((step) => step?.screenshot) : []), ...Object.values(isObject(manifest.outputs) ? manifest.outputs : {}).map((output) => output?.path)];
-    for (const path of paths.filter((item) => typeof item === "string" && item !== "")) {
-      const target = inside(directory, path);
-      facts[path] = target ? fileFacts(target) : { exists: false };
-    }
-  }
-  const result = checkManifest(manifest, facts, { maxBytes: options.maxMb * 1024 * 1024 });
-  emit(result);
-  return result.ok ? 0 : 1;
-};
-
 const path = (describe) => ({ type: "string", placeholder: "path", describe });
-const playwrightFlag = path("Playwright module path or package directory (else QA_VIDEO_PLAYWRIGHT, else the cwd's node_modules)");
+const playwrightFlag = path("Playwright module path or package directory (else QA_VIDEO_PLAYWRIGHT, else node_modules from the cwd up, NODE_PATH, and global installs)");
+const ffmpegFlag = path("ffmpeg binary (else FFMPEG_PATH, else ffmpeg on PATH or in QA_VIDEO_TOOL_DIRS)");
+const magickFlag = path("ImageMagick magick or montage binary (else magick, then montage, on PATH or in QA_VIDEO_TOOL_DIRS)");
 const otpTimeout = { type: "number", default: 300, placeholder: "seconds", describe: "Seconds otp() waits for <out>/otp.txt; exit 3 when no code arrives" };
 const commands = {
   doctor: {
@@ -521,8 +239,8 @@ const commands = {
     spec: {
       playwright: playwrightFlag,
       browser: { type: "string", default: "chromium", values: browsers, placeholder: "name", describe: "Browser to check: chromium, firefox, or webkit" },
-      ffmpeg: path("ffmpeg binary (else FFMPEG_PATH, else ffmpeg on PATH)"),
-      magick: path("ImageMagick magick or montage binary (else magick, then montage, on PATH)"),
+      ffmpeg: ffmpegFlag,
+      magick: magickFlag,
     },
   },
   login: {
@@ -559,7 +277,7 @@ const commands = {
   },
   finish: {
     summary: "Write captions and the requested derived outputs next to a recorded manifest",
-    run: finish,
+    run: (options) => finish(options, io),
     spec: {
       manifest: { type: "string", required: true, placeholder: "path", describe: "Manifest written by record" },
       mp4: { type: "boolean", describe: "H.264 mp4 of the video (needs libx264)" },
@@ -570,13 +288,13 @@ const commands = {
       "gif-width": { type: "number", default: 800, describe: "Gif width in pixels" },
       "gif-fps": { type: "number", default: 10, describe: "Gif frames per second" },
       hold: { type: "number", default: 2, describe: "Seconds each PNG holds in the slideshow" },
-      ffmpeg: path("ffmpeg binary (else FFMPEG_PATH, else ffmpeg on PATH)"),
-      magick: path("ImageMagick magick or montage binary (else magick, then montage, on PATH)"),
+      ffmpeg: ffmpegFlag,
+      magick: magickFlag,
     },
   },
   check: {
     summary: "Verify a manifest against the files on disk",
-    run: check,
+    run: (options) => check(options, io),
     spec: {
       manifest: { type: "string", required: true, placeholder: "path", describe: "Manifest to verify" },
       "max-mb": { type: "number", default: 10, describe: "Warn when an output is over this many MB" },
@@ -601,8 +319,8 @@ const main = async () => {
     return await entry.run(options);
   } catch (error) {
     const usage = error instanceof UsageError;
-    say(usage || error instanceof SetupError || error?.exitCode ? message(error) : error?.stack ?? message(error));
-    emit({ ok: false, error: message(error), ...(usage ? { usage: `node ${program} ${entry ? `${command} ` : ""}--help` } : {}) });
+    say(usage || error instanceof SetupError || error?.exitCode ? errorText(error) : error?.stack ?? errorText(error));
+    emit({ ok: false, error: errorText(error), ...(usage ? { usage: `node ${program} ${entry ? `${command} ` : ""}--help` } : {}) });
     return error?.exitCode ?? 2;
   }
 };

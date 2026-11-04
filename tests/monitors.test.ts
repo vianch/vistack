@@ -239,25 +239,6 @@ describe('the Stop snapshot', () => {
     ])
     expect(fromStopSnapshot([wakeup], { crons: [] }, 0)[0]?.status).toBe('active')
   })
-
-  test('takes the engine Stop hook input as it is', async ($, on) => {
-    let seen: DeckMonitor[] = []
-
-    on('classic.Stop', (_engine, e) => {
-      seen = fromStopSnapshot([], { crons: e.session_crons, tasks: e.background_tasks }, 0)
-
-      return {}
-    })
-    await $.classic.Stop({
-      background_tasks: [{ agent_type: 'Explore', description: 'map the code', id: 'a7', status: 'running', type: 'subagent' }],
-      session_crons: [{ id: 'c1', prompt: '<<autonomous-loop>>', recurring: true, schedule: '*/10 * * * *' }],
-      stop_hook_active: false,
-    })
-    expect(seen.map(monitor => [monitor.id, monitor.kind, monitor.label, monitor.detail])).toEqual([
-      ['a7', 'agent', 'map the code', 'Explore'],
-      ['c1', 'cron', 'autonomous loop', '*/10 * * * *'],
-    ])
-  })
 })
 
 describe('other monitor sources', () => {

@@ -198,6 +198,19 @@ for (const path of lintFiles) {
   }
 }
 
+// The engine's cc-plugin-sec-default routes these events past a user-tier plugin, so a hook on one
+// never runs and the engine reports it skipped every session (see the host facts in CLAUDE.md).
+const bypassedEvent = /\bon\(\s*['"`](classic\.[A-Za-z]+|skill\.prompt|prompt\.(?:section|context|compose)|attribution\.text|settings\.read)['"`]/g;
+for (const path of await walkFiles(join(repositoryRoot, "hooks"), [".ts", ".tsx"], [])) {
+  const lines = (await read(path)).split("\n");
+  lines.forEach((line, index) => {
+    for (const match of line.matchAll(bypassedEvent)) {
+      if (excepted(line, "bypassed-hook", path, index + 1)) continue;
+      fail(path, `line ${index + 1}: \`on('${match[1]}')\` never runs for a user-tier plugin, because cc-plugin-sec-default bypasses it; read the same data from tool.call, prompt.submit, turn.*, agent.spawn, or session.* instead (CLAUDE.md, Rules and what enforces them)`);
+    }
+  });
+}
+
 // The README repeats the release version, so every host manifest and that line must agree.
 const manifestPaths = [".claude-plugin", ".codex-plugin", ".grok-plugin"].map((host) => join(repositoryRoot, host, "plugin.json"));
 const versions = await Promise.all(manifestPaths.map(async (path) => [path, JSON.parse(await read(path)).version]));

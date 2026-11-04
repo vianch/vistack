@@ -66,7 +66,6 @@ import {
   fromAgents,
   fromCronList,
   fromRuns,
-  fromStopSnapshot,
   fromTaskNotifications,
   fromToolCall,
   isOpen,
@@ -83,6 +82,7 @@ import { modelLabel } from './lib/pricing'
 import { effectiveRealm, isInRealm, normalizeRemote, realmParts } from './lib/realm'
 import { relaunchPlan, withLoopArgs } from './lib/relaunch'
 import { carryWatch, isWatchLoop, parseWatchState, planWatch, watchLoopArgs } from './lib/review-watch'
+import { createdTask, recordSkill, withTask } from './lib/session-lists'
 import { DEFAULT_SETTINGS, iconsOf, paletteOf, readSettings } from './lib/theme'
 import { historyTallyOf } from './lib/type-overview'
 import { gitdirOf, headBranch, isPrChange, lastLedgerRow, parsePrSearch, parseRun, prSearchArgs } from './lib/workflow'
@@ -119,7 +119,6 @@ import type { AgentAction } from './tabs/agents'
 import type { LoopDraft, MonitorAction } from './tabs/monitors'
 import type { Kit, KitElements } from './tabs/parts'
 import type {
-  CronSummary,
   DeckActivity,
   DeckAdvisor,
   DeckAgent,
@@ -152,7 +151,6 @@ import type {
   MonitorChange,
   MonitorEndNote,
   StopCall,
-  TaskSummary,
 } from '../types'
 
 type Dollar = EngineInterface
@@ -183,7 +181,6 @@ type Job =
   | { kind: 'monitor-notes'; notes: MonitorEndNote[] }
   | { kind: 'monitor-scan' }
   | { kind: 'monitor-crons' }
-  | { kind: 'monitor-snapshot'; tasks: readonly TaskSummary[] | undefined; crons: readonly CronSummary[] | undefined; isComplete: boolean }
   | { kind: 'monitor-stop'; id: string }
   | { kind: 'monitor-stop-all' }
   | { kind: 'monitor-relaunch'; id: string }
@@ -1222,12 +1219,6 @@ const syncAgentMonitors = async ($: Dollar): Promise<void> => {
   await reviseMonitors($, list => fromAgents(list, agentList, at))
 }
 
-const takeSnapshot = async ($: Dollar, job: Extract<Job, { kind: 'monitor-snapshot' }>): Promise<void> => {
-  const at = await $.clock.now()
-
-  await reviseMonitors($, list => fromStopSnapshot(list, { crons: job.crons, tasks: job.tasks }, at, job.isComplete))
-}
-
 // Applies the end itself, as the deck's own tool calls skip its tool.call hook. The reason the
 // call refused, or null once it ran.
 const runStopCall = async ($: Dollar, call: StopCall): Promise<string | null> => {
@@ -1716,8 +1707,6 @@ const runJob = async ($: Dollar, job: Job): Promise<void> => {
       return scanMonitorNotes($)
     case 'monitor-crons':
       return syncCrons($)
-    case 'monitor-snapshot':
-      return takeSnapshot($, job)
     case 'monitor-stop':
       return stopMonitor($, job.id)
     case 'monitor-stop-all':
@@ -2500,6 +2489,8 @@ export const register: Register = (on, options) => {
       }
       enqueue({ kind: 'settle', pickId: `turn-${e.turnId}`, result: e.reason, usd: cost.isPartial ? null : cost.usd })
       enqueue({ kind: 'advisor-scan' })
+      enqueue({ kind: 'monitor-scan' })
+      enqueue({ kind: 'monitor-crons' })
     } else {
       const agentId = e.agentId
       const own = stepList.filter(step => step.agentId === agentId)
@@ -2610,14 +2601,6 @@ export const register: Register = (on, options) => {
     return sent
   })
 
-  on('skill.prompt', async ($, e, next) => {
-    const at = await $.clock.now()
-
-    await update($, skills, list => [...list, { at, skill: e.skill }].slice(-60))
-
-    return next(e)
-  })
-
   // A background task's end report, delivered while idle or into a running turn.
   on('prompt.submit', async ($, e, next) => {
     if (e.origin.kind === 'task-notification') {
@@ -2634,35 +2617,6 @@ export const register: Register = (on, options) => {
     if (note !== null) {
       takeNotes([note])
     }
-
-    return next(e)
-  })
-
-  // An account may bypass a user-tier plugin's classic hooks, so nothing depends on these snapshots.
-  on('classic.Stop', async ($, e, next) => {
-    enqueue({ crons: e.session_crons, isComplete: true, kind: 'monitor-snapshot', tasks: e.background_tasks })
-    enqueue({ kind: 'monitor-scan' })
-
-    return next(e)
-  }).catch(($, e, next) => next(e))
-
-  on('classic.SubagentStop', async ($, e, next) => {
-    enqueue({ crons: e.session_crons, isComplete: false, kind: 'monitor-snapshot', tasks: e.background_tasks })
-
-    return next(e)
-  }).catch(($, e, next) => next(e))
-
-  on('classic.TaskCreated', async ($, e, next) => {
-    await update($, todos, list => [
-      ...list.filter(todo => todo.id !== e.task_id),
-      { content: e.task_subject, id: e.task_id, status: 'pending' },
-    ])
-
-    return next(e)
-  })
-
-  on('classic.TaskCompleted', async ($, e, next) => {
-    await update($, todos, list => list.map(todo => (todo.id === e.task_id ? { ...todo, status: 'completed' } : todo)))
 
     return next(e)
   })
@@ -2753,6 +2707,20 @@ export const register: Register = (on, options) => {
             status: String(field(todo, 'status') ?? 'pending'),
           })),
         ])
+      }
+    }
+    if (tool === 'Skill') {
+      const skill = field(e, 'skill')
+
+      if (typeof skill === 'string' && skill !== '') {
+        await update($, skills, list => recordSkill(list, { at: endedAt, skill, ...(e.agentId === undefined ? {} : { agentId: e.agentId }) }))
+      }
+    }
+    if (tool === 'TaskCreate') {
+      const task = createdTask(e, ran.result)
+
+      if (task !== null) {
+        await update($, todos, list => withTask(list, task))
       }
     }
     if (tool === 'TaskUpdate') {

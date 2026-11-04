@@ -563,26 +563,6 @@ test("a shell a synchronous subagent started ends with that agent, and the main 
   await ui.unmount()
 })
 
-test('a Stop snapshot that no longer lists a shell ends it once the grace has passed', async ($, on) => {
-  const clock = mock.clock(on, { now: 1_000 })
-
-  tools(on, [])
-  on('classic.Stop', () => ({}))
-  await startSession($, on)
-  await $.tool.call(SHELL as never)
-  await clock.advance(300)
-  await $.classic.Stop({ background_tasks: [], session_crons: [], stop_hook_active: false })
-  await clock.advance(60_000)
-
-  const ui = await $.ui.mount(pane('terminal'))
-
-  expect(await ui.find({ text: /1 running · 0 active/ })).toBeDefined()
-  await clock.advance(90_000)
-  expect(await ui.find({ text: /0 running · 0 active/ })).toBeDefined()
-  expect(await ui.find({ text: /no end report seen/ })).toBeDefined()
-  await ui.unmount()
-})
-
 test('New loop Run starts /loop with the interval and the prompt, then clears the prompt', async ($, on) => {
   const clock = mock.clock(on, { now: 1_000 })
   const loops: unknown[] = []

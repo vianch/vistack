@@ -59,7 +59,7 @@ export const finishTool = (list: readonly DeckTool[], id: string, endedAt: numbe
     one.id === id ? { ...one, ms: Math.max(0, endedAt - one.startedAt), status: isError ? 'error' : 'ok' } : one,
   )
 
-const field = (input: unknown, name: string): unknown =>
+export const field = (input: unknown, name: string): unknown =>
   typeof input === 'object' && input !== null ? (input as Record<string, unknown>)[name] : undefined
 
 const text = (input: unknown, name: string): string => {

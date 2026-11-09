@@ -19,7 +19,7 @@ from .schema import DecisionContext
 
 AGENTS_DIR = Path(__file__).resolve().parents[1] / "agents"
 
-# The closed ladder, least capable and cheapest first. Fable is the advisor's model and sits off
+# The closed ladder, least capable and cheapest first. The advisor is pinned, and Fable sits off
 # the ladder, as does any model an agent file names that is not listed here; such a role is
 # pinned. A frontmatter with no effort sits on the first rung of its model.
 RUNGS: tuple[tuple[str, str], ...] = (

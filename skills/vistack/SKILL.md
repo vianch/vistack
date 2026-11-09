@@ -212,7 +212,7 @@ column does not apply.
 | Verification | `qa-verifier`, `health-check` | sonnet · medium, haiku | QA evidence, adversarial audit |
 | Reporting | `report-writer` | sonnet · medium | renders one HTML page from state, ledger, diff, or a code map; never publishes |
 | Design and review | `design-runner`, `reviewer`, `pr-reviewer`, `mention-responder` | opus · high, `mention-responder` medium; Luna on Codex | `architect` candidates, `interrogate` findings, `review-pr` findings, `review-watch` replies |
-| Advisor | advisor tool, else `advisor` | Fable 5.1 | before a plan, when an error repeats, before done |
+| Advisor | advisor tool, else `advisor` | Opus 5.5 | before a plan, when an error repeats, before done |
 
 What crosses levels:
 

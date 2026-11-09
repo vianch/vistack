@@ -10,7 +10,7 @@ playbook, one role phase per slice, stopping at merge-ready.
 `vistack` is the identifier you install and invoke. **viStack** is what it is called in
 prose. Same thing. It runs on Claude Code, Codex, Grok Build, and OpenCode.
 
-**Version:** `0.32.1`
+**Version:** `0.32.3`
 
 **Contents:** [install](#install) · [usage](#usage) ·
 [QA evidence: screenshots and video](#qa-evidence-screenshots-and-video) ·
@@ -634,7 +634,7 @@ files are the source of truth, so they are not restated here.
 | [`qa-verifier`](agents/qa-verifier.md) | the QA contract: scenarios from the diff, screenshots, scenario videos, results table | `sonnet` | medium |
 | [`health-check`](agents/health-check.md) | adversarial audit of the diff against the acceptance criteria | `haiku` | — |
 | [`devops`](agents/devops.md) | CI failures a slice did not cause, pipelines, environments, dependency and project-health audits. Never edits product code | `opus` | `medium` |
-| [`advisor`](agents/advisor.md) | fallback reviewer when the advisor tool is off: plan, repeat, done | `fable` | `xhigh` |
+| [`advisor`](agents/advisor.md) | fallback reviewer when the advisor tool is off: plan, repeat, done | `opus` | `xhigh` |
 | [`design-runner`](agents/design-runner.md) | one independent `architect` candidate: usage first, then types and a rationale | `opus` | high |
 | [`reviewer`](agents/reviewer.md) | one independent `interrogate` reviewer, or the `architect` judge. Read-only | `opus` | high |
 | [`pr-reviewer`](agents/pr-reviewer.md) | one senior reviewer in the PR's stack for `review-pr`; drafts findings in the operator's voice, never posts, approves, or edits. Read-only | `opus` | high |
@@ -656,19 +656,19 @@ triage run on Opus at `medium`. Mechanical code goes to Sonnet at `high` and com
 to Opus at `xhigh`. Judgment and review roles run at `high`; procedural ones (PR authoring,
 QA, reports, mention replies, agent design) run at `medium`, so no role inherits the session's
 effort. The adversarial audit starts on Haiku and steps up on a retry or a contract or
-boundary change. Fable 5.1 advises at three checkpoints and
+boundary change. Opus 5.5 advises at three checkpoints and
 never writes code. You are the owner above the main session. The levels, what passes between
 them, and which agent owns each job are defined once, in the Agent tree of
 [`skills/vistack/SKILL.md`](skills/vistack/SKILL.md).
 
 ```text
-AGENT TREE · YOU OWN THE WORK · OPUS 5.5 DISPATCHES · FABLE 5.1 ON CALL
+AGENT TREE · YOU OWN THE WORK · OPUS 5.5 DISPATCHES · OPUS 5.5 ON CALL
 
                                  you · owner · human client
                                  ▼ requests, corrections, fence answers
                                  ▲ phase reports, fence questions, merges
                                               │
-Fable 5.1 · advisor · on call           Opus 5.5 · coordinator (main session) · xhigh
+Opus 5.5 · advisor · on call            Opus 5.5 · coordinator (main session) · xhigh
 reads the whole session                 plans + decides + delegates
   ◇ before a plan ───────────────────▶        │
                                               ▼

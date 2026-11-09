@@ -142,11 +142,15 @@ a ledger row did not happen.
 - Write every brief in two parts. The role's static header comes first and stays identical
   across dispatches of that role: the role, the pointer to
   `skills/vistack/principles/index.md`, forbidden actions, the stall and flattened-returns
-  stop rules below, and report shape. Slice fields come last: goal, writable files, files it
+  stop rules below, and report shape: every worker report ends with three labelled sections,
+  Facts (each with a `file:line` or command output), Decisions (what and why), and Open
+  questions. Slice fields come last: goal, writable files, files it
   may not touch, context as `file:line` pointers, acceptance checks with exact verification
   commands, and timebox. This order's reason is in
   `skills/guard-the-context-window/SKILL.md`. Run `skills/prompt-enhancer/SKILL.md` over the
-  slice fields.
+  slice fields. The coordinator reads those three sections before the next dispatch and
+  writes decisions to the ledger as it does today, because lanes that cannot see each other's
+  work repeat or contradict it.
 - A completion is a queue event. Drain it, update state, ledger, and session comment, then
   dispatch the next eligible unit without waiting for a human.
 - A lane that reaches its expected runtime without a commit, captured artifact, check delta,

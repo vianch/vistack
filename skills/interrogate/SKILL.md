@@ -72,6 +72,9 @@ it (`evidence-over-inference`). Sort each finding into one bucket:
 - Reviewer A: <host model>, <n> findings
 - Reviewer B: <host model>, <n> findings
 
+### Reviewed revision
+<head SHA the diff was taken at>
+
 ### Act on
 <finding — raised by — why it matters — the file:line>
 
@@ -88,6 +91,9 @@ it (`evidence-over-inference`). Sort each finding into one bucket:
 <where reviewers agreed, where they split, and what that says>
 ```
 
-Record one ledger row, `decision: interrogated`, with the verdict path as evidence. An
+The verdict is void once a new commit lands on the reviewed branch; re-run instead of
+reusing it, because the findings describe a diff that no longer exists.
+
+Record one ledger row, `decision: interrogated`, with the verdict path and the head SHA as evidence. An
 `Act on` item goes back to the owning slice with its evidence. The verdict never edits code,
 opens a PR, or posts a review; those stay with the owning role.

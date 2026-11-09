@@ -31,6 +31,15 @@ That request matches `overnight`. The run checks the predicate, makes one eviden
 change, verifies it, records one ledger row, and repeats. It stops at merge-ready drafts or
 one of the four fences.
 
+## Choosing the main session model
+
+The main session model is chosen when you launch Claude Code, for example
+`claude --model sonnet`; `--model` takes an alias such as `opus`, `sonnet`, or `fable`, or a
+full model name. The Agent tree defaults assume an Opus main session and describe what the
+coordinator should delegate. A Sonnet main session changes cost, not the delegation rules,
+and nothing in agent frontmatter needs editing. Advisor selection is a separate launch
+setting: `--advisor`, which `claude --help` does not list, or `advisorModel`
+(`skills/advisor/SKILL.md`, Setup).
 ## Sticky mode
 
 Once `/vistack` has run, the session is in viStack mode.

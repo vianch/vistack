@@ -7,8 +7,8 @@ description: "Consult the advisor at the three moments that change a run's outco
 
 The owning role writes the code; the main session plans, dispatches, and verifies; the
 advisor reviews. The levels live in `skills/vistack/SKILL.md` (Agent tree). Opus 5.5 runs
-the main session. Fable 5.1 reads the whole session and speaks at three checkpoints only. The advisor never edits a file. The main session acts on
-each point, through the owning role when it needs a write, or rebuts it with evidence.
+the main session. An Opus 5.5 advisor reads the whole session and speaks at three checkpoints
+only. The advisor never edits a file. The main session acts on each point, through the owning role when it needs a write, or rebuts it with evidence.
 
 ## The three checkpoints
 
@@ -37,7 +37,7 @@ what the advisor reads: the transcript is never rewritten.
    the enhanced request, with the original beside it. The advisor already reads the full
    transcript, every tool call included. Do not paste it.
 2. **Advisor tool off** — `CLAUDE_CODE_DISABLE_ADVISOR_TOOL`, a non-Anthropic provider, a
-   rejected pairing, or no Fable access. Dispatch the `advisor` agent with a dossier: the
+   rejected pairing. Dispatch the `advisor` agent with a dossier: the
    checkpoint, the finish predicate, the plan or the error with its attempt log, the diff
    summary, and the evidence paths. A `done` dossier also carries the run report path when
    one exists. Enhance the dossier and keep every evidence path in it. The agent sees only
@@ -66,8 +66,9 @@ write `decision: advisor-unavailable` with `result: skipped`.
 
 ## Setup
 
-Set `"advisorModel": "fable"` in `~/.claude/settings.json`, or run `/advisor fable`. Fable
-5.1 as advisor needs Claude Code v2.1.257 or later, the Anthropic API, and a supported main
-model; Opus 5.5 accepts Fable or Opus 5 and later. Subagents inherit the advisor and apply the
+Set `"advisorModel": "opus"` in `~/.claude/settings.json`, or run `/advisor opus`. The
+advisor needs the Anthropic API and a main model it ranks at or above; an Opus 5.5 main
+session accepts Fable or Opus 5 and later, so the Opus 5.5 advisor pairs with it. Every
+subagent here runs Haiku, Sonnet, or Opus 5.5, and each accepts an Opus 5.5 advisor. Subagents inherit the advisor and apply the
 same pairing check. `DISABLE_TELEMETRY`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`, and
 `DISABLE_ERROR_REPORTING` stop feature-flag fetching and keep the advisor off.

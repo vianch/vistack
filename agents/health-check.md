@@ -65,6 +65,8 @@ unattributed — say so rather than guessing.
 
 ## Outputs
 
+- One line: the reviewed head SHA, the revision the diff was read at. A new commit on the
+  branch voids the report; re-run instead of reusing it.
 - The criteria table: criterion | hunk | met/unmet.
 - The traceability table: scenario | hunk | traced/untraced, plus untested hunks.
 - The defect list, each with its owning slice and its evidence.

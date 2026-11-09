@@ -5,7 +5,7 @@ settles types and boundaries before implementation by having independent runners
 competing designs and synthesizing the best one. `interrogate` has independent reviewers try
 to break the result. `swarm` covers slices or races when the job is coverage, not synthesis.
 
-Runners and reviewers use the current host's model and nothing else: opus on Claude Code,
+Runners and reviewers run one pinned model per host, whatever the main session runs: opus on Claude Code,
 Luna (`gpt-6-luna`) on Codex. There is no per-reviewer model list to maintain.
 
 ## Settle the shape with `architect`
@@ -112,3 +112,22 @@ or the playbook ask for; neither replaces the other.
 | Invoke | `/vistack:architect`, `/vistack:interrogate` | `$vistack:architect`, `$vistack:interrogate` | ask for the skill by name |
 | Runners and reviewers | `design-runner` and `reviewer` agents on opus, dispatched in parallel | separate `codex exec --ephemeral -m gpt-6-luna` processes; reviewers in a read-only sandbox | the current model, one at a time in the thread |
 | Independence | fresh context per agent | fresh process per runner or reviewer | reduced — recorded in the ledger |
+
+## Patterns considered
+
+Outside multi-agent patterns, set against what viStack already does. A verdict of `keep`
+means the existing home covers it, `adapt` means it was folded in, `discard` means it adds
+nothing here.
+
+| Pattern | What viStack does | Verdict | Home |
+|---|---|---|---|
+| Chain of steps | Playbooks name the steps; the coordinator runs them | keep | `skills/vistack/playbooks/`, `skills/coordinate/SKILL.md` |
+| Supervisor: check each worker result, send failures back with a reason | `defect-routed` and `tier-mismatch` rows, plus the health check | keep | `skills/coordinate/SKILL.md` |
+| Debate: two opposed advocates and a judge, for launch-or-wait decisions | Not present. `architect` runs independent candidates from the same brief and synthesizes them, which is not adversarial. Noted gap; adopt only if the operator asks | keep as is | `skills/architect/SKILL.md` |
+| Shared memory of facts, decisions, open questions | Ledger and state file, plus the Facts, Decisions, and Open questions sections every worker report ends with | adapt | `skills/coordinate/SKILL.md`, `skills/coordinate/references/state-file.md` |
+| Chief, Lead, Builder, Reviewer roles | Coordinator, planner, implementer, reviewer and health check | discard | `skills/vistack/SKILL.md` (Agent tree) |
+| Delegation template: task, owner, context, done means, risks, next check-in | The slice fields of the brief rule | discard | `skills/coordinate/SKILL.md` (Dispatch rules) |
+| Prompt review loop: draft, restate, clarify, constrain, test, revise | `prompt-enhancer` restates, `interrogate` reviews, `prove-it-works` tests, `correct` revises. Examples only for open sets | keep | `skills/prompt-enhancer/SKILL.md`, `skills/correct/SKILL.md` |
+| A pasted placeholder-only workflow-adaptation XML prompt | Sends nothing anywhere, repeats the playbooks, `evidence-over-inference`, and the ledger, and names commands (`/create-verification-skill`, `/maintain-verification-skill`) that do not exist here | discard | `skills/vistack/principles/index.md` |
+| Verification skill: launch, doctor, drive, evidence, cleanup | `qa-verify` and the `qa-video` doctor. No local-process launch exists, so no cleanup rule is added | keep | `skills/qa-verify/SKILL.md`, `skills/qa-video/SKILL.md` |
+| Cheap main model, a swarm of small workers, a strong advisor | Not adopted by default. The Agent tree, agent frontmatter, and `laya/model_selection.py` are one design; a different main model is a launch choice, see `usage.md` | discard | `skills/vistack/SKILL.md` (Agent tree), `docs/guide/usage.md` |

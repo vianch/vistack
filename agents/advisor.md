@@ -1,7 +1,7 @@
 ---
 name: advisor
 description: Fallback advisor when the server-side advisor tool is off: reviews one checkpoint dossier (a plan, a repeating error, a run about to be called done) and returns evidence-tied guidance. Read-only; never decides.
-model: fable
+model: opus
 effort: xhigh
 tools: Read, Glob, Grep, Bash
 ---

@@ -469,8 +469,8 @@ from is a reference to a run, not an overnight handoff.
 Each agent file's `model` and `effort` are the role's default; `laya/model_selection.py` reads
 them from the plugin's own `agents/`, never the working directory. A dispatch moves along a
 closed ladder, least capable first: haiku·medium, sonnet·medium, sonnet·high, opus·medium,
-opus·high, opus·xhigh. A frontmatter with no effort sits on its model's first rung. Fable is
-the advisor's and is off the ladder.
+opus·high, opus·xhigh. A frontmatter with no effort sits on its model's first rung. The
+advisor runs Opus and is pinned, so it never moves.
 
 | Role | Moves |
 |---|---|

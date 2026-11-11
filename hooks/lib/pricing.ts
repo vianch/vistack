@@ -4,6 +4,7 @@
 type Rate = { input: number; output: number; cacheRead: number; cacheWrite: number }
 
 const RATES: readonly (readonly [RegExp, Rate])[] = [
+  [/fable-5-2|mythos-5-2/, { input: 8, output: 40, cacheRead: 0.2, cacheWrite: 10 }],
   [/fable-5-1|mythos-5-1/, { input: 10, output: 50, cacheRead: 0.25, cacheWrite: 12.5 }],
   [/fable-5|mythos-5/, { input: 10, output: 50, cacheRead: 1, cacheWrite: 12.5 }],
   [/opus-5-5/, { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 }],
@@ -14,7 +15,7 @@ const RATES: readonly (readonly [RegExp, Rate])[] = [
 ]
 
 const ALIASES: Readonly<Record<string, string>> = {
-  fable: 'claude-fable-5-1',
+  fable: 'claude-fable-5-2',
   haiku: 'claude-haiku-4-5',
   opus: 'claude-opus-5-5',
   sonnet: 'claude-sonnet-5-5',

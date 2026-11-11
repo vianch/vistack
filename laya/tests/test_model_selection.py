@@ -1,9 +1,22 @@
 from __future__ import annotations
 
+import itertools
 import unittest
 
 from laya.engine import DecisionEngine
-from laya.model_selection import PINNED_ROLES, RUNGS, rung_of, roster
+from laya.model_selection import PINNED_ROLES, RUNGS, SeatLeak, resolved, rung_of, roster
+from laya.seat_model import SEAT_ROLES, is_fable
+
+MAX_UP = {
+    "retries": 9,
+    "changes_data_shape": True,
+    "changes_public_contract": True,
+    "crosses_boundary": True,
+    "estimated_changed_lines": 400,
+    "writable_files": [f"src/file{index}.ts" for index in range(20)],
+    "acceptance_criteria": [f"criterion {index}" for index in range(10)],
+}
+MAX_DOWN = {"estimated_changed_lines": 10, "pattern": "lib/date.test.ts:3"}
 
 
 def fake_model(answers):
@@ -107,6 +120,48 @@ class ModelSelectionTests(unittest.TestCase):
         result = decide(model_context("general-purpose", "Sweep the repo", model="sonnet", effort="high", estimated_changed_lines=500))
         self.assertEqual(picked(result), ("opus", "medium"))
         self.assertEqual(picked(decide(model_context("general-purpose", "Sweep the repo"))), (None, None))
+
+
+class NoFableLeakTests(unittest.TestCase):
+    SWEEP = (
+        ("Map the order serializer callers", {}),
+        ("Migrate the auth token refresh across services", MAX_UP),
+        ("Rename one constant", MAX_DOWN),
+    )
+
+    def test_no_agent_frontmatter_names_fable_and_every_agent_pins_a_model(self):
+        for role, (model, _) in roster().items():
+            self.assertIsNotNone(model, role)
+            self.assertFalse(is_fable(model), role)
+
+    def test_no_roster_role_resolves_to_fable_under_any_signal(self):
+        for role, ((request, signals), host) in itertools.product(roster(), itertools.product(self.SWEEP, (None, "codex"))):
+            task = {key: value for key, value in signals.items() if key != "retries"}
+            context = model_context(role, request, retries=signals.get("retries", 0), **task)
+            if host:
+                context["constraints"] = {"host": host}
+            outputs = decide(context).outputs
+            for action in ("keep", "step-up", "step-down"):
+                self.assertFalse(is_fable(resolved(outputs, action)["dispatch_model"]), (role, request, host, action))
+
+    def test_a_built_in_naming_fable_is_rebased_to_the_top_rung_and_flagged(self):
+        for model in ("fable", "claude-fable-5-2"):
+            for role in ("general-purpose", ""):
+                with self.subTest(model=model, role=role):
+                    result = decide(model_context(role, "Sweep the repo", model=model, effort="high"))
+                    self.assertEqual(picked(result), RUNGS[-1])
+                    self.assertEqual((result.outputs["changed"], result.outputs["rebased_from"]), (True, model))
+
+    def test_a_model_step_cannot_put_a_rebased_built_in_on_fable(self):
+        result = refined(model_context("general-purpose", "Look up the rename API", model="fable"), "step-down", confidence=0.99)
+        self.assertFalse(is_fable(result.outputs["dispatch_model"]))
+
+    def test_resolving_fable_for_a_non_seat_role_is_a_bug_not_a_decision(self):
+        base = {"role": "general-purpose", "default_model": "fable", "default_effort": None, "rung": None, "band_low": 0, "band_high": 5}
+        with self.assertRaises(SeatLeak):
+            resolved(base, "keep")
+        for role in SEAT_ROLES:
+            self.assertEqual(resolved({**base, "role": role}, "keep")["dispatch_model"], "fable")
 
 
 class ModelSelectionRefinementTests(unittest.TestCase):

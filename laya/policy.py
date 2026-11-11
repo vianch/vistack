@@ -733,6 +733,11 @@ def evaluate(context: DecisionContext) -> PolicyDraft:
 
         return select_model(context)
 
+    if decision_type == "seat-model":
+        from .seat_model import select_seat
+
+        return select_seat(context)
+
     if decision_type == "dispatch-readiness":
         criteria = _acceptance_criteria(context)
         dependencies = _items(context.task.get("dependencies"))

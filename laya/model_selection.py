@@ -15,13 +15,15 @@ from typing import Any, Mapping
 
 from .policy import TIER_FLAGS, PolicyDraft, _COMPLEX_WORK, _MECHANICAL_WORK, _acceptance_criteria, _common, _int, _items, _request
 from .schema import DecisionContext
+from .seat_model import SEAT_ROLES, is_fable
 
 
 AGENTS_DIR = Path(__file__).resolve().parents[1] / "agents"
 
 # The closed ladder, least capable and cheapest first. The advisor is pinned, and Fable sits off
-# the ladder, as does any model an agent file names that is not listed here; such a role is
-# pinned. A frontmatter with no effort sits on the first rung of its model.
+# the ladder: a role outside the seats that names it is rebased to FABLE_REBASE. Any other model
+# an agent file names that is not listed here pins the role. A frontmatter with no effort sits on
+# the first rung of its model.
 RUNGS: tuple[tuple[str, str], ...] = (
     ("haiku", "medium"),
     ("sonnet", "medium"),
@@ -30,6 +32,7 @@ RUNGS: tuple[tuple[str, str], ...] = (
     ("opus", "high"),
     ("opus", "xhigh"),
 )
+FABLE_REBASE = RUNGS[-1]
 # A role whose model is part of its contract never moves: the advisor and the coordinator are
 # fixed seats, design runners and reviewers are compared on one model (docs/guide/design.md),
 # and the complex tier is the top rung by definition.
@@ -46,6 +49,10 @@ MANY_CRITERIA = 8
 # documentation lookup down at 0.72, and a wrong step-down costs a retry that outspends the saving.
 STEP_DOWN_FLOOR = 0.85
 _FRONTMATTER = re.compile(r"\A---\n(.*?)\n---", re.S)
+
+
+class SeatLeak(AssertionError):
+    pass
 
 
 @lru_cache(maxsize=1)
@@ -95,7 +102,9 @@ def resolved(base: Mapping[str, Any], action: str) -> dict[str, Any]:
         model, effort = base.get("default_model"), base.get("default_effort")
     else:
         model, effort = RUNGS[target]
-    return {**base, "dispatch_model": model, "dispatch_effort": effort, "changed": target != rung}
+    if base.get("role") not in SEAT_ROLES and is_fable(model):
+        raise SeatLeak(f"{base.get('role') or 'a role'} outside the seats resolved to {model}")
+    return {**base, "dispatch_model": model, "dispatch_effort": effort, "changed": target != rung or "rebased_from" in base}
 
 
 def _baseline(context: DecisionContext) -> dict[str, Any]:
@@ -104,6 +113,9 @@ def _baseline(context: DecisionContext) -> dict[str, Any]:
     if model is None:
         # A role with no agent file, such as a host's built-in type, names its own default.
         model, effort = context.task.get("model") or None, context.task.get("effort") or None
+    rebased = {"rebased_from": model} if role not in SEAT_ROLES and is_fable(model) else {}
+    if rebased:
+        model, effort = FABLE_REBASE
     rung = None if role in PINNED_ROLES else rung_of(model, effort)
     band = [index for index, (name, _) in enumerate(RUNGS) if role not in TIER_LOCKED_ROLES or name == model] or [0]
     return {
@@ -115,6 +127,7 @@ def _baseline(context: DecisionContext) -> dict[str, Any]:
         "band_low": band[0],
         "band_high": band[-1],
         "retries": _int(context.current_state.get("retries")) or 0,
+        **rebased,
     }
 
 

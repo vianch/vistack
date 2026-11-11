@@ -82,6 +82,7 @@ import { modelLabel } from './lib/pricing'
 import { effectiveRealm, isInRealm, normalizeRemote, realmParts } from './lib/realm'
 import { relaunchPlan, withLoopArgs } from './lib/relaunch'
 import { carryWatch, isWatchLoop, parseWatchState, planWatch, watchLoopArgs } from './lib/review-watch'
+import { guardSpawn } from './lib/seat-guard'
 import { createdTask, recordSkill, withTask } from './lib/session-lists'
 import { DEFAULT_SETTINGS, iconsOf, paletteOf, readSettings } from './lib/theme'
 import { historyTallyOf } from './lib/type-overview'
@@ -2521,7 +2522,7 @@ export const register: Register = (on, options) => {
     const call = !isOwn && mayApply(config.jevMode, e.subagentType, e.model) ? await forkCall($) : null
     const asked = call === null ? null : await decide($, call.argv, request, 'agent-spawn')
     const choice = asked === null || asked.decision === null ? undefined : rosterModel(roster, asked.decision)
-    const started = await next(choice === undefined ? e : { ...e, model: choice })
+    const started = await next(guardSpawn(choice === undefined ? e : { ...e, model: choice }, await $.session.model().catch(() => '')))
 
     if (started.deny !== undefined || started.agentId === undefined) {
       return started

@@ -487,6 +487,14 @@ class DecisionEngine:
             outputs.update(model_outputs(baseline.outputs, selected))
             confidence_parts = [_confidence(answer)]
             probabilities = _probabilities(answer)
+        elif decision_type == "seat-model":
+            answer = _answer(result, "seat")
+            selected = _choice(answer)
+            if selected not in ACTIONS_BY_TYPE[decision_type]:
+                return None, "invalid typed seat-model answer"
+            outputs.update({"model_seat": selected})
+            confidence_parts = [_confidence(answer)]
+            probabilities = _probabilities(answer)
         elif decision_type == "dispatch-readiness":
             answer = _answer(result, "readiness")
             selected = _choice(answer)
@@ -602,6 +610,8 @@ class DecisionEngine:
             rejected = model_gate(baseline, model_draft)
             if rejected:
                 return False, rejected
+        if context.decision_type == "seat-model" and model_draft.action != baseline.action:
+            return False, "deterministic seat gate: only named signals move the coordinator and advisor seats"
         if context.decision_type == "skill-improvement" and model_draft.action == "propose-change" and baseline.action != "propose-change":
             return False, "deterministic history gate requires repeated evidence before proposing a change"
         if context.decision_type in OPEN_ACTION_TYPES:

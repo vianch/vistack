@@ -18,6 +18,7 @@ const DECISION_TYPES = [
   "skill-improvement",
   "tool-selection",
   "file-selection",
+  "seat-model",
 ]
 
 function runPython(directory, arguments_, input, timeoutMs = 3000) {

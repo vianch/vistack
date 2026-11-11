@@ -28,6 +28,7 @@ export const TYPE_LABELS: readonly (readonly [string, string])[] = [
   ['skill-improvement', 'skill'],
   ['tool-selection', 'tool'],
   ['file-selection', 'file'],
+  ['seat-model', 'seat'],
 ]
 
 const LABELS: ReadonlyMap<string, string> = new Map(TYPE_LABELS)

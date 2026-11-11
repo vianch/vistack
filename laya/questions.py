@@ -166,6 +166,17 @@ def questions_for(context: DecisionContext) -> dict[str, dict[str, Any]]:
         from .model_selection import question
 
         return {"rung": question(context)}
+    if decision_type == "seat-model":
+        return {
+            "seat": _choice(
+                "Which seat state should the coordinator and advisor run?",
+                {
+                    "opus": "Opus runs the main session and the advisor: routine work",
+                    "fable-advisor": "an Opus main session with a Fable advisor: tough work that needs a stronger reviewer",
+                    "fable": "Fable runs the main session and the advisor: tough work that keeps failing",
+                },
+            ),
+        }
     if decision_type == "dispatch-readiness":
         return {
             "readiness": _choice(

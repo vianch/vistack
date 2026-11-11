@@ -33,6 +33,7 @@ const ASKED: ReadonlyMap<string, readonly [AskedBy, string]> = new Map([
   ['skill-improvement', ['coordinator', 'after a correction-recorded row']],
   ['tool-selection', ['coordinator', 'at a step inside a slice with candidate tools']],
   ['file-selection', ['coordinator', 'at a step inside a slice with candidate files']],
+  ['seat-model', ['coordinator', 'at run start, at the plan, repeat and retry checkpoints, and at run end']],
 ])
 
 const UNLISTED: readonly [AskedBy, string] = ['coordinator', 'at a boundary in skills/laya-decision/SKILL.md']

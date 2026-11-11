@@ -24,6 +24,7 @@ DECISION_TYPES = (
     "skill-improvement",
     "tool-selection",
     "file-selection",
+    "seat-model",
 )
 
 # These forks choose among options the caller supplies in ``available_actions``: the tools a
@@ -96,6 +97,7 @@ ACTIONS_BY_TYPE = {
     "skill-improvement": ("no-change", "collect-evidence", "propose-change"),
     "tool-selection": (),
     "file-selection": (),
+    "seat-model": ("opus", "fable-advisor", "fable"),
 }
 
 TIER_ROLES = {"mechanical": "implementer", "complex": "senior-implementer"}

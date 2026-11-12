@@ -73,7 +73,7 @@ object.
 | Field | Meaning |
 |---|---|
 | `interval` | The wake cadence: `self-paced`, or the fixed interval such as `10m` when self-pacing is unavailable. |
-| `mechanism` | What runs the monitor: the `/loop` command, the host's recurring task, or the `watch-pr.py` command on a host with no recurring monitor. |
+| `mechanism` | What runs the monitor: the `/loop` command, the host's recurring task, the `watch-pr.py` command on a host with no recurring monitor, or `headless-session` for a headless scheduled run, where the session is its own monitor. |
 | `owner` | The session id of the coordinator holding the monitor. Pickup reclaims it by writing its own. |
 | `status` | `active` while the monitor runs, `stopped` after the terminal pass or a pause. A persisted `active` is a claim that Startup invariant in `skills/coordinate/SKILL.md` verifies. |
 | `last_pass_at` | ISO-8601 UTC time of the last monitor pass, clean passes included. |

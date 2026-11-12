@@ -51,7 +51,7 @@ A `tier-selection` fork whose request is not an implementation slice never reach
 ladder, not even under `--consult always`. The policy sets `outputs.slice_like`, a boolean:
 `true` when it sees a tier signal (complex or mechanical terms, a flag, a named pattern, or a
 reported mismatch) or the request's leading task class is implementation work (`bug-fix`,
-`design-implementation`, `feature`, `perf-issue`, `prototype`, `refactor`). When it is
+`crash-hunt`, `design-implementation`, `feature`, `maintenance`, `perf-issue`, `prototype`, `refactor`). When it is
 `false` (a question, a hand-back, chat), the policy answers `complex` at 0.60 as a split fork,
 its rationale says the request is not an implementation slice, and no model is asked:
 no model can say which implementer owns work that is not there, and hosted Jev's confidence

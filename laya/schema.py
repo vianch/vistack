@@ -40,6 +40,8 @@ PLAYBOOKS = (
     "refactor",
     "design-implementation",
     "perf-issue",
+    "maintenance",
+    "crash-hunt",
     "prototype",
     "blocker",
     "pr-stack",

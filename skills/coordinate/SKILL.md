@@ -43,6 +43,9 @@ On Claude Code the monitor is the self-paced `/loop /vistack babysit <slug>`, ea
 setting its next wake from the table; `/loop 10m /vistack babysit <slug>` is the fallback
 when self-pacing is unavailable.
 
+A headless scheduled run has no `/loop`: the session is its own monitor, waits on each lane's
+completion event, and records `monitor.mechanism` as `headless-session`.
+
 Every pass reads PR state with `scripts/watch-pr.py --status-only`. One long-running
 `python3 scripts/watch-pr.py --pr <n,…> --interval <s> --timeout <s>`, `--interval` at the
 poll rate, is the loop's external-state wake; on a host with none it is the monitor itself,
@@ -100,9 +103,12 @@ a ledger row did not happen.
 - Every write goes to the role that owns it, including a playbook step that names no owner:
   code, tests, and contract files to the slice's tier owner, a blocker fix to `unblocker`,
   an agent file to `agent-designer`, a page to `report-writer`, PR text to `pr-author`, and
-  QA evidence to a `qa-verifier` lane. The coordinator writes only the state file, the
-  ledger, the session record, and a lane's `otp.txt`. On Codex the thread adopts the role
-  instead, under the router's Host adapter.
+  QA evidence to a `qa-verifier` lane, crash evidence, the known list, and proof replays to
+  `crash-hunter`. The coordinator writes only the state file, the
+  ledger, the session record, a lane's `otp.txt`, and
+  `<state-root>/maintenance/dropped.jsonl` (the `maintenance` playbook appends a dropped
+  topic there at its step 8). On Codex the thread adopts the role instead, under the
+  router's Host adapter.
 - Dispatch each slice to its tier's owner: mechanical work (repetitive edits, basic
   utilities, unit tests, a change that follows a named pattern) to `implementer`, complex
   work (a changed data shape or public contract, a boundary crossing, concurrency, auth,

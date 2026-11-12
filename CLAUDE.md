@@ -83,6 +83,8 @@ constraints:
 - `.claude/state/<slug>.json`, consuming repo: resume point, `skills/coordinate/references/state-file.md`.
 - `.claude/state/<slug>.tsv`, consuming repo: ledger, `docs/guide/ledger-format.md`.
 - `~/.vistack/review-watch/state.json`: review watch, `skills/review-watch/references/data.md`.
+- `<state-root>/maintenance/dropped.jsonl`: topics dropped by a maintenance run, `skills/vistack/playbooks/maintenance.md`.
+- `<state-root>/crash-hunt/known.jsonl` and per-run `<state-root>/crash-hunt/<run-id>/boot.json`: crash signatures and the boot record, `skills/crash-hunt/references/crash.md`, `skills/crash-hunt/SKILL.md`.
 
 The state file records intent, the ledger records what happened; after a crash they disagree
 and `session-pickup` reconciles them.

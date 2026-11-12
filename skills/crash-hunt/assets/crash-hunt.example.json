@@ -1,0 +1,30 @@
+{
+  "baseUrl": "http://127.0.0.1:8080",
+  "healthPath": "/health",
+  "boot": {
+    "command": "<command that starts the app in the foreground with its local profile>",
+    "cwd": ".",
+    "env": { "<PROFILE_VARIABLE>": "<local profile name>" },
+    "readySeconds": 180
+  },
+  "database": {
+    "up": "<command that creates, migrates, and seeds the disposable local database>",
+    "reset": "<command that returns that database to its seeded state>",
+    "down": "<command that drops that database>",
+    "datasource": "<command that prints the datasource the active profile resolves>"
+  },
+  "egress": {
+    "hostsCommand": "<command that prints every outbound host the active profile resolves, one per line>"
+  },
+  "appLog": "<file the app logs to, relative to the worktree root>",
+  "routes": {
+    "source": "openapi",
+    "path": "<local OpenAPI document, relative to the worktree root>"
+  },
+  "auth": {
+    "headerCommand": "<command that prints one Name: value header for a seeded local user>"
+  },
+  "rules": [".claude/rules/<rule read before every edit>.md"],
+  "budget": { "requests": 2000, "minutes": 20, "seed": null },
+  "errorContract": "<file and section where the repository documents its 4xx error shape>"
+}

@@ -10,7 +10,7 @@ playbook, one role phase per slice, stopping at merge-ready.
 `vistack` is the identifier you install and invoke. **viStack** is what it is called in
 prose. Same thing. It runs on Claude Code, Codex, Grok Build, and OpenCode.
 
-**Version:** `0.32.3`
+**Version:** `0.34.1`
 
 **Contents:** [install](#install) · [usage](#usage) ·
 [QA evidence: screenshots and video](#qa-evidence-screenshots-and-video) ·
@@ -185,6 +185,19 @@ Matches `overnight`. It records the permissions, escape hatch, host wake mechani
 decision trail before dispatch. Each iteration makes one evidence-backed change, checks the
 real artifact, and records whether the predicate moved. It stops at merge-ready drafts or a
 fence.
+
+### Nightly routines
+
+```
+Install the nightly crash-hunt and maintenance routines for ~/dev/my-app on Claude Code.
+```
+
+`crash-hunt` runs at 01:30 every night and `maintenance` at 06:00 on weekdays, each as one
+headless run in that repository, ending in at most one draft PR and a run report. Nothing is
+merged. Nothing is installed until you ask for a named repository. The install checks that the
+repository's Claude Code settings allow the commands the run needs, because a scheduled run
+cannot answer a permission prompt. See
+[`docs/guide/overnight.md`](docs/guide/overnight.md#nightly-routines).
 
 For a queue of independent items, say `full autopilot` and name each item and its finish
 check. That matches `autopilot-full`, which runs one owner per item and leaves every PR as a
@@ -605,6 +618,8 @@ files are the source of truth, so they are not restated here.
 | [`autopilot-full`](skills/vistack/playbooks/autopilot-full.md) | independent PR queue, one owner per item, all to merge-ready drafts |
 | [`overnight`](skills/vistack/playbooks/overnight.md) | one task or bounded queue while the user is away |
 | [`perf-issue`](skills/vistack/playbooks/perf-issue.md) | one measured performance fix |
+| [`maintenance`](skills/vistack/playbooks/maintenance.md) | one change, none named: the agent picks the one most likely to prevent a production incident and lands it as one draft PR |
+| [`crash-hunt`](skills/vistack/playbooks/crash-hunt.md) | fuzz the real app on loopback until it crashes, prove each crash by replay, and fix one new crash as one draft PR |
 | [`prototype`](skills/vistack/playbooks/prototype.md) | a throwaway experiment that settles a design or behavior question |
 | [`multi-phase-plan`](skills/vistack/playbooks/multi-phase-plan.md) | large or cross-cutting work that needs a durable execution plan |
 | [`authoring-skill`](skills/vistack/playbooks/authoring-skill.md) | creating or modifying a workflow contract |
@@ -631,6 +646,7 @@ files are the source of truth, so they are not restated here.
 | [`design-implementer`](agents/design-implementer.md) | the same, sourced from Figma; reports deviations instead of inventing values | `sonnet` | high |
 | [`unblocker`](agents/unblocker.md) | the bounded blocker loop and its escalation dossier | `opus` | high |
 | [`pr-author`](agents/pr-author.md) | draft PRs, the stacked chain over 500 lines, reviewer assignment | `opus` | medium |
+| [`crash-hunter`](agents/crash-hunter.md) | boots the app on loopback against a disposable database, fuzzes it, and proves crashes and fixes by replay. Never fixes code | `sonnet` | high |
 | [`qa-verifier`](agents/qa-verifier.md) | the QA contract: scenarios from the diff, screenshots, scenario videos, results table | `sonnet` | medium |
 | [`health-check`](agents/health-check.md) | adversarial audit of the diff against the acceptance criteria | `haiku` | — |
 | [`devops`](agents/devops.md) | CI failures a slice did not cause, pipelines, environments, dependency and project-health audits. Never edits product code | `opus` | `medium` |
@@ -710,6 +726,8 @@ invokes a principle must name the decision the principle changed.
 [`architect`](skills/architect/SKILL.md) (design before code) ·
 [`interrogate`](skills/interrogate/SKILL.md) (adversarial multi-reviewer pass) ·
 [`review-pr`](skills/review-pr/SKILL.md) (one review on another author's PR: posted as comments, left pending for you, or returned as feedback, with one-click suggestions; never approves) ·
+[`maintenance`](skills/maintenance/SKILL.md) (one change picked by production-incident risk, as one draft PR) ·
+[`crash-hunt`](skills/crash-hunt/SKILL.md) (fuzz the real app on loopback until it crashes, prove each crash by replay) ·
 [`understanding`](skills/understanding/SKILL.md) (how, why, teach, and recall answers in the thread, with a cross-host transcript search) ·
 [`pruning-comments`](skills/pruning-comments/SKILL.md) (the comment policy and the pass that applies it to a diff) ·
 [`handoff`](skills/handoff/SKILL.md) (write or pick up a handoff document any host can resume) ·

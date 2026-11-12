@@ -36,6 +36,7 @@ Free text is allowed, but these carry meaning elsewhere in the plugin:
 | `prompt-enhanced` | `coordinator` | `skills/prompt-enhancer/SKILL.md` rewrote the request or a brief; `reason` says what changed and what is missing, `evidence` where the original and enhanced text are kept |
 | `step-skipped` | any | a playbook step stayed in the list and was not run — `reason` is required |
 | `sliced` | `planner` | the slice list exists |
+| `candidate-ranked` | `analyst`, through the `coordinator` | one row per ranked candidate of a `maintenance` or `crash-hunt` pick; `result` is `ok` for the pick and `skipped` for the rest, `reason` is the score or the exclusion, `evidence` is the `file:line` |
 | `matrix-built` | `planner` | the conflict matrix exists; dispatch may begin |
 | `dispatched` | `coordinator` | an agent is running on a slice; on Codex, the thread adopted the role, and `reason` names the role and tier, plus the model, effort, and `model-selection` decision id when the dispatch left its frontmatter default. A QA lane's `reason` reads `qa lane, background, head <sha7>` and its `evidence` is the lane's evidence directory |
 | `qa-superseded` | `coordinator` | a newer PR head cancelled a running QA lane; `evidence` is the new head SHA |

@@ -46,6 +46,43 @@ class LabelledScenarioTests(unittest.TestCase):
                 misses.append(f"{scenario['id']}: {result.action} != {scenario['human_action']}")
         self.assertEqual(misses, [])
 
+    def test_requests_route_by_whether_they_name_their_change(self):
+        engine = DecisionEngine(backend="deterministic")
+        labelled = {
+            "maintenance": (
+                "Do one high-value maintenance change and pick it by risk",
+                "Pay down some tech debt tonight, pick the riskiest thing",
+                "Find the highest-risk code path and harden it",
+                "Nightly maintenance pass on this repository",
+            ),
+            "crash-hunt": (
+                "Fuzz the local API with malformed requests",
+                "Send random requests to the app until it crashes",
+                "Run a crash hunt against the local server",
+            ),
+            "refactor": (
+                "Refactor the order adapter into smaller functions",
+                "Rename the constant MAX_RETRIES to RetryLimit",
+                "Update the variable names in the billing module",
+                "Extract the price formatting into a helper",
+            ),
+            "bug-fix": (
+                "Fix this crash in the checkout endpoint",
+                "The app crashes when the cart is empty",
+                "The scheduled export fails during the maintenance window",
+            ),
+        }
+        for expected, requests in labelled.items():
+            for request in requests:
+                result = engine.decide({"decision_type": "playbook-selection", "task": {"request": request}})
+                self.assertEqual(result.action, expected, request)
+
+    def test_a_value_change_to_a_constant_is_not_a_refactor(self):
+        result = DecisionEngine(backend="deterministic").decide(
+            {"decision_type": "playbook-selection", "task": {"request": "Change the page size constant to 50"}}
+        )
+        self.assertNotEqual(result.action, "refactor")
+
     def test_page_requests_route_to_html_report_with_a_sharp_fork(self):
         engine = DecisionEngine(backend="deterministic")
         checked = 0

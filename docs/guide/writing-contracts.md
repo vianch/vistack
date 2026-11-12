@@ -25,6 +25,8 @@ home and check that the pointers still describe it.
 | Topic | Home |
 |---|---|
 | The four fences | `skills/autonomy-has-fences/SKILL.md` |
+| Ranking a maintenance or crash candidate by production-incident risk, and the trigger vocabulary for picked versus named changes | `skills/maintenance/references/risk-rubric.md`, `skills/maintenance/references/triggers.md` |
+| Crash kinds, signatures, validity, the loopback guard, the pre-boot gate, and the crash-hunt config | `skills/crash-hunt/SKILL.md`, `skills/crash-hunt/references/crash.md` |
 | Merge boundary, run report, script path resolution, Codex role adoption | `skills/vistack/SKILL.md` (Merge boundary, Final report, Host adapter) |
 | Hierarchy (owner → coordinator → workers), what crosses levels, job owners | `skills/vistack/SKILL.md` (Agent tree) |
 | Delegation (the main session runs no work an owning role owns), the tier rule, and QA lanes | `skills/coordinate/SKILL.md` (Dispatch rules, QA lanes) |

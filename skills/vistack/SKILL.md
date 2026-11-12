@@ -65,6 +65,8 @@ decides, and a failed call changes nothing.
 | `refactor` | Structure must change while observable behavior stays the same. |
 | `design-implementation` | Figma is the source of truth. |
 | `perf-issue` | A measured performance problem needs one evidence-backed fix. |
+| `maintenance` | The request asks for one change and names none, so the agent picks it by production-incident risk. |
+| `crash-hunt` | The real app should be sent random and malformed HTTP requests until it crashes, and one new crash fixed. |
 | `prototype` | A quick experiment can settle an empirical or design question. |
 | `blocker` | An open unit is stuck on one identified obstacle. |
 | `pr-stack` | A finished branch needs one PR or a parent-to-child chain. |
@@ -89,7 +91,11 @@ many days is `multi-phase-plan`; it must still state its size and finish predica
 explicit request for an HTML page, chart, diagram, or artifact matches `html-report`. A
 request to understand or explain something that needs a recommendation, several angles, or a
 report matches `investigation`, whose report step renders through `html-report`; one that
-needs only an answer in the thread runs `skills/understanding/SKILL.md` from Step 0.
+needs only an answer in the thread runs `skills/understanding/SKILL.md` from Step 0. A request
+that names its change matches `refactor`, `bug-fix`, or `feature`, and one that leaves the
+pick to the agent is `maintenance` (`skills/maintenance/references/triggers.md`). Fuzzing or
+sending malformed requests until something crashes is `crash-hunt`; a request to fix one
+named crash is `bug-fix`.
 
 ## Step 3. State the finish condition
 
@@ -209,6 +215,7 @@ column does not apply.
 | Worker, complex | `senior-implementer` | opus · xhigh | data shapes, contracts, boundaries, hot paths |
 | DevOps | `devops` | opus · medium | CI failures a slice did not cause, pipelines, environments, dependency and health audits |
 | Judgment roles | `groomer`, `planner`, `pr-author`, `unblocker` | opus · high; `pr-author` medium | tickets, slices, PRs, blockers |
+| Crash hunting | `crash-hunter` | sonnet · high | boots the consuming repository's app on loopback against a disposable database, fuzzes it, and proves crashes and fixes by replay |
 | Verification | `qa-verifier`, `health-check` | sonnet · medium, haiku | QA evidence, adversarial audit |
 | Reporting | `report-writer` | sonnet · medium | renders one HTML page from state, ledger, diff, or a code map; never publishes |
 | Design and review | `design-runner`, `reviewer`, `pr-reviewer`, `mention-responder` | opus · high, `mention-responder` medium; Luna on Codex | `architect` candidates, `interrogate` findings, `review-pr` findings, `review-watch` replies |
@@ -231,6 +238,7 @@ What crosses levels:
 | Addressing review comments | the slice's tier owner, through the project's `address-ai-reviews` |
 | Answering comments that tag the operator on another author's PR | `mention-responder`, through `skills/review-watch/SKILL.md` |
 | Feedback | the role that owns the mistaken work, with a `correction-recorded` row (Step 0); a repeat goes to `skills/correct/SKILL.md` |
+| Fuzzing a local app, and replaying a crash or a fix's proof | `crash-hunter` |
 | DevOps and project health | `devops`; `health-check` audits one diff, not the project |
 
 ## Fork layer

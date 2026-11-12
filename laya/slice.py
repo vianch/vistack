@@ -11,7 +11,7 @@ from typing import Any, Mapping, Sequence
 
 
 TIER_SIGNALS = ("complex_signals", "flags", "mechanical_signals", "pattern", "tier_mismatch")
-IMPLEMENTATION_CLASSES = frozenset({"bug-fix", "design-implementation", "feature", "perf-issue", "prototype", "refactor"})
+IMPLEMENTATION_CLASSES = frozenset({"bug-fix", "crash-hunt", "design-implementation", "feature", "maintenance", "perf-issue", "prototype", "refactor"})
 NOT_A_SLICE = (
     "The request names no tier signal and no implementation work, so it is not an implementation slice; "
     "an unclear tier is complex and no model is asked."

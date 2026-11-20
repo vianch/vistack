@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 
-import { headlineOf, nextFilter, typesOf } from '../hooks/lib/fork-types'
+import { TYPE_LABELS, headlineOf, nextFilter, typesOf } from '../hooks/lib/fork-types'
 import { HISTORY_ROWS, historyPicksOf, mergePicks } from '../hooks/lib/history'
 import { DEFAULT_LADDER, DEFAULT_ROSTER, decidedPick, decidingPick, isMatchPath, parseDecision, parseForkStatus } from '../hooks/lib/jev'
 
@@ -117,6 +117,10 @@ const HISTORY = [
   historyRow({ ...answer('grooming', 'ready', {}), decision_id: 'dec_grooming' }),
 ].join('\n')
 
+const ALL_TYPES = TYPE_LABELS.map(([type]) => type)
+
+const typeAfter = (type: string): string => ALL_TYPES[ALL_TYPES.indexOf(type) + 1] ?? ''
+
 const base = decidingPick({ at: 1, id: 'p', scope: 'main', subject: 's', trigger: 'cli' })
 
 describe('every decision type', () => {
@@ -166,11 +170,11 @@ describe('every decision type', () => {
     const picks = [{ ...base, decisionType: 'verification' }, base, { ...base, decisionType: 'zzz' }, base]
 
     expect(typesOf(picks)).toEqual([['tier-selection', 2], ['verification', 1], ['zzz', 1]])
-    expect(nextFilter('', picks)).toBe('intake-analysis')
-    expect(nextFilter('verification', picks)).toBe('skill-improvement')
-    expect(nextFilter('file-selection', picks)).toBe('zzz')
+    expect(nextFilter('', picks)).toBe(ALL_TYPES[0])
+    expect(nextFilter('verification', picks)).toBe(typeAfter('verification'))
+    expect(nextFilter(ALL_TYPES[ALL_TYPES.length - 1] ?? '', picks)).toBe('zzz')
     expect(nextFilter('zzz', picks)).toBe('')
-    expect(nextFilter('grooming', picks)).toBe('playbook-selection')
+    expect(nextFilter('grooming', picks)).toBe(typeAfter('grooming'))
     expect(isMatchPath([{ startedAt: 0, text: 'a', turnId: 't1' }], 't1', 'fix it')).toBe(true)
     expect(isMatchPath([{ startedAt: 0, text: 'a', turnId: 't1' }, { startedAt: 1, text: 'b', turnId: 't2' }], 't2', 'fix it')).toBe(false)
     expect(isMatchPath([{ startedAt: 0, text: 'a', turnId: 't1' }, { startedAt: 1, text: 'b', turnId: 't2' }], 't2', '  New task: port it')).toBe(true)
@@ -243,7 +247,7 @@ test('the Decisions tab draws every type from the history, filters by type with 
   expect(await ui.find({ text: /verify ▸ accept/ })).toBeUndefined()
   expect(await ui.find({ text: /complex ▸ Opus 5\.5 · \.90 · policy · sharp/ })).toBeDefined()
   expect(await ui.find({ text: /mechanical ▸/ })).toBeUndefined()
-  expect(await ui.find({ text: /^12 of 12 asked this session$/ })).toBeDefined()
+  expect(await ui.find({ text: new RegExp(`^${CASES.length} of ${ALL_TYPES.length} asked this session$`) })).toBeDefined()
   expect(await ui.find({ text: /^verification +1 +2 +\.90 +0% coord accept$/ })).toBeDefined()
   expect(await ui.find({ text: /^tier-selection +1 +2 +\.90 +0% deck +mechanical$/ })).toBeDefined()
   expect(await ui.find({ text: /^file-selection +1 +1 +\.50 +100% coord hooks\/lib\/jev\.ts$/ })).toBeDefined()

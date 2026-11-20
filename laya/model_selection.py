@@ -48,6 +48,7 @@ MANY_CRITERIA = 8
 # A model's step-down must clear this floor: on the labelled split forks hosted Jev stepped a
 # documentation lookup down at 0.72, and a wrong step-down costs a retry that outspends the saving.
 STEP_DOWN_FLOOR = 0.85
+SITUATIONS = {"pattern-copy": "step-down", "routine": "keep", "judgment": "step-up"}
 _FRONTMATTER = re.compile(r"\A---\n(.*?)\n---", re.S)
 
 
@@ -217,16 +218,29 @@ def select_model(context: DecisionContext) -> PolicyDraft:
     )
 
 
+def move_for(base: Mapping[str, Any], situation: str | None) -> str | None:
+    """The rung move a situation answer means for this role; a move its band forbids keeps."""
+
+    move = SITUATIONS.get(situation or "")
+    if move is None:
+        return None
+    return move if feasible(base, move) else "keep"
+
+
 def question(context: DecisionContext) -> dict[str, Any]:
-    base = select_model(context).outputs
-    role = base["role"] or "the role"
-    default = f"{base['default_model']} at {base['default_effort'] or 'default'} effort"
-    moves = {"keep": f"{role}'s default, {default}, fits this job"}
-    if feasible(base, "step-up"):
-        moves["step-up"] = "the job is riskier, larger, or has failed before: run one rung more capable"
-    if feasible(base, "step-down"):
-        moves["step-down"] = "the job is small, mechanical, and follows a named pattern: run one rung cheaper"
-    return {"type": "choice", "instructions": "Which model rung should run this dispatch?", "criteria": moves}
+    from .questions import _fields, _has
+
+    pattern = " or follows `task.pattern`" if _has(context, "task.pattern") else ""
+    return {
+        "type": "choice",
+        "instructions": f"What kind of job is the dispatch in {_fields(context, 'task.request', 'task.brief')} for the {_fields(context, 'task.role', 'task.request')} role?",
+        "criteria": {
+            "pattern-copy": f"the job copies an existing example: a rename, a repeated edit, a test, or a change that mirrors code already there{pattern}",
+            "routine": "the job is the everyday work this role is built for, with nothing in it that needs a new decision",
+            "judgment": "the job needs a design decision or careful reasoning: a data shape or contract, a boundary between modules or services, security, auth, money, concurrency, or behavior no example shows",
+            "ask": "the text says too little about the job to place it",
+        },
+    }
 
 
 def gate(baseline: PolicyDraft, answer: PolicyDraft) -> str | None:

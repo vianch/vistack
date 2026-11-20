@@ -47,15 +47,14 @@ overrode a confident deterministic answer the override was wrong (6 of 6), and d
 accuracy fell from 100% to 91%. `--consult always` still asks the ladder on sharp forks and
 records its answer in `outputs.model_opinion` for evaluation, without applying it.
 
-A `tier-selection` fork whose request is not an implementation slice never reaches the
-ladder, not even under `--consult always`. The policy sets `outputs.slice_like`, a boolean:
-`true` when it sees a tier signal (complex or mechanical terms, a flag, a named pattern, or a
-reported mismatch) or the request's leading task class is implementation work (`bug-fix`,
-`crash-hunt`, `design-implementation`, `feature`, `maintenance`, `perf-issue`, `prototype`, `refactor`). When it is
-`false` (a question, a hand-back, chat), the policy answers `complex` at 0.60 as a split fork,
-its rationale says the request is not an implementation slice, and no model is asked:
-no model can say which implementer owns work that is not there, and hosted Jev's confidence
-is flat on such text. The deck leads those rows with `not a slice`.
+A `tier-selection` request that is a hand-back (`<agent-message` or `<task-notification` at its
+start) or a brief that declares a read-only role (`hooks/lib/non-slice.ts` lists the roles)
+never reaches the ladder, not even under `--consult always`: no model can say which
+implementer owns work that is not there. The policy sets `outputs.slice_like` false and answers
+`complex` at 0.60 as a split fork. Every other request reaches the ladder, where the tier
+question offers `not-a-slice`; a tier that answers it at or above its floor sets
+`outputs.slice_like` false, keeps the fork split, and ends the climb. The deck leads those
+rows with `not a slice`.
 
 ## Protocol and model references
 
@@ -112,7 +111,8 @@ prove the key and remaining credits. That call is billed.
 probabilities, so a .73 and .27 split reads .46 (a live probe), while real slices read 1.0
 and .98. It is not the chance of being right, and it is not Ollama's entropy scale, below.
 The 0.65 floor stays: letting Jev override a sharp policy answer was wrong 6 of 6 times, so
-any floor change goes through the held-out hillclimb below, not an edit to the number.
+any floor change goes through the held-out hillclimb in `docs/guide/fork-questions.md`,
+not an edit to the number.
 
 The TypeSafe agent skill is not installed: both of its install paths clone from a GitHub
 organisation outside the allowed origin realm. This adapter follows the published API
@@ -201,7 +201,7 @@ rejected by a gate. Without them, Ollama leads. Sharp forks never reach it.
 ### Threshold
 
 `clef-flash` keeps an answer only at 0.85 confidence or higher; the other tiers use the
-global 0.65. Its raw answers on all 108 scenarios, before any gate:
+global 0.65. Its raw answers on 2026-10-05 over all 108 scenarios the set held then (163 rows now), before any gate:
 
 | Confidence at least | Answers | Wrong |
 |---|---|---|
@@ -258,14 +258,17 @@ The state sent to Ollama is capped at 6000 characters. The loaded model has its 
 window, 16,384 for `clef-flash` by default. When a prompt exceeds it, Ollama returns HTTP 400
 with `prompt 0 has N tokens; expected 1-M`, and the adapter retries once with a smaller
 state. A choice question with fewer than 2 options is dropped, because the API requires 2 to
-26.
+26. A question naming a field or output the capped state does not carry is not asked, and a
+state still over the cap is not sent.
 
 ### Confidence scale
 
 Ollama returns `confidence = 1 - H(p) / ln N`, the entropy concentration of the answer
 distribution. It is not calibrated correctness. For a two-option choice, p must be about
 0.93 to reach 0.65 and about 0.98 to reach 0.85. The scales differ across tiers, so do not
-retune `--min-confidence` globally from one tier's numbers.
+retune `--min-confidence` globally from one tier's numbers. A noul between 0.4 and 0.6 means
+the model cannot tell, and the fork stays split. A noul, confidence, probability, or score
+that is not a finite number is no answer.
 
 ### Configuration
 
@@ -433,27 +436,39 @@ and fallback metadata, and `fork`: `sharp` runs in code, `split` goes to the mai
   `; dissents: <action>`. A tier that was unavailable, malformed, or failed a gate appears in
   neither list. The action, confidence, and fork do not change: no held-out evidence shows
   that agreement under a floor is right more often than the policy alone.
-- `fallback_reason` carries why no tier settled the fork; `risks` holds only the policy's own
-  risks.
+- `outputs.declined` records a tier that answered its question's exit (`none`, `not-a-slice`,
+  `ask`, `unclear`, `no-change`) at or above its floor, with `backend`, `question`, `answer`,
+  and `confidence`. The fork stays split and no later tier is asked.
+- `outputs.model_situation` on `model-selection` is the situation the model named
+  (`pattern-copy`, `routine`, `judgment`); code maps it to step-down, keep, or step-up, and a
+  move the role's band forbids keeps the default.
+- `fallback_reason` carries why no tier settled the fork, or `not asked:` and why (a tier whose budget cannot carry the
+  questions reads `<tier> unavailable or rejected: not asked: ...`); `risks` holds only the
+  policy's own risks.
 
 ### Inputs the deterministic policy reads
 
-Routing scores word-boundary signals for each task class. The request, title, description,
-and summary carry full weight; acceptance criteria, briefs, and other task values carry about
-a third, so a criterion such as "no failures in the console" cannot reroute a feature. The
-playbook-selection decision reports `outputs.route_source`: `state` (blocked, paused, or at
-QA), `handoff` (an explicit overnight or autopilot request), `signals`, or `default`. A model
-may not change a `state` or `handoff` route or invent an unattended one.
+Routing scores word-boundary signals for each task class. The request, title, description, and
+summary carry full weight; acceptance criteria, briefs, other task values, and text the request
+quotes (double or curly quotes, backticks, or a fenced block) carry about a third, so a
+criterion such as "no failures in the console" or a pasted prompt cannot reroute a feature.
+When three or more classes score 1.0 or more, the request asks for several kinds of work and
+its route drops to 0.6, a split fork. The playbook-selection decision reports
+`outputs.route_source`: `state` (blocked, paused, or at QA), `handoff` (an explicit overnight
+request, autopilot named as the run mode, independent PRs or tickets, or "unattended" with acceptance criteria or a
+ticket reference), `signals`, or `default`. A model may not change a `state` or `handoff`
+route, invent an unattended one, or change the route of a request that names an irreversible
+action.
 
 | Decision type | Optional fields | Effect |
 |---|---|---|
 | `grooming` | `task.open_questions`, `task.estimated_changed_lines` | Open questions return `needs-decision`; an estimate above 500 returns `split`. |
 | `decomposition` | `task.slices[].files`, `task.slices[].depends_on`, `task.dependencies` | Overlapping slice files or a dependency return `sequence`; `outputs.shared_files` names the overlap. Textual estimates such as `"about 300"` are parsed. |
-| `tier-selection` | `task.pattern`, `task.changes_data_shape`, `task.changes_public_contract`, `task.crosses_boundary`, `current_state.tier_mismatch` | A reported mismatch, a flag, or complex-work terms in the request return `complex` with `outputs.role` `senior-implementer`. Mechanical terms or a named pattern return `mechanical` with `implementer`. Neither returns `complex` below the refinement threshold, a split fork a model may settle either way. A request with `outputs.slice_like` false is never asked of a model. A model never lowers evidenced complex work. |
+| `tier-selection` | `task.pattern`, `task.changes_data_shape`, `task.changes_public_contract`, `task.crosses_boundary`, `current_state.tier_mismatch` | A reported mismatch or a flag returns `complex`, sharp, with `outputs.role` `senior-implementer`. A named pattern returns `mechanical` with `implementer`, sharp, or `complex` when the request also names complex-tier work. Complex or mechanical terms in the request text alone return that tier at 0.60 as a split fork: a model may confirm it, and no model lowers complex-term work. A hand-back or a read-only role's brief has `outputs.slice_like` false and is never asked of a model. |
 | `model-selection` | `task.role`, `task.estimated_changed_lines`, `task.writable_files`, `task.acceptance_criteria`, `task.pattern`, the three tier flags, `current_state.retries`, `constraints.host`; `task.model` and `task.effort` for a role with no agent file | Retries or a tier flag return `step-up`; a large job (over 300 lines, 10 files, or 8 acceptance criteria) with no cheaper signal returns `step-up`; size, pattern, and mechanical work together return `step-down`; anything weaker is split. `outputs.dispatch_model` and `outputs.dispatch_effort` are absolute, and `outputs.changed` says whether they differ from the frontmatter. Model selection, below, has the ladder and gates. |
-| `tool-selection`, `file-selection` | `available_actions` (required), `task.tools` or `task.file_summaries`, `current_state.failed_tools` or `failed_files` | One option, or a request that names exactly one option (a file by path or basename), is sharp. Anything else is split with the first unfailed option as a placeholder. An option whose name or description is irreversible (merge, production deploy, data deletion) is never chosen in code or by a model. Choices are capped at 10 options. |
+| `tool-selection`, `file-selection` | `available_actions` (required), `task.tools` or `task.file_summaries`, `current_state.failed_tools` or `failed_files` | One option, or a request that names exactly one option (a file by path or basename), is sharp. Anything else is split with the first unfailed option as a placeholder. An option whose name or description is irreversible (merge, production deploy, data deletion) is never chosen in code or by a model. A fork with more than 9 candidates, or with a candidate the caller did not describe, is not asked of a model: `fallback_reason` starts `not asked:` and says why. `file-selection` returns `outputs.ranking` (`path`, `score`, best first); two files at the top level stay split (`outputs.ranking_tie`). |
 | `runtime-progress` | `current_state.attempts`, `identical_results`, `unblock_exhausted`, `next_action`, `credentials_missing`, `credentials_expired`, `contract_ambiguity` | Each fence returns `escalate` with `outputs.fence` set to 1-4. Twenty attempts or three identical results is FENCE 1; an irreversible `next_action` such as a merge is FENCE 3. |
-| `verification` | `evidence[].criterion`, `evidence[].status` | `criterion` (1-based index or exact criterion text) covers that criterion only. `status` `fail` or a summary such as `3 tests failed` returns `request-evidence`; `status` `unavailable` returns `block`. Duplicate refs count once. `outputs.uncovered_criteria` lists the gaps. |
+| `verification` | `evidence[].criterion`, `evidence[].status`, `evidence[].output` | `criterion` (1-based index or exact criterion text) covers that criterion only. `status` `fail` or a summary such as `3 tests failed` returns `request-evidence`; `status` `unavailable` returns `block`. Duplicate refs count once, so one command run for two criteria needs two refs. `outputs.uncovered_criteria` lists the gaps. An entry with `output` and no `status` splits at 0.60 once every criterion is covered and nothing failed (`outputs.judged_evidence`), and the ladder reads it as `docs/guide/fork-questions.md`, Done, describes. Output showing an unreached target returns `block`; cut or unsent output never accepts. |
 
 Rationales name the matched terms or the missing fields, and `alternatives` names the
 runner-up route when one matched.
@@ -546,8 +561,8 @@ The CLI records JSONL history in the host's state root by default:
 `.claude/vistack/decision-history.jsonl` under Claude Code (`CLAUDECODE=1`), else
 `.codex/vistack/decision-history.jsonl`. Pass `--history` for another location. Add that path
 to the consuming repository's ignore rules. Sensitive-looking fields are redacted before they
-are written. The deck's Decisions tab shows this session's rows of every type from the Claude
-Code file, beside the forks the deck asks itself (`docs/guide/deck.md`, Decisions).
+are written; evidence output is scrubbed too (`docs/guide/fork-questions.md`, Done). The
+deck's Decisions tab shows this session's rows of every type from the Claude Code file, beside the forks the deck asks itself (`docs/guide/deck.md`, Decisions).
 
 Record feedback without editing the skill:
 
@@ -593,11 +608,10 @@ about 7 s for `clef-flash`, so read warm latency from the others.
 On 2026-09-29 the 80 labelled scenarios gave: deterministic policy alone, 70 sharp forks,
 all right (87.5% coverage); with Jev, 77 sharp, all right (96.25% coverage), the remaining
 three split. Before two tool labels were made unambiguous, Jev picked `grep` for both at 0.99
-confidence — the confidence gave no warning. On 2026-10-05, on 108 scenarios, `clef-flash`
-alone settled 7 of the 10 split forks at its floor, none wrong; the table is in the Ollama
-section. Add a scenario for every corrected decision, and compare deterministic policy, model
-recommendation, human choice, and final outcome before raising the confidence threshold or
-enabling more automatic refinement.
+confidence — the confidence gave no warning. The `clef-flash` run of 2026-10-05 is in the
+Ollama section. Add a scenario for every corrected decision, and compare deterministic policy,
+model recommendation, human choice, and final outcome before raising the confidence threshold
+or enabling more automatic refinement.
 
 A deterministic decision is policy and serialization only. On 2026-09-22, 25 decisions took
 a warm p50 of 0.025 ms and a p95 of 0.054 ms, with a peak process RSS of 30,688 KB. With
@@ -605,39 +619,14 @@ history enabled, 3000 decisions took 23.0 s before the history index change and 
 it; the mean of the last 100 appends fell from 16.0 ms to 0.20 ms.
 `laya/tests/test_performance.py` holds the append cost flat.
 
-### Hillclimbing the fork layer
-
-Move a fork from split to sharp with a measured loop, not by editing rules until today's
-failures pass.
-
-1. Build scenarios from real runs first: ledger rows, `override` records, and corrected
-   decisions. Hand-written cases come second. A case enters only when a person can say which
-   action is right.
-2. Split the scenarios into train and held-out sets before the first change. Keep the split
-   fixed.
-3. Check headroom and noise. A decision type above 95% held-out accuracy has no room to
-   climb; aim at latency or cost instead. Repeat a model-backed run to measure variance.
-4. Change one surface per round: one policy rule, one question schema, or one threshold.
-   Read train failures only, and fix the cause, not the case.
-5. Run both sets. Keep the change only when held-out accuracy improves or holds while train
-   improves. Revert a change that lifts train and leaves held-out flat.
-6. Never copy scenario text or its expected action into a policy rule. Keywords lifted from
-   a failing case are leakage.
-7. After two or three flat rounds, stop and sort the remaining failures by cause: ambiguous
-   case, wrong label, missing input field, or a fork that belongs to the main session.
-8. Report held-out accuracy against the baseline, and flag any gain inside the noise margin.
-
-`scripts/evaluate-laya.py --split train` and `--split held-out` score the two sets. The split
-comes from a stable hash of each scenario id, 30% held out by default
-(`--held-out-percent`), so adding a scenario never moves an existing one. A scenario pins
-itself with `"split": "train"` or `"split": "held-out"`. Each decision type reports its
-accuracy and mean confidence.
+The measured loop that moves a fork from split to sharp, and the record that a change was kept
+or reverted, are in `docs/guide/fork-questions.md`, Measuring a change.
 
 ## Adding a decision type
 
 1. Add the stable name and legal actions to `laya/schema.py`.
 2. Add a deterministic policy branch in `laya/policy.py` with evidence and safety conditions.
-3. Add a bounded typed question schema in `laya/questions.py`.
+3. Add a typed question schema in `laya/questions.py` that passes `laya/tests/test_question_rules.py`, and name its action question in `ACTION_QUESTION`. The rules are in `docs/guide/fork-questions.md`.
 4. Map the typed result and add a safety gate in `laya/engine.py`.
 5. Add unit tests for valid, malformed, unavailable-runtime, low-confidence, and fence cases.
 6. Add the integration owner and fallback rule to this document and the relevant role contract.
@@ -665,6 +654,10 @@ fallback and evidence predicate are independently testable.
   gates and its own floor.
 - Choice quality can degrade with large option sets, so question schemas keep choices small
   and route candidates are prefiltered.
+- Routing misses that remain: "how do I run autopilot" routes `autopilot-stack`; any bare `#N`
+  is a ticket reference; the overnight signal reads quoted text; a zero-margin tie stays sharp.
+  The router's "groomed ticket with no other signal is autopilot-stack" disagrees with the
+  policy default, `feature` at 0.62.
 - Confidence is used as a safety threshold, not as proof of correctness.
 - The feedback loop proposes changes; it does not train weights or modify workflow files.
 

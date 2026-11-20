@@ -10,7 +10,7 @@ playbook, one role phase per slice, stopping at merge-ready.
 `vistack` is the identifier you install and invoke. **viStack** is what it is called in
 prose. Same thing. It runs on Claude Code, Codex, Grok Build, and OpenCode.
 
-**Version:** `0.34.1`
+**Version:** `0.36.0`
 
 **Contents:** [install](#install) · [usage](#usage) ·
 [QA evidence: screenshots and video](#qa-evidence-screenshots-and-video) ·
@@ -625,7 +625,7 @@ files are the source of truth, so they are not restated here.
 | [`authoring-skill`](skills/vistack/playbooks/authoring-skill.md) | creating or modifying a workflow contract |
 | [`automate-me`](skills/vistack/playbooks/automate-me.md) | capturing working preferences in a reusable mode skill |
 | [`agent-design`](skills/vistack/playbooks/agent-design.md) | a new agent, bot, or subagent for Claude Code, Codex, or OpenCode |
-| [`correct`](skills/vistack/playbooks/correct.md) | agents keep repeating a mistake; make it impossible with a structure, type, lint, or test |
+| [`improve`](skills/vistack/playbooks/improve.md) | agents keep repeating a mistake; make it impossible with a structure, type, lint, or test |
 | [`worktree-cleanup`](skills/vistack/playbooks/worktree-cleanup.md) | an evidence-based audit of stale worktrees |
 | [`html-report`](skills/vistack/playbooks/html-report.md) | the deliverable is a page: report, chart, diagram, timeline, board, toggle editor, design tokens |
 | [`session-pickup`](skills/vistack/playbooks/session-pickup.md) | resuming work whose session is gone; state file and ledger exist |
@@ -750,8 +750,8 @@ invokes a principle must name the decision the principle changed.
 Direct entries include [`overnight`](skills/overnight/SKILL.md),
 [`automate-me`](skills/automate-me/SKILL.md), [`design-agent`](skills/design-agent/SKILL.md),
 [`transcript-healthcheck`](skills/transcript-healthcheck/SKILL.md),
-[`routine-healthcheck`](skills/routine-healthcheck/SKILL.md), and [`correct`](skills/correct/SKILL.md)
-(`/vistack:correct`, operator-invoked). How much design a change deserves:
+[`routine-healthcheck`](skills/routine-healthcheck/SKILL.md), and [`improve`](skills/improve/SKILL.md)
+(`/vistack:improve`, alias `/vistack:correct`, operator-invoked). How much design a change deserves:
 [`docs/guide/design.md`](docs/guide/design.md). Editing a contract:
 [`docs/guide/writing-contracts.md`](docs/guide/writing-contracts.md).
 

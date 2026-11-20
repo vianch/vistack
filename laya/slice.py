@@ -1,26 +1,28 @@
 """Whether a tier-selection request reads as an implementation slice.
 
-Hosted Jev's tier confidence is the margin of its two probabilities, and it is flat on text
-that is not a slice: a question, a hand-back, or chat. Such a request settles in code, because
-no model can say which implementer owns work that is not there.
+Only the certain cases are not: a hand-back the host wraps in ``<agent-message`` or
+``<task-notification``, and a brief that declares a read-only role. Such a request settles in
+code, because no model can say which implementer owns work that is not there. Every other
+request reaches the ladder, where a model may answer ``not-a-slice``.
 """
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Sequence
+import re
 
 
-TIER_SIGNALS = ("complex_signals", "flags", "mechanical_signals", "pattern", "tier_mismatch")
-IMPLEMENTATION_CLASSES = frozenset({"bug-fix", "crash-hunt", "design-implementation", "feature", "maintenance", "perf-issue", "prototype", "refactor"})
+HAND_BACK = re.compile(r"^\s*<(?:agent-message|task-notification)\b")
+# Mirrors READ_ONLY_ROLES in hooks/lib/non-slice.ts.
+READ_ONLY_ROLES = ("advisor", "analyst", "groomer", "health-check", "planner", "researcher", "reviewer")
+READ_ONLY_BRIEF = re.compile(rf"^\s*role:\s*(?:{'|'.join(READ_ONLY_ROLES)})\b", re.I | re.M)
+BRIEF_HEAD_CHARS = 600
 NOT_A_SLICE = (
-    "The request names no tier signal and no implementation work, so it is not an implementation slice; "
+    "The request is a hand-back or a read-only role's brief, so it is not an implementation slice; "
     "an unclear tier is complex and no model is asked."
 )
 
 
-def slice_like(tier_signals: Mapping[str, Any], ranked_classes: Sequence[str]) -> bool:
-    """True when the policy sees a tier signal or the request's leading task class is implementation work."""
+def slice_like(request: str) -> bool:
+    """False only for a hand-back or a brief that declares a read-only role."""
 
-    if any(tier_signals.get(name) for name in TIER_SIGNALS):
-        return True
-    return bool(ranked_classes) and ranked_classes[0] in IMPLEMENTATION_CLASSES
+    return not (HAND_BACK.match(request) or READ_ONLY_BRIEF.search(request[:BRIEF_HEAD_CHARS]))

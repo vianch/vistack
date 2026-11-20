@@ -79,6 +79,23 @@ config tweak. The machinery costs tokens. Just make the change.
 
 ## Also, in descending order of cost
 
+**Editing the installed plugin copy, or syncing over it.** Sessions load
+`~/.claude/plugins/marketplaces/vistack`, not the checkout, and drift runs both ways.
+Sessions opened in the installed copy edited it on 2026-10-27 (19a0deef, 77587894). On
+2026-11-20 the 0.35.0 release existed only there while the checkout read 0.34.1, and the
+`rsync --delete` that `scripts/verify.sh` printed as its fix would have erased it. Edit the
+checkout, treat an installed version newer than the checkout as work to recover, and sync
+with `scripts/sync-installed.sh`.
+
+**Taking a playbook from the request's keywords.** "Unattended" does not make a run
+`autopilot-stack`, which needs a groomed ticket, and words inside pasted text do not name
+the work. The fork layer returned `autopilot-stack` at 0.9 for three unattended requests
+that named no ticket (decisions `dec_bfa0c4d783a443e2`, `dec_e5225e05d640459b`,
+`dec_ef23825075634f56`), because its `_AUTOPILOT` pattern in `laya/policy.py` matched the
+word with no groomed-ticket check. It returned `bug-fix` at 0.856 for a request to create a
+skill whose pasted text said "crashes" and "fix it" (`dec_3b0debee39d64d0c`). Check the route's Match-when text in router Step 2 before
+taking the pick; the fork's answer is advisory.
+
 **Paraphrasing a playbook step.** The steps are the executable contract. Paraphrasing drops
 the clause that mattered — usually the one about evidence. A step that will not be run stays
 in the task list, marked skipped, reason in the ledger.

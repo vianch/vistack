@@ -152,9 +152,15 @@ class RefinementGateTests(unittest.TestCase):
         self.assertIn("route gate", result.fallback_reason)
 
     def test_model_cannot_invent_an_unattended_route(self):
-        result = refined(WEAK_ROUTE, choice("playbook", "overnight"))
+        offered = {**WEAK_ROUTE, "available_actions": ["feature", "overnight", "prototype"]}
+        result = refined(offered, choice("playbook", "overnight"))
         self.assertEqual((result.action, result.fork), ("feature", "split"))
         self.assertIn("unattended", result.fallback_reason)
+
+    def test_model_cannot_pick_a_route_the_question_did_not_offer(self):
+        result = refined(WEAK_ROUTE, choice("playbook", "overnight"))
+        self.assertEqual((result.action, result.fork), ("feature", "split"))
+        self.assertIn("did not offer", result.fallback_reason)
 
     def test_model_route_is_used_when_signals_are_weak(self):
         result = refined(WEAK_ROUTE, choice("playbook", "prototype"))
@@ -164,10 +170,11 @@ class RefinementGateTests(unittest.TestCase):
         result = refined({"decision_type": "playbook-selection", "task": {"request": "Add a CLI flag"}}, choice("playbook", "prototype"))
         self.assertEqual((result.action, result.backend), ("feature", "deterministic"))
 
-    def test_model_fence_conflict_flag_rejects_its_route(self):
-        answers = {**choice("playbook", "prototype"), "route_conflict": {"type": "noul", "noul": 0.8}}
-        result = refined(WEAK_ROUTE, answers)
+    def test_model_cannot_reroute_a_request_naming_an_irreversible_action(self):
+        context = {**WEAK_ROUTE, "task": {**WEAK_ROUTE["task"], "request": "Handle the thing, then deploy to production"}}
+        result = refined(context, choice("playbook", "prototype"))
         self.assertEqual((result.action, result.fork), ("feature", "split"))
+        self.assertIn("irreversible", result.fallback_reason)
 
     def test_model_cannot_keep_an_oversized_unit_whole(self):
         result = refined(

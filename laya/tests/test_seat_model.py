@@ -293,7 +293,7 @@ class EngineContractTests(unittest.TestCase):
         from laya.questions import questions_for
 
         question = questions_for(DecisionContext.from_dict({"decision_type": "seat-model"}))["seat"]
-        self.assertEqual((question["type"], tuple(question["criteria"])), ("choice", SEATS))
+        self.assertEqual((question["type"], tuple(question["criteria"])), ("choice", (*SEATS, "unclear")))
 
     def test_outputs_lead_with_seat_and_switch_and_carry_no_dispatch_or_pair_fields(self):
         for _, context, _, _ in SeatTransitionTests.TRANSITIONS:

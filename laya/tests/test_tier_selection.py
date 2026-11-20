@@ -66,7 +66,17 @@ class TierSelectionTests(unittest.TestCase):
 
     def test_model_cannot_downgrade_evidenced_complex_work(self):
         result = refined(tier_context("Rotate the refresh token on every request"), "mechanical")
-        self.assertEqual((result.action, result.fork, result.backend), ("complex", "sharp", "deterministic"))
+        self.assertEqual((result.action, result.fork, result.backend), ("complex", "split", "deterministic-fallback"))
+        self.assertIn("tier gate", result.fallback_reason)
+
+    def test_words_in_the_request_alone_leave_the_tier_split(self):
+        for request, action in (("Rotate the refresh token on every request", "complex"), ("Add the boilerplate export for the new icon", "mechanical")):
+            result = decide(tier_context(request))
+            self.assertEqual((result.action, result.fork), (action, "split"), request)
+
+    def test_a_model_may_confirm_text_only_complex_work(self):
+        result = refined(tier_context("Rotate the refresh token on every request"), "complex")
+        self.assertEqual((result.action, result.fork, result.backend), ("complex", "sharp", "ollama:clef-flash"))
 
     def test_model_can_settle_an_unclear_tier(self):
         result = refined(tier_context("Update the order summary panel"), "mechanical")

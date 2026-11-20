@@ -58,6 +58,7 @@ PLAYBOOKS = (
     "automate-me",
     "agent-design",
     "html-report",
+    "improve",
 )
 
 ROLES = (
@@ -128,6 +129,95 @@ def redact(value: Any, *, max_string: int = 2400) -> Any:
     return str(value)
 
 
+# A runner prints its verdict last, so the excerpt keeps the tail. 2,000 characters keep three
+# excerpts inside Ollama's 6,000-character state.
+OUTPUT_MAX_LINES = 60
+OUTPUT_MAX_CHARS = 2000
+TRIMMED = "...[earlier output trimmed]\n"
+
+
+# A command can print a credential inside its own output, and that output goes to hosted models
+# and to the history file. Key names are not enough there, so the text itself is scrubbed. Long
+# hex strings (git SHAs, checksums) are left alone: they are not secrets, and only a sensitive
+# key in front of one, ``secret=<hex>``, blanks it.
+_SECRET_KEY = (
+    rf"[\w-]*(?:{_SENSITIVE_KEY.pattern}|passwd|api[_-]?key|authorization|(?<![a-z])auth(?![a-z]))[\w-]*"
+)
+_SECRET_PATTERNS = (
+    (
+        re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|\Z)"),
+        "[REDACTED]",
+    ),
+    (re.compile(r"(?P<scheme>\b[a-z][a-z0-9+.-]*://)[^\s/:@]+:[^\s/@]+@", re.I), r"\g<scheme>[REDACTED]@"),
+    (re.compile(r"\beyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]*"), "[REDACTED]"),
+    (re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]{16,}", re.I), "[REDACTED]"),
+    (
+        re.compile(r"\bBasic\s+(?:(?=[A-Za-z0-9+/]*[0-9+/])[A-Za-z0-9+/]{8,}={0,2}|[A-Za-z0-9+/]{8,}={1,2})"),
+        "[REDACTED]",
+    ),
+    (re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"), "[REDACTED]"),
+    (re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,}|\bgithub_pat_[A-Za-z0-9_]{22,}"), "[REDACTED]"),
+    (re.compile(r"\bsk-[A-Za-z0-9_-]{20,}|\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{10,}|\bxox[abprs]-[A-Za-z0-9-]{10,}"), "[REDACTED]"),
+    (
+        re.compile(
+            rf"(?P<head>{_SECRET_KEY}(?:\\?[\"'])?[ \t]*(?P<sep>[=:])(?P<gap>[ \t]*(?:\r?\n[ \t]*)?))"
+            r"(?!(?:\\?[\"'])?\[REDACTED\])(?P<value>"
+            r'\\"(?:[^\\\n]|\\\\\\"|\\\\|\\[^"\n])*(?:\\"|(?=\n)|$)'
+            r"|\"(?:[^\"\\\n]|\\.)*\"?"
+            r"|'(?:[^'\\\n]|\\.)*'?"
+            r"|(?:(?:Bearer|Basic|Digest|Token)[ \t]+)?[^\s\"',;&)}\]]+)",
+            re.I,
+        ),
+        None,
+    ),
+)
+_TEST_COUNT = re.compile(r"\d{1,6}")
+_TEST_COUNT_NOUN = re.compile(
+    r"[ \t]+(?:passed|passing|failed|failing|failures?|errors?|skipped|pending|checks?|tests?|specs?|suites?|assertions?|warnings?)\b", re.I
+)
+_PHRASE_WORD = re.compile(r"[a-z]{2,}")
+_PHRASE_NEXT_WORD = re.compile(r"[ \t]+[a-z]{2,}\b")
+_REST_OF_LINE = re.compile(r"[^\n]*")
+
+
+def _not_a_credential(match: re.Match[str]) -> bool:
+    value, after = match.group("value"), match.string[match.end() :]
+    if "\n" in match.group("gap"):
+        return bool(_REST_OF_LINE.match(after).group().strip())
+    if _TEST_COUNT.fullmatch(value):
+        return bool(_TEST_COUNT_NOUN.match(after))
+    return match.group("sep") == ":" and bool(_PHRASE_WORD.fullmatch(value)) and bool(_PHRASE_NEXT_WORD.match(after))
+
+
+def _blank_value(match: re.Match[str]) -> str:
+    if _not_a_credential(match):
+        return match.group(0)
+    value = match.group("value")
+    quote = next((mark for mark in ('\\"', '"', "'") if value.startswith(mark)), "")
+    closed = quote and len(value) > len(quote) and value.endswith(quote)
+    return f"{match.group('head')}{quote}[REDACTED]{quote if closed else ''}"
+
+
+def scrub_secrets(text: str) -> str:
+    """Replace secret-shaped substrings in command output with ``[REDACTED]``."""
+
+    for pattern, replacement in _SECRET_PATTERNS:
+        text = pattern.sub(replacement or _blank_value, text)
+    return text
+
+
+def trim_output(text: str, *, max_lines: int = OUTPUT_MAX_LINES, max_chars: int = OUTPUT_MAX_CHARS) -> str:
+    lines = scrub_secrets(text).rstrip().splitlines()
+    tail = "\n".join(lines[-max_lines:])
+    if len(lines) <= max_lines and len(tail) <= max_chars:
+        return tail
+    return TRIMMED + tail[-max(1, max_chars - len(TRIMMED)) :]
+
+
+def output_trimmed(text: str | None) -> bool:
+    return bool(text) and text.startswith(TRIMMED)
+
+
 @dataclass(frozen=True)
 class Evidence:
     """An observed input. A model cannot create evidence; callers supply it."""
@@ -137,6 +227,8 @@ class Evidence:
     summary: str = ""
     criterion: str | None = None
     status: str | None = None
+    # An excerpt of a command's output captured after the last change.
+    output: str | None = None
 
     @classmethod
     def from_value(cls, value: Any) -> "Evidence":
@@ -150,12 +242,14 @@ class Evidence:
             raise ValueError("evidence entries require non-empty string kind and ref")
         criterion = value.get("criterion")
         status = value.get("status")
+        output = value.get("output")
         return cls(
             kind=kind,
             ref=ref,
             summary=str(value.get("summary", "")),
             criterion=None if criterion is None else str(criterion),
             status=None if status is None else str(status),
+            output=(trim_output(str(output)) or None) if output is not None else None,
         )
 
 

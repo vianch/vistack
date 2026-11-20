@@ -88,6 +88,42 @@ describe('why a tier pick did or did not set its model', () => {
   })
 })
 
+describe('apply mode sets a model only from a sharp fork', () => {
+  const answer = (fork: string, outputs: Record<string, unknown>): string =>
+    JSON.stringify({ action: 'mechanical', backend: 'deterministic', confidence: 0.6, decision_type: 'tier-selection', fork, outputs: { tier: 'mechanical', ...outputs } })
+  const applied = (fork: string, outputs: Record<string, unknown> = {}): string | undefined | 'parse failed' => {
+    const decision = parseDecision(answer(fork, outputs))
+
+    return decision === null ? 'parse failed' : rosterModel(DEFAULT_ROSTER, decision)
+  }
+
+  test('a sharp tier is applied', async () => {
+    expect(applied('sharp')).toBe('sonnet')
+  })
+
+  test('a split tier is not applied', async () => {
+    expect(applied('split')).toBeUndefined()
+  })
+
+  test('a split tier a model declined is not applied', async () => {
+    expect(applied('split', { declined: 'not-a-slice' })).toBeUndefined()
+  })
+
+  test('a sharp tier that is no slice is not applied', async () => {
+    expect(applied('sharp', { slice_like: false })).toBeUndefined()
+  })
+
+  test('a split fork still shows its suggested model and says why it was not applied', async () => {
+    const base = decidingPick({ at: 1, hasCallerModel: false, id: 'agent-a1', mode: 'apply', scope: 'agent', subagentType: 'Explore', subject: 'Explore: map it', trigger: 'spawn-apply' })
+    const decision = parseDecision(answer('split', {}))
+    const pick = decision === null ? base : decidedPick(base, decision, DEFAULT_ROSTER, [])
+
+    expect(pick.recommended).toBe('sonnet')
+    expect(applyReasonOf(pick)).toBe('not applied: the fork is split; the main session decides')
+    expect(applyReasonOf({ ...pick, fork: 'sharp' })).toBe('not applied: the answer named no model')
+  })
+})
+
 describe('a prompt the engine reads as no slice', () => {
   test('slice_like false, true, as text, and missing', async () => {
     expect(sliceLikeOf('tier-selection', { slice_like: 'false' })).toBe(false)
@@ -153,7 +189,7 @@ describe('the chain wording', () => {
 })
 
 describe('every decision type, in one overview', () => {
-  test('an empty session and no history list all 12, each never asked', async () => {
+  test('an empty session and no history list every type, each never asked', async () => {
     const rows = typeOverviewOf([], historyTallyOf(null))
 
     expect(rows.map(row => row.type)).toEqual(ALL_TYPES)
@@ -226,7 +262,7 @@ describe('every decision type, in one overview', () => {
 })
 
 describe('the type filter', () => {
-  test('cycles all, then all 12 types in schema order, then any other type present', async () => {
+  test('cycles all, then every type in schema order, then any other type present', async () => {
     const seen: string[] = []
     let current = ''
 
@@ -235,7 +271,7 @@ describe('the type filter', () => {
       seen.push(current)
     }
     expect(seen).toEqual([...ALL_TYPES, ''])
-    expect(nextFilter('file-selection', [{ ...tierPick(), decisionType: 'zzz' }])).toBe('zzz')
+    expect(nextFilter(ALL_TYPES[ALL_TYPES.length - 1] ?? '', [{ ...tierPick(), decisionType: 'zzz' }])).toBe('zzz')
     expect(nextFilter('zzz', [{ ...tierPick(), decisionType: 'zzz' }])).toBe('')
     expect(nextFilter('gone', [])).toBe('')
   })

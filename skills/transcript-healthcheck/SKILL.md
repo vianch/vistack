@@ -40,8 +40,8 @@ For each, name:
 - the smallest fix, with the file it would touch;
 - what it would stop, in one sentence.
 
-A proposal for a correction class names `/vistack:correct` as its route: picking it runs
-`skills/correct/SKILL.md` for that class, which enforces the fix instead of documenting it.
+A proposal for a correction class names `/vistack:improve` as its route: picking it runs
+`skills/improve/SKILL.md` for that class, which enforces the fix instead of documenting it.
 
 Rank by how often the friction recurs. Five proposals at most.
 

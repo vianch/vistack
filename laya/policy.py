@@ -28,10 +28,14 @@ UNBLOCK_ATTEMPT_LIMIT = 20
 IDENTICAL_RESULT_LIMIT = 3
 
 # Signals are matched on word boundaries against observed values, never field names. The
-# request text carries full weight; acceptance criteria, briefs, and other task values carry
-# SUPPORT_WEIGHT, so "no failures in the console" in a criterion cannot turn a feature into a
-# bug fix. Strong signals (2.0) name a route outright; weak ones (<1.0) only break ties.
+# request text carries full weight; acceptance criteria, briefs, other task values, and text the
+# request quotes carry SUPPORT_WEIGHT, so "no failures in the console" in a criterion cannot turn
+# a feature into a bug fix. Strong signals (2.0) name a route outright; weak ones (<1.0) only
+# break ties.
 SUPPORT_WEIGHT = 0.35
+MULTI_ASK_CLASSES = 3
+MULTI_ASK_SCORE = 1.0
+MULTI_ASK_CONFIDENCE = 0.6
 CLASS_SIGNALS: tuple[tuple[str, tuple[tuple[str, float], ...]], ...] = (
     ("design-implementation", ((r"figma", 2.0), (r"design implementation", 2.0), (r"visual parity", 2.0), (r"mock-?ups?", 1.0))),
     ("worktree-cleanup", ((r"(?:clean(?:\s?up)?|prune|stale|old|orphaned|remove|delete)\b.{0,30}\bworktrees?", 2.0), (r"worktrees?\b.{0,30}\b(?:clean(?:\s?up)?|prune|stale)", 2.0))),
@@ -41,7 +45,8 @@ CLASS_SIGNALS: tuple[tuple[str, tuple[tuple[str, float], ...]], ...] = (
     ("pause-safely", ((r"pause", 1.5), (r"stop safely", 2.0), (r"park (?:the |this )?(?:run|work|slice)", 1.5))),
     ("html-report", ((r"html (?:report|page|file|artifact|timeline|diagram|chart|dashboard|view|document)s?", 2.0), (r"as (?:an? )?(?:html|artifact|page|diagram|chart|graph|board)", 2.0), (r"claude artifact", 2.0), (r"timeline (?:page|view)", 2.0), (r"design (?:system|tokens?) (?:page|view|sheet)", 2.0), (r"toggle editor", 2.0), (r"(?:make|give|show|generate|plot) me (?:an? |the )?(?:\w+ ){0,3}(?:charts?|graphs?|diagrams?|dashboards?|boards?|timelines?|reports?)", 1.5), (r"(?:make|generate|build) (?:me )?an? (?:\w+ ){0,2}reports? page", 1.5), (r"board of (?:the )?(?:\w+ )?(?:slices|lanes|prs|pull requests|tasks|tickets|agents)", 1.5), (r"visuali[sz]e .{0,60}?\b(?:as|in) (?:an? )?(?:html|page|artifact|diagram|chart|graph)", 1.2), (r"(?:architecture|flow) (?:diagram|map)", 0.6))),
     ("agent-design", ((r"design (?:an? |the |my )?(?:new )?(?:agent|bot|subagent)s?", 2.0), (r"(?:create|make|build) (?:an? |the |my )?(?:new )?(?:agent|bot|subagent)s?", 2.0))),
-    ("authoring-skill", ((r"skill\.md", 2.0), (r"skills?", 1.2), (r"playbooks?", 1.2), (r"workflow contract", 2.0), (r"agent (?:file|definition)", 1.2))),
+    ("authoring-skill", ((r"skill\.md", 2.0), (r"(?:create|write|add|update|change|edit) (?:(?:a|an|the|this|that|our|my|new|one) ){0,2}(?:[\w-]+ )?(?:skill|playbook)s?", 2.0), (r"skills?", 1.2), (r"playbooks?", 1.2), (r"workflow contract", 2.0), (r"agent (?:file|definition)", 1.2))),
+    ("improve", ((r"make (?:each one|each of them|them|each mistake|(?:the|this|that|these|those) mistakes?) impossible", 2.0), (r"make (?:it|this|that) impossible to (?:repeat|recur|happen again)", 2.0), (r"repeat(?:ed|ing)? (?:\w+ )?mistakes?", 2.0), (r"mistakes? (?:\w+ ){0,3}keeps? (?:making|repeating)", 2.0), (r"keeps? (?:making|repeating) (?:the same |this |that |these |those )?mistakes?", 2.0), (r"(?<![^\s(\[]/)(?<=/)(?:vistack:)?(?:improve|correct)(?!/)|(?<=vistack:)(?:improve|correct)(?!/)", 2.0), (r"what went (?:well|right) and what went wrong", 2.0))),
     ("automate-me", ((r"preferences?", 1.2), (r"working style", 2.0), (r"mode skill", 2.0))),
     # The vocabulary's home is skills/maintenance/references/triggers.md.
     ("crash-hunt", ((r"fuzz(?:ing|ed|er)?", 2.0), (r"malformed (?:http |api )?(?:requests?|input|payloads?)", 2.0), (r"random (?:http |api )?requests?", 2.0), (r"until (?:it|something|the app|the server) crash(?:es)?", 2.0), (r"crash[- ]hunt(?:ing|er)?", 2.0))),
@@ -49,7 +54,7 @@ CLASS_SIGNALS: tuple[tuple[str, tuple[tuple[str, float], ...]], ...] = (
     ("perf-issue", ((r"performance", 1.2), (r"perf", 1.0), (r"latency", 1.2), (r"slow(?:er|ness|ly)?", 1.2), (r"throughput", 1.2), (r"memory leak", 1.5), (r"p9[059]", 1.2), (r"takes? \d+(?:\.\d+)? ?(?:ms|s|sec|seconds|minutes)", 1.2), (r"optimi[sz](?:e|ation)", 0.6), (r"cpu usage", 1.2))),
     ("bug-fix", ((r"bugs?", 1.2), (r"broken", 1.2), (r"regression", 1.2), (r"wrong", 1.0), (r"incorrect(?:ly)?", 1.0), (r"fail(?:s|ed|ing|ures?)?", 1.0), (r"crash(?:es|ed|ing)?", 1.2), (r"errors?", 0.8), (r"exceptions?", 0.8), (r"fix(?:es|ed|ing)?", 1.0), (r"not working", 1.2), (r"doesn'?t work", 1.2), (r"debug", 0.5))),
     ("refactor", ((r"refactor(?:ing)?", 1.5), (r"renam(?:e|es|ed|ing)", 1.2), (r"reorgani[sz]e", 1.2), (r"restructure", 1.2), (r"migrate", 1.0), (r"extract", 0.8), (r"dedupe|deduplicate", 1.0), (r"simplify", 0.8), (r"(?:variable|constant|function|identifier|method|class|parameter) names?", 1.2))),
-    ("investigation", ((r"investigate", 1.5), (r"why", 0.6), (r"understand", 1.0), (r"audit(?!\s+(?:logs?|trails?))", 1.2), (r"explain", 1.2), (r"how (?:does|do|is)", 1.0), (r"analy[sz]e", 1.0), (r"research", 1.0), (r"compare", 0.8))),
+    ("investigation", ((r"investigate", 1.5), (r"why", 0.6), (r"why did", 1.0), (r"understand", 1.0), (r"audit(?!\s+(?:logs?|trails?))", 1.2), (r"explain", 1.2), (r"how (?:does|do|is)", 1.0), (r"analy[sz]e", 1.0), (r"research", 1.0), (r"compare", 0.8))),
     ("prototype", ((r"prototype", 1.5), (r"experiment", 1.2), (r"spike", 1.5), (r"proof of concept|poc", 1.5))),
     ("blocker", ((r"blocker", 1.5), (r"blocked", 1.5), (r"stuck", 1.2))),
     ("qa-verification", ((r"qa", 1.2), (r"verify", 1.0), (r"verification", 1.0), (r"screenshot evidence", 1.5), (r"preview (?:deployment|url)", 1.0))),
@@ -64,7 +69,21 @@ _PRIORITY = {name: index for index, (name, _) in enumerate(CLASS_SIGNALS)}
 _OVERNIGHT = re.compile(r"\b(?:going to bed|step(?:ping)? away|overnight|run until done|don'?t stop)\b")
 _OVERNIGHT_RUN_NOUN = re.compile(r"\b(?:of|about|from) (?:the|last|this|that|tonight'?s|last night'?s) overnight (?:runs?|work|jobs?|queue)\b")
 _AUTOPILOT_FULL = re.compile(r"\b(?:autopilot full|independent (?:prs?|pull requests|queue|tickets))\b")
-_AUTOPILOT = re.compile(r"\b(?:autopilot|unattended)\b")
+_AUTOPILOT_NAME = r"autopilot(?:-(?:stack|full))?"
+_AUTOPILOT_MODE = re.compile(
+    rf"(?:^|[.;:!?,]\s)\W*{_AUTOPILOT_NAME} (?:it|this|that|them|these|those)\b|"
+    r"(?:^|[.;!?]\s)\W*autopilot(?:\s*[.,:;!–—]|\s+-\s|\s*$)|"
+    rf"\b(?:run|put|leave|set|take|drive|finish|ship|handle|work|go)\b(?:\s+(?!autopilot\b)[\w'#-]+){{0,3}}\s+(?:in |on |with |as )?{_AUTOPILOT_NAME}(?: mode)?"
+    r"(?=\s*$|\s*[.,:;!?)–—]|\s+(?:and|then|on|for|with|until|tonight|overnight|now|please|while|from|in|so)\b)"
+)
+_UNATTENDED = re.compile(r"\bunattended\b")
+_UNATTENDED_NOUN = re.compile(r"\b(?:the|an?|our|my|its|last|tonight'?s|last night'?s|yesterday'?s) unattended\b")
+_NOT_A_TICKET = re.compile(r"\[image #\d+\]|\b(?:prs?|pull requests?)\s*#?\s*\d+\b", re.IGNORECASE)
+_TICKET_REFERENCE = re.compile(
+    r"(?i:\b(?:issues?|tickets?)\s*#?\s*\d+\b|/issues/\d+\b)|(?<![\w#&/])#\d+\b"
+    r"|\b(?!(?:UTF|SHA|ISO|RFC|GPT|MD|HTTP|TLS|SSL|ES|COVID|IPV)-)[A-Z][A-Z0-9]{1,9}-\d+\b"
+)
+_QUOTED = re.compile(r"```.*?(?:```|\Z)|`[^`\n]*`|\"[^\"]*\"|“[^”]*”", re.DOTALL)
 _CROSS_CUTTING = re.compile(r"\b(?:large|cross-cutting|many services|program|multi-phase|multiple repos(?:itories)?)\b")
 _NEEDS_DECISION = re.compile(r"\b(?:product decision|choose between|ambiguous|tbd|to be decided|undecided)\b|\beither\b.{1,80}\bor\b")
 _SPLIT = re.compile(r"\b(?:split|decompose)\b")
@@ -94,6 +113,13 @@ _FAILURE = re.compile(
     r"exit (?:code|status) [1-9]\d*)\b"
 )
 _NO_FAILURE = re.compile(r"\b(?:0|no|zero) (?:tests? )?(?:failed|failures?|errors?)\b")
+_TARGET_UNREACHED = re.compile(
+    r"\b(?:connection refused|econnrefused|etimedout|could not connect)\b|\btimed out waiting\b[^\n]{0,60}\bwebserver\b",
+    re.IGNORECASE,
+)
+_TESTS_RAN = re.compile(
+    r"(?<![:.\w])(?<!port )[1-9]\d* (?:tests? )?(?:passed|passing|failed|failing|failures?)(?![:\w])|\bassertion ?error\b", re.IGNORECASE
+)
 _ACCEPTED_EVIDENCE = {"command", "test", "test-output", "artifact", "screenshot", "response", "file"}
 _UNAVAILABLE = {"unavailable", "unreachable", "blocked"}
 _FAILED = {"fail", "failed", "failing", "error"}
@@ -116,6 +142,30 @@ def _request(context: DecisionContext) -> str:
 def _supporting_text(context: DecisionContext) -> str:
     rest = {key: value for key, value in context.task.items() if key not in {"request", "title", "description", "summary"}}
     return " ".join(_observed(rest)).lower()
+
+
+def _unquoted(text: str) -> str:
+    return _QUOTED.sub(" ", text)
+
+
+def _quoted(text: str) -> str:
+    return " ".join(match.group() for match in _QUOTED.finditer(text))
+
+
+def _groomed(context: DecisionContext) -> bool:
+    if _acceptance_criteria(context) or any(context.task.get(key) for key in ("issue", "ticket", "issue_url", "ticket_url")):
+        return True
+    text = " ".join(_observed(context.task))
+    return bool(_TICKET_REFERENCE.search(_NOT_A_TICKET.sub(" ", text)))
+
+
+def _runs_on_autopilot(context: DecisionContext) -> str | None:
+    own = _unquoted(_request(context)).lower()
+    if _AUTOPILOT_MODE.search(own):
+        return "The request names autopilot as its run mode."
+    if _UNATTENDED.search(_UNATTENDED_NOUN.sub(" ", own)) and _groomed(context):
+        return "The request asks for an unattended run of a groomed unit."
+    return None
 
 
 def _acceptance_criteria(context: DecisionContext) -> list[Any]:
@@ -172,7 +222,12 @@ class Classification:
 def score_classes(context: DecisionContext) -> Classification:
     """Score every task class from word-boundary signals and explain the winner."""
 
-    sources = ((_request(context).lower(), 1.0), (_supporting_text(context), SUPPORT_WEIGHT))
+    request = _request(context)
+    sources = (
+        (_unquoted(request).lower(), 1.0),
+        (_quoted(request).lower(), SUPPORT_WEIGHT),
+        (_supporting_text(context), SUPPORT_WEIGHT),
+    )
     scores: dict[str, float] = {}
     signals: dict[str, tuple[str, ...]] = {}
     for name, compiled in _COMPILED:
@@ -219,6 +274,16 @@ def select_playbook(context: DecisionContext) -> tuple[str, float, str]:
 
 
 def _route(context: DecisionContext) -> tuple[str, float, str, Classification, str]:
+    route = _matched_route(context)
+    playbook, confidence, _, classification, source = route
+    asks = [name for name in classification.ranked() if classification.scores[name] >= MULTI_ASK_SCORE]
+    if source != "signals" or len(asks) < MULTI_ASK_CLASSES:
+        return route
+    rationale = f"The request asks for {len(asks)} kinds of work ({', '.join(asks)}), so no single route is evident."
+    return playbook, min(confidence, MULTI_ASK_CONFIDENCE), rationale, classification, source
+
+
+def _matched_route(context: DecisionContext) -> tuple[str, float, str, Classification, str]:
     request = _request(context).lower()
     classification = score_classes(context)
     state = {str(key).lower(): value for key, value in context.current_state.items()}
@@ -235,8 +300,9 @@ def _route(context: DecisionContext) -> tuple[str, float, str, Classification, s
         return "overnight", 0.96, "The request explicitly names an unattended handoff.", classification, "handoff"
     if _AUTOPILOT_FULL.search(request):
         return "autopilot-full", 0.93, "The request names independent work items for parallel execution.", classification, "handoff"
-    if _AUTOPILOT.search(request):
-        return "autopilot-stack", 0.9, "The request names unattended execution for a groomed unit.", classification, "handoff"
+    autopilot = _runs_on_autopilot(context)
+    if autopilot:
+        return "autopilot-stack", 0.9, autopilot, classification, "handoff"
     if classification.label in PLAYBOOKS:
         if _CROSS_CUTTING.search(request) and classification.label in {"feature", "refactor"}:
             return "multi-phase-plan", 0.8, "The request describes cross-cutting work that needs a plan first.", classification, "signals"
@@ -260,9 +326,15 @@ def _evidence_state(item: Evidence) -> str:
         return "failed"
     if status:
         return "passed"
+    if item.output and _TARGET_UNREACHED.search(item.output) and not _TESTS_RAN.search(item.output):
+        return "unavailable"
     if _FAILURE.search(_NO_FAILURE.sub(" ", item.summary.lower())):
         return "failed"
     return "passed"
+
+
+def _usable_kind(item: Evidence) -> bool:
+    return item.kind in _ACCEPTED_EVIDENCE or bool(item.output and not item.status)
 
 
 def _criterion_index(item: Evidence, criteria: list[Any]) -> int | None:
@@ -295,7 +367,7 @@ def assess_evidence(context: DecisionContext) -> dict[str, Any]:
             failed.append(item.ref)
         elif state == "unavailable":
             unavailable.append(item.ref)
-        elif item.kind in _ACCEPTED_EVIDENCE:
+        elif _usable_kind(item):
             usable.append(item)
     mapped = {index for item in usable if (index := _criterion_index(item, criteria)) is not None}
     unmapped = sum(1 for item in usable if _criterion_index(item, criteria) is None)
@@ -315,6 +387,32 @@ def assess_evidence(context: DecisionContext) -> dict[str, Any]:
 
 def verification_sufficient(context: DecisionContext) -> bool:
     return bool(assess_evidence(context)["sufficient"])
+
+
+def judged_evidence(context: DecisionContext) -> list[tuple[int, Evidence, str | None]]:
+    """``(position, entry, criterion text)`` for each entry with output and no status; the text
+    is None when the entry covers no criterion. Coverage must match ``assess_evidence``: a label
+    covers its criterion; the rest cover the remaining criteria in order."""
+
+    criteria = _acceptance_criteria(context)
+    seen: set[str] = set()
+    usable: list[tuple[int, Evidence]] = []
+    for position, item in enumerate(context.evidence):
+        if item.ref in seen:
+            continue
+        seen.add(item.ref)
+        if _evidence_state(item) == "passed" and _usable_kind(item):
+            usable.append((position, item))
+    mapped = {index for _, item in usable if (index := _criterion_index(item, criteria)) is not None}
+    spare = iter(index for index in range(len(criteria)) if index not in mapped)
+    found = []
+    for position, item in usable:
+        index = _criterion_index(item, criteria)
+        if index is None:
+            index = next(spare, None)
+        if item.output and not item.status:
+            found.append((position, item, None if index is None else str(criteria[index])))
+    return found
 
 
 def _common(
@@ -663,7 +761,7 @@ def evaluate(context: DecisionContext) -> PolicyDraft:
             "pattern": pattern,
             "tier_mismatch": mismatch,
         }
-        base["slice_like"] = slice_like(base, score_classes(context).ranked())
+        base["slice_like"] = slice_like(str(context.task.get("request") or ""))
         if mismatch:
             return _common(
                 context,
@@ -682,7 +780,15 @@ def evaluate(context: DecisionContext) -> PolicyDraft:
                 risks=("A contract, data-shape, or boundary change needs design judgment, not a pattern copy.",),
                 outputs=_tier_outputs(base, "complex"),
             )
-        if complex_terms:
+        if not base["slice_like"]:
+            return _common(
+                context,
+                action="complex",
+                confidence=0.6,
+                rationale=NOT_A_SLICE,
+                outputs=_tier_outputs(base, "complex"),
+            )
+        if complex_terms and pattern:
             return _common(
                 context,
                 action="complex",
@@ -711,11 +817,21 @@ def evaluate(context: DecisionContext) -> PolicyDraft:
                 conditions=("Report tier-mismatch if the slice turns out to change a contract or data shape.",),
                 outputs=_tier_outputs(base, "mechanical"),
             )
+        if complex_terms:
+            return _common(
+                context,
+                action="complex",
+                confidence=0.6,
+                rationale=f"The request names complex-tier work ({', '.join(repr(term) for term in complex_terms[:3])}) in its text only; a model may confirm it, and none may lower it.",
+                risks=("A mechanical owner would copy a pattern where the slice needs a design decision.",),
+                alternatives=(("mechanical", "Use only when the named work follows an existing pattern unchanged."),),
+                outputs=_tier_outputs(base, "complex"),
+            )
         if mechanical_terms:
             return _common(
                 context,
                 action="mechanical",
-                confidence=0.74,
+                confidence=0.6,
                 rationale=f"The request is mechanical work ({', '.join(repr(term) for term in mechanical_terms[:3])}), but no pattern is named.",
                 required=("the pattern to follow, as file:line",),
                 alternatives=(("complex", "Use if no existing file shows the pattern."),),
@@ -725,7 +841,7 @@ def evaluate(context: DecisionContext) -> PolicyDraft:
             context,
             action="complex",
             confidence=0.6,
-            rationale="No pattern or mechanical signal is evidenced; an unclear tier is complex." if base["slice_like"] else NOT_A_SLICE,
+            rationale="No pattern or mechanical signal is evidenced; an unclear tier is complex.",
             required=("the pattern to follow, or the reason none exists",),
             alternatives=(("mechanical", "Use once a named pattern covers the whole slice."),),
             outputs=_tier_outputs(base, "complex"),
@@ -901,6 +1017,16 @@ def evaluate(context: DecisionContext) -> PolicyDraft:
                 risks=("A green test command alone does not prove behavior not exercised by that test.",),
                 required=tuple(f"evidence for acceptance criterion {index}" for index in uncovered) or ("at least one captured artifact",),
                 outputs=outputs,
+            )
+        judged = [item.ref for _, item, _ in judged_evidence(context)]
+        if judged:
+            return _common(
+                context,
+                action="request-evidence",
+                confidence=0.6,
+                rationale=f"{len(judged)} artifact(s) carry captured output and no status, so the output must be read against its criterion.",
+                required=tuple(f"a reading of {ref} against its criterion" for ref in judged[:5]),
+                outputs={**outputs, "judged_evidence": judged},
             )
         return _common(
             context,

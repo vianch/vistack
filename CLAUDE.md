@@ -130,8 +130,8 @@ Editing a contract: read `docs/guide/writing-contracts.md` first.
 
 ## Rules and what enforces them
 
-Each rule here was broken at least twice. `/vistack:correct` (`skills/correct/SKILL.md`) adds
-a row per operator correction; a row whose mistake can no longer happen is dropped. An exception goes on the offending line as
+Each rule here was broken at least twice. `/vistack:improve` (`skills/improve/SKILL.md`) adds
+a row per class it enforces; a row whose mistake can no longer happen is dropped. An exception goes on the offending line as
 `lint-ok: <rule>; <reason>; expires YYYY-MM-DD; approved-by <name>`.
 
 | Rule | Enforced by | Proved against |
@@ -145,3 +145,9 @@ a row per operator correction; a row whose mistake can no longer happen is dropp
 | One version bump per change, in its own commit | nothing for the bump itself: a forgotten bump shows only in git history. `scripts/check-playbooks.mjs` fails when the three manifests or the README version line disagree | a README version line left at 0.22.0 against 0.23.0 manifests |
 | A deck hook registers only events that run for a user-tier plugin: no `on('classic.*')`, `skill.prompt`, `prompt.section`, `prompt.context`, `prompt.compose`, `attribution.text`, or `settings.read`, which the built-in `cc-plugin-sec-default` routes past it | `scripts/check-playbooks.mjs` fails such an `on(` in `hooks/**`, naming the file and line; `claude plugin validate .` cannot see it | the 0.32.0 tree: `hooks/register.tsx:2613,2642,2649,2655,2664`, each reported skipped every session |
 | A staged file an agent wrote stays at or under 5,000 tokens (bytes / 4) | the `token-guard` pre-commit hook on staged files, installed per consuming repository with `skills/token-guard/scripts/token-guard.mjs install`; reviewers run its `check --files` (`skills/interrogate/references/code-quality-review.md`). Not installed in this checkout, where git is off-limits | `hooks/register.tsx` at 87,610 bytes (21,903 tokens), `tests/pane.test.tsx` at 53,523 bytes, and `hooks/lib/monitors.ts` at 32,299 bytes, each grown past the limit in small edits; `check --files hooks/register.tsx` exits 2 |
+| Work that exists only in the installed copy is never erased by a sync | `scripts/sync-installed.sh` backs the installed copy up, refuses a newer installed copy, and refuses installed-only deletes without `--allow-delete`; `scripts/verify.sh` calls it | the 2026-11-20 state: installed 0.35.0 against checkout 0.34.1, where the old `scripts/verify.sh` printed `rsync -a --delete` that would have erased `skills/review-pr/scripts/approve-review.mjs` (`.claude/state/improve-jev-loop/proof-A2.txt`) |
+| A fork-layer question follows the typed-question rules: an exit option, option text that stands alone, backticked state paths (`docs/guide/fork-questions.md`) | `laya/tests/test_question_rules.py` | the pre-run `laya/questions.py`: exit-option x14, option-meaning x4, state-pointer x25 (`.claude/state/improve-jev-loop/proof-C1.txt`) |
+| Keyword routing does not fire on unattended, quoted text, or a multi-ask request | `laya/tests/test_route_misfires.py` and the labelled scenarios | decisions dec_ef23825075634f56, dec_e5225e05d640459b, dec_bfa0c4d783a443e2 routed `autopilot-stack` sharp 0.9 (`.claude/state/improve-jev-loop/proof-C2.txt`) |
+| The deck applies only sharp forks | the apply-mode tests in `tests/fork-overview.test.ts` | reverting the fork check gives 2 failures |
+| The decision-type list has one source in the deck | `tests/decision-types.test.tsx` and `tests/fork-overview.test.ts` derive their lists from `TYPE_LABELS` | the 0.34.1 tree's 3 failing "12 types" tests |
+| git and gh are never run in a repository whose origin is outside the project realm | MISSING: the no-git hook was deleted 2026-10-05. Proposed fix, the operator's call: a native `permissions.deny` for `Bash(git:*)` and `Bash(gh:*)` | 2026-10-27, a `git reset -q` in a session opened in the installed copy; 2026-11-20, a lane's `git diff` blocked by the classifier |

@@ -106,7 +106,7 @@ flowchart TD
 The diagram shows the common routes. The full route set includes intake, design
 implementation, blocker recovery, PR stacks, QA verification, session pickup, safe pause,
 babysitting, worktree cleanup, skill authoring, agent design, preference capture, mistake
-correction (`correct`), and `html-report`. A request to review someone else's PR by URL runs
+correction (`improve`), and `html-report`. A request to review someone else's PR by URL runs
 `review-pr`, which posts one comment-only review, leaves it pending for you to submit, or
 returns the feedback without posting, and never approves.
 

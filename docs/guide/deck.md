@@ -144,7 +144,7 @@ also appear as rows in the `/config` menu.
 | Option | Default | Meaning |
 |---|---|---|
 | `realm` | empty | The host and owner whose repositories the deck may run `gh` and lazygit against, for example `github.com/your-org`. Empty means neither runs. A repository whose `origin` is outside the realm shows why it was skipped |
-| `jevMode` | `suggest` | `off`: no suggestion. `suggest`: show and record the fork layer's model pick. `apply`: also set that model on built-in subagent types (`general-purpose`, `Explore`, `Plan`) that named no model. The deck never changes viStack's own agents; the coordinator picks their model with `model-selection` |
+| `jevMode` | `suggest` | `off`: no suggestion. `suggest`: show and record the fork layer's model pick. `apply`: also set that model on built-in subagent types (`general-purpose`, `Explore`, `Plan`) that named no model, only when the fork is sharp; a split fork is shown but never applied. The deck never changes viStack's own agents; the coordinator picks their model with `model-selection` |
 | `autoOpen` | `true` | Dock the deck when a session starts and the terminal is wide enough |
 | `lazygitLauncher` | `auto` | Where lazygit opens: `tmux` (a split), `ghostty`, `iterm`, or `terminal` (a new window). `auto` picks tmux when inside tmux, otherwise the terminal app you run |
 | `vistackRoot` | empty | The folder that holds `scripts/vistack-decision.py`. Empty looks beside the deck and then in the installed marketplace copy |
@@ -346,6 +346,7 @@ checks in this order, and the first match is the reason:
 | a viStack role (`vistack:` prefix) | `the coordinator picks this role's model (model-selection)` |
 | a subagent type outside `general-purpose`, `Explore`, `Plan` | `the deck sets only general-purpose, Explore, Plan` |
 | `jevMode` is not `apply` | `suggest mode; jevMode=apply would set it` |
+| the fork is split | `not applied: the fork is split; the main session decides` |
 | none of the above | `not applied: the answer named no model` |
 
 ### How the ladder line is derived

@@ -166,28 +166,28 @@ class NoFableLeakTests(unittest.TestCase):
 
 class ModelSelectionRefinementTests(unittest.TestCase):
     def test_a_model_settles_a_split_fork_and_the_rung_is_resolved_in_code(self):
-        result = refined(model_context("researcher", "Look up the rename API"), "step-down")
+        result = refined(model_context("researcher", "Look up the rename API"), "pattern-copy")
         self.assertEqual((result.action, result.fork), ("step-down", "sharp"))
         self.assertEqual(picked(result), ("sonnet", "high"))
         self.assertEqual(result.outputs["model"], "ollama:clef-flash")
 
     def test_a_model_step_down_needs_the_higher_floor(self):
-        result = refined(model_context("researcher", "Look up the rename API"), "step-down", confidence=0.72)
+        result = refined(model_context("researcher", "Look up the rename API"), "pattern-copy", confidence=0.72)
         self.assertEqual((result.action, result.fork), ("keep", "split"))
         self.assertIn("0.85", result.fallback_reason)
 
     def test_a_model_cannot_step_down_with_risk_evidence(self):
-        result = refined(model_context("analyst", "Trace the auth token refresh"), "step-down")
+        result = refined(model_context("analyst", "Trace the auth token refresh"), "pattern-copy")
         self.assertEqual((result.action, result.fork), ("step-up", "split"))
         self.assertIn("step-down", result.fallback_reason)
 
     def test_a_model_may_keep_the_default_against_a_weak_up_signal(self):
-        result = refined(model_context("analyst", "Trace the auth token refresh"), "keep")
+        result = refined(model_context("analyst", "Trace the auth token refresh"), "routine")
         self.assertEqual((result.action, result.fork), ("keep", "sharp"))
         self.assertEqual(picked(result), ("opus", "medium"))
 
     def test_a_sharp_fork_is_not_re_read_by_a_model(self):
-        result = refined(model_context("qa-verifier", "Verify the PR"), "step-up")
+        result = refined(model_context("qa-verifier", "Verify the PR"), "judgment")
         self.assertEqual((result.action, result.backend), ("keep", "deterministic"))
 
 

@@ -68,8 +68,8 @@ Free text is allowed, but these carry meaning elsewhere in the plugin:
 | `deviation` | any execution role | work departed from the plan or spec; `reason` says what and why |
 | `pilot-passed` | `coordinator` | the pilot lane's first side effect proved the brief |
 | `failure-triaged` | any execution role | a failing check was classified caused-by-diff, pre-existing, or flaky, with evidence |
-| `correction-recorded` | main session | the operator corrected how an agent works mid-run; `reason` names the mistake and `evidence` the turn |
-| `rule-enforced` | `correct` | a new check failed on a recorded past mistake and passed on the fix; `evidence` is the command and both outputs |
+| `correction-recorded` | main session (`improve`, per-correction pass) | the operator corrected how an agent works mid-run; `reason` is `<class-key>: <the mistake>`, `evidence` the turn; with no run open the row goes to `<state-root>/corrections.tsv` |
+| `rule-enforced` | `improve` | a new check failed on a recorded past mistake and passed on the fix; `reason` starts with the class key, `evidence` is the command and both outputs |
 | `review-posted` | main session (`review-pr`) | one COMMENT review went out on another author's PR inside an open run; `reason` is `N comments on <owner>/<repo>#<n>`, `evidence` the review URL, `result` `skipped` when nothing went out |
 
 ### Worked rows

@@ -132,8 +132,14 @@ a ledger row did not happen.
 - Call the fork layer at four more boundaries, each call and its context named in
   `skills/laya-decision/SKILL.md`, Boundaries: `decomposition` once the slice plan exists,
   `dispatch-readiness` before each `dispatched` row, `runtime-progress` at each monitor pass,
-  and `verification` before reporting merge-ready. A `hold`, `block`, or `request-evidence`
-  answer sends you back to the rule it advises on; a failed call never blocks a dispatch.
+  and `verification` before reporting merge-ready, passing for each acceptance criterion one
+  `evidence` entry whose `output` is the verification command's output captured after the
+  slice's last commit, with one `ref` per criterion. An `escalate` answer means a criterion
+  cannot be judged from output: ask a person. When an analyst map gives more than three file
+  pointers for one slice brief, call `file-selection` with each pointer described in
+  `task.file_summaries` (at most nine) and list the files in `outputs.ranking` order in the
+  brief. A `hold`, `block`, or `request-evidence` answer sends you back to the rule it advises
+  on; a failed call never blocks a dispatch.
 - Run the advisor `plan` checkpoint before the first wave and the `done` checkpoint before
   reporting merge-ready (`skills/advisor/SKILL.md`). Record `advisor-consulted` or
   `advisor-unavailable`.

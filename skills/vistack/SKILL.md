@@ -23,7 +23,7 @@ Once this skill starts, every later turn stays inside the open playbook.
 | A how, why, teach, or recall question that needs only an answer in the thread | Run `skills/understanding/SKILL.md`, then return to the open playbook, or to idle when none is open. Do not re-match. |
 | A request for a handoff, or to pick one up | Run `skills/handoff/SKILL.md`, then return to the open playbook, or to idle when none is open. Do not re-match. |
 | `/vistack:review-watch` with `on`, `off`, `status`, or `pass`, or its loop firing | Run `skills/review-watch/SKILL.md` with that argument, then return to the open playbook, or to idle when none is open. Do not re-match. |
-| The operator corrects how an agent works, not what the work is | Route the fix to the role that owns the mistaken work, add a `correction-recorded` ledger row, and propose `/vistack:correct` for that class in the next phase report. Do not re-match. |
+| The operator corrects how an agent works, not what the work is | Run the per-correction pass in `skills/improve/SKILL.md`: it routes the fix to the owning role, records and classes the correction, and proposes `/vistack:improve` for a repeated class in the next phase report. Do not re-match. |
 | Any other mid-run input | Continue the next unchecked playbook step. |
 | `new task` | Close the current run if safe, then return to the principles index and match again. |
 | A second unrelated request | Finish or run `pause-safely`, then wait for `new task`. |
@@ -82,7 +82,7 @@ decides, and a failed call changes nothing.
 | `authoring-skill` | A SKILL.md or a workflow contract is being created or changed. |
 | `automate-me` | The user wants working preferences captured in a reusable mode skill. |
 | `agent-design` | A new agent, bot, or subagent is being designed for Claude Code, Codex, or OpenCode. |
-| `correct` | The operator wants a repeated agent mistake made impossible, or runs `/correct`. |
+| `improve` | The operator wants a repeated agent mistake made impossible, or runs `/improve` or `/correct`. |
 
 Ties break toward the most specific route. A groomed ticket with no other signal is
 `autopilot-stack`. A large run the user will review later is `overnight` when the request
@@ -237,7 +237,7 @@ What crosses levels:
 | Development | `implementer`, `senior-implementer`, `design-implementer`, by tier |
 | Addressing review comments | the slice's tier owner, through the project's `address-ai-reviews` |
 | Answering comments that tag the operator on another author's PR | `mention-responder`, through `skills/review-watch/SKILL.md` |
-| Feedback | the role that owns the mistaken work, with a `correction-recorded` row (Step 0); a repeat goes to `skills/correct/SKILL.md` |
+| Feedback | the role that owns the mistaken work, through the per-correction pass in `skills/improve/SKILL.md` (Step 0); a repeated class goes to `/vistack:improve` |
 | Fuzzing a local app, and replaying a crash or a fix's proof | `crash-hunter` |
 | DevOps and project health | `devops`; `health-check` audits one diff, not the project |
 
@@ -246,7 +246,7 @@ What crosses levels:
 Laya is the fork layer. It takes the choices that need no thinker, such as which playbook,
 file, tool, tier, or model, and whether to dispatch or retry. When to call it, its boundaries, its
 off switches, and its commands are in `skills/laya-decision/SKILL.md`. Its Boundaries table
-names the call and context for each of the twelve decision types; every call lands in the
+names the call and context for each decision type; every call lands in the
 decision history the deck's Decisions tab reads, and none blocks the run.
 
 ## Reuse existing skills

@@ -11,7 +11,7 @@ file or tool the next step uses, which tier, which model and effort a dispatch r
 dispatch or hold, and retry or stop. A sharp fork, a valid action at or above the confidence
 threshold that every safety gate accepts, is applied in code without a model turn. A split fork returns to the main session, which decides
 and records why. Forks never reach the advisor (`skills/advisor/SKILL.md`). Move a fork from
-split to sharp only through the held-out hillclimb in `docs/guide/decision-engine.md`.
+split to sharp only through the held-out hillclimb in `docs/guide/fork-questions.md`.
 
 Call it only when a choice changes routing, readiness, decomposition, dispatch, runtime
 recovery, verification, or rule review. It is not a coding agent, and it never replaces the
@@ -41,12 +41,15 @@ column. `task.request` is the user's original request, never the enhanced text.
 | each dispatch | `model-selection` | Dispatch rules in `skills/coordinate/SKILL.md` | the agent file's default model and effort |
 | before each `dispatched` ledger row | `dispatch-readiness` | `task.brief`, `task.acceptance_criteria`, `task.verification_command`, `task.writable_files`, `task.dependencies`, `current_state.dependencies_satisfied` | coordinator state, dependencies, and the conflict matrix |
 | each monitor pass | `runtime-progress` | `current_state.phase`, `attempts`, `identical_results`, `stalled`, `blockers` | the stall rule, `unblock`, and the fences |
-| before merge-ready | `verification` | `task.acceptance_criteria`, one `evidence` entry per artifact (`kind`, `ref`, `criterion`, `status`) | captured artifacts tied to each acceptance criterion |
-| after a `correction-recorded` row | `skill-improvement` | `current_state.human_overrides`, `current_state.repeated_pattern` | explicit human review; no automatic skill edits |
-| a step inside a slice | `tool-selection`, `file-selection` | `available_actions`, the candidate tools or files, described by `task.tools` or `task.file_summaries` | the slice's writable files and the fences |
+| before merge-ready | `verification` | `task.acceptance_criteria`, one `evidence` entry per artifact with a distinct `ref` (`kind`, `ref`, `criterion`, and either `status` or `output`: the command's output captured after the last change; code keeps its last 60 lines and 2,000 characters and scrubs secret-shaped text before any model sees it; a passing read of a cut excerpt never accepts) | captured artifacts tied to each acceptance criterion |
+| after a `correction-recorded` row | `skill-improvement` | `task.request` (the correction text), `current_state.human_overrides`, `current_state.repeated_pattern`; the caller is the per-correction pass in `skills/improve/SKILL.md` | explicit human review; no automatic skill edits |
+| a step inside a slice | `tool-selection`, `file-selection` | `available_actions` (at most 9), each candidate described in `task.tools` or `task.file_summaries`; `task.request` carries the step | the slice's writable files and the fences |
 
 `tool-selection` and `file-selection` exit non-zero without `available_actions`, so skip
-them when the step has no explicit candidates.
+them when the step has no explicit candidates. Describe every candidate in `task.tools` or
+`task.file_summaries`, and pass at most 9: an undescribed candidate or a tenth one leaves the
+fork split without asking a model. The rules a question follows, and the five coding-loop
+decisions mapped to these types, are in `docs/guide/fork-questions.md`.
 
 The deck's Types block lists every type above and shows `never asked` for a boundary call the
 coordinator skipped, so a missing call is visible (`docs/guide/deck.md`, The Types block).
@@ -89,7 +92,9 @@ If a tier is unavailable, refused, timed out, malformed, low-confidence, or reje
 safety gate or fence, continue to the next one and finally the deterministic result with
 `fork: split`. `decisions on` alone does not opt into cloud usage. Ollama runs on the machine
 and sends nothing off it; Jev sends the redacted state to TypeSafe and Cloudflare sends it to
-Cloudflare. Credentials alone do not opt in.
+Cloudflare. That state includes verification command output when the coordinator passes it,
+scrubbed of secret-shaped text only, not of customer or personal data; a lowercase
+multi-word passphrase after a key is not blanked. Credentials alone do not opt in.
 
 ## Switches
 

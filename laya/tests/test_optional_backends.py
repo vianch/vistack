@@ -141,15 +141,25 @@ class TypedAnswerTests(unittest.TestCase):
         self.assertIn("split", criteria)
 
     def test_every_choice_stays_within_the_calibrated_option_budget(self):
-        from laya.questions import MAX_CHOICE_OPTIONS, questions_for
-        from laya.schema import DECISION_TYPES, DecisionContext
+        from laya.questions import MAX_CHOICE_OPTIONS, NoQuestion, questions_for
+        from laya.schema import DECISION_TYPES, OPEN_ACTION_TYPES, DecisionContext
 
         for decision_type in DECISION_TYPES:
-            actions = [f"option-{index}" for index in range(15)]
-            context = DecisionContext.from_dict({"decision_type": decision_type, "available_actions": actions}) if decision_type.endswith("selection") and decision_type not in {"playbook-selection", "tier-selection"} else DecisionContext.from_dict({"decision_type": decision_type})
-            for name, question in questions_for(context).items():
-                if question["type"] == "choice":
-                    self.assertLessEqual(len(question["criteria"]), MAX_CHOICE_OPTIONS, f"{decision_type}.{name}")
+            for count in (2, MAX_CHOICE_OPTIONS - 1, 15):
+                actions = [f"option-{index}" for index in range(count)]
+                described = {"tools": {item: f"does job {item}" for item in actions}, "file_summaries": {item: f"holds part {item}" for item in actions}}
+                context = DecisionContext.from_dict(
+                    {"decision_type": decision_type, "task": {"request": "Do the step", **described}, "available_actions": actions}
+                    if decision_type in OPEN_ACTION_TYPES
+                    else {"decision_type": decision_type, "task": {"request": "Do the step"}}
+                )
+                if decision_type in OPEN_ACTION_TYPES and count >= MAX_CHOICE_OPTIONS:
+                    with self.assertRaisesRegex(NoQuestion, f"{count} candidate"):
+                        questions_for(context)
+                    continue
+                for name, question in questions_for(context).items():
+                    if question["type"] == "choice":
+                        self.assertLessEqual(len(question["criteria"]), MAX_CHOICE_OPTIONS, f"{decision_type}.{name}")
 
 
 class OpenForkTests(unittest.TestCase):

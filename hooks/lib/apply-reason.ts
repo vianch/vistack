@@ -39,6 +39,10 @@ export const applyReasonOf = (pick: DeckPick): string => {
     return 'suggest mode; jevMode=apply would set it'
   }
 
+  if (pick.fork === 'split') {
+    return 'not applied: the fork is split; the main session decides'
+  }
+
   return 'not applied: the answer named no model'
 }
 

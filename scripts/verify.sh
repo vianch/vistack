@@ -9,9 +9,10 @@ cd "$root"
 
 node scripts/check-playbooks.mjs
 python3 -m unittest discover -t .
-node --test skills/html-report/scripts/*.test.mjs skills/pruning-comments/scripts/*.test.mjs skills/qa-video/scripts/*.test.mjs skills/review-pr/scripts/*.test.mjs skills/review-watch/scripts/*.test.mjs skills/token-guard/scripts/*.test.mjs skills/understanding/scripts/*.test.mjs skills/crash-hunt/scripts/*.test.mjs scripts/run-routine.test.mjs
+node --test skills/html-report/scripts/*.test.mjs skills/pruning-comments/scripts/*.test.mjs skills/qa-video/scripts/*.test.mjs skills/review-pr/scripts/*.test.mjs skills/review-watch/scripts/*.test.mjs skills/token-guard/scripts/*.test.mjs skills/understanding/scripts/*.test.mjs skills/crash-hunt/scripts/*.test.mjs scripts/run-routine.test.mjs scripts/sync-installed.test.mjs
 bash -n skills/handoff/scripts/handoff.sh
 sh -n scripts/run-routine.sh
+bash -n scripts/sync-installed.sh
 
 # The deck mod: the engine's own manifest and source check, then its tests. CI has no claude CLI.
 if command -v claude >/dev/null 2>&1; then
@@ -23,6 +24,7 @@ fi
 # match. Compare them when the installed copy is on this machine; CI has none and skips this.
 installed="${VISTACK_INSTALLED:-$HOME/.claude/plugins/marketplaces/vistack}"
 if [ -d "$installed" ] && [ "$(cd "$installed" && pwd -P)" != "$(pwd -P)" ]; then
+  scripts/sync-installed.sh --check-version
   # Paths the engine writes into a folder it loads a mod from (.claude-plugin/types/, tsconfig.json)
   # are excluded by anchored rsync patterns, so the root types/ contract is still compared.
   drift="$(rsync -rcn --delete --itemize-changes \
@@ -32,8 +34,7 @@ if [ -d "$installed" ] && [ "$(cd "$installed" && pwd -P)" != "$(pwd -P)" ]; the
   if [ -n "$drift" ]; then
     echo "FAIL the installed copy at $installed differs from this checkout:" >&2
     printf '%s\n' "$drift" | head -20 >&2
-    echo "Sync it with: rsync -a --delete --exclude /.git --exclude /.github --exclude /.claude --exclude /.claude-plugin/types/ --exclude /tsconfig.json \"$root/\" \"$installed/\"" >&2
-    echo "Then start a new session so the hosts reload the plugin." >&2
+    echo "Sync it with: scripts/sync-installed.sh (it backs the installed copy up first and refuses to delete installed-only files without --allow-delete)" >&2
     exit 1
   fi
 fi

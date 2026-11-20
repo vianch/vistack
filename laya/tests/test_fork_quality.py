@@ -9,6 +9,7 @@ from laya.policy import evaluate
 from laya.schema import DecisionContext
 
 
+HAND_BACK = '<agent-message from="analyst">The cache has two callers.</agent-message>'
 DECK_SEGMENT = re.compile(r"(?:^|; )([\w:.-]+) unavailable or rejected: ")
 
 
@@ -75,17 +76,35 @@ class SliceLikenessTests(unittest.TestCase):
             with self.subTest(request=context["task"]["request"]):
                 self.assertTrue(self.slice_like(context))
 
-    def test_questions_investigations_and_chat_are_not_slices(self):
+    def test_hand_backs_and_read_only_briefs_are_not_slices(self):
         for request in (
-            "How does the decision cache work?",
-            "thanks, that looks right",
-            "Investigate why the deck pane is slow",
+            HAND_BACK,
+            '<task-notification status="completed">The build finished</task-notification>',
+            "Map the cache callers\n\nRole: analyst, read-only. Report what calls the cache.",
+            "Review the plan\n\nROLE: reviewer for this run.",
         ):
             with self.subTest(request=request):
                 self.assertFalse(self.slice_like(tier_context(request)))
 
+    def test_questions_and_chat_reach_the_model_which_may_answer_not_a_slice(self):
+        for request in ("How does the decision cache work?", "thanks, that looks right", "Investigate why the deck pane is slow"):
+            with self.subTest(request=request):
+                self.assertTrue(self.slice_like(tier_context(request)))
+        jev = StandIn("not-a-slice", 0.9)
+        result = engine_with_ladder(("jev", jev)).decide(tier_context("thanks, that looks right"))
+        self.assertEqual((jev.calls, result.fork, result.outputs["slice_like"]), (1, "split", False))
+
+    def test_a_role_named_past_the_brief_head_or_a_writing_role_stays_a_slice(self):
+        for request in ("Add the export\n\nRole: implementer. The analyst lane reviews it later.", "Add the export " + "x" * 700 + "\nRole: analyst"):
+            with self.subTest(request=request[:40]):
+                self.assertTrue(self.slice_like(tier_context(request)))
+
+    def test_a_declining_tier_reads_as_its_own_deck_segment(self):
+        result = engine_with_ladder(("jev", StandIn("not-a-slice", 0.9)), ("ollama:clef-flash", Down())).decide(tier_context("thanks, that looks right"))
+        self.assertEqual(deck_reasons(result.fallback_reason), {"jev": "answered 'not-a-slice' to tier at 0.90, so the main session decides"})
+
     def test_a_non_slice_keeps_the_unclear_tier_answer_and_says_why(self):
-        result = DecisionEngine(backend="deterministic").decide(tier_context("How does the decision cache work?"))
+        result = DecisionEngine(backend="deterministic").decide(tier_context(HAND_BACK))
         unclear = evaluate(DecisionContext.from_dict(tier_context("Update the order summary panel")))
         self.assertEqual((result.action, result.confidence), (unclear.action, unclear.confidence))
         self.assertIn("not an implementation slice", result.rationale)
@@ -93,7 +112,7 @@ class SliceLikenessTests(unittest.TestCase):
     def test_a_non_slice_never_touches_the_ladder_even_when_consulting_always(self):
         tiers = [("jev", StandIn("complex", 0.99)), ("cloudflare:clef-flash", StandIn("complex", 0.99, floor=0.85)), ("ollama:clef-flash", Down())]
         engine = engine_with_ladder(*tiers, consult="always")
-        result = engine.decide(tier_context("thanks, that looks right"))
+        result = engine.decide(tier_context(HAND_BACK))
         self.assertEqual([backend.calls for _, backend in tiers], [0, 0, 0])
         self.assertEqual((result.backend, result.fork, result.fallback_used, result.fallback_reason), ("deterministic", "split", False, None))
         self.assertNotIn("model_opinion", result.outputs)

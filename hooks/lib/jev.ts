@@ -219,13 +219,18 @@ export const parseDecision = (stdout: string, expectedType = TIER_SELECTION): De
   return root === null ? null : decisionOf(root, expectedType)
 }
 
-export const rosterModel = (roster: Roster, decision: Decision): string | undefined => {
+const suggestedModel = (roster: Roster, decision: Decision): string | undefined => {
   if (sliceLikeOf(decision.decisionType, decision.outputs) === false) {
     return undefined
   }
 
   return decision.tier === undefined ? decision.model : roster[decision.tier]
 }
+
+// The model the deck may set on a spawn: only a settled (sharp) fork's. A split fork keeps the
+// policy's placeholder action, which no tier confirmed, and returns to the main session.
+export const rosterModel = (roster: Roster, decision: Decision): string | undefined =>
+  decision.fork === 'sharp' ? suggestedModel(roster, decision) : undefined
 
 export const askedOf = (ran: Ran, ms: number, expectedType = TIER_SELECTION): Asked => {
   if (typeof ran === 'string') {
@@ -435,7 +440,7 @@ export const decidedPick = (current: DeckPick, decision: Decision, roster: Roste
   ladder: ladderOf(ladder.length === 0 ? DEFAULT_LADDER : ladder, decision.backend, decision.fallbackReason, decision.rationale),
   outputs: decision.outputs,
   rationale: decision.rationale,
-  recommended: rosterModel(roster, decision) ?? '',
+  recommended: suggestedModel(roster, decision) ?? '',
   requiredEvidence: decision.requiredEvidence,
   risks: decision.risks,
   status: 'decided',

@@ -1,0 +1,71 @@
+{
+  "schema": 1,
+  "generated_at": "2026-11-24T09:00:00Z",
+  "subject": { "login": "sample-dev" },
+  "scope": {
+    "kind": "folder",
+    "label": "example-org checkouts",
+    "repositories": ["example-org/storefront", "example-org/billing"],
+    "skipped": [{ "repository": "outside-org/tools", "reason": "outside realm" }]
+  },
+  "period": { "label": "Last 7 days", "since": "2026-11-17T00:00:00+00:00", "until": "2026-11-24T00:00:00+00:00", "partial": false, "time_zone": "Europe/London" },
+  "sources": [
+    { "name": "git log", "ok": true, "truncated": false, "detail": "2 repositories, 14 commits", "metrics": ["commits", "lines_added", "lines_removed", "files_changed", "active_days"] },
+    { "name": "GitHub search: pull requests", "ok": true, "truncated": false, "detail": "5 pull requests", "metrics": ["prs_opened", "prs_merged", "prs_closed_unmerged", "prs_open", "pr_cycle_time_median_hours"] },
+    { "name": "GitHub search: reviews", "ok": true, "truncated": true, "detail": "page limit reached after 5 results", "metrics": ["prs_reviewed", "review_comments"] },
+    { "name": "GitHub search: comments", "ok": false, "truncated": false, "detail": "HTTP 502 from the search API", "metrics": ["comments"] },
+    { "name": "GitHub search: issues", "ok": true, "truncated": false, "detail": "8 issue rows", "metrics": ["issues_created", "tasks_created", "sub_issues_created", "issues_solved"] }
+  ],
+  "metrics": {
+    "commits": 14, "lines_added": 1210, "lines_removed": 388, "files_changed": 47, "active_days": 5,
+    "prs_opened": 4, "prs_merged": 3, "prs_closed_unmerged": 1, "prs_open": 1, "pr_cycle_time_median_hours": 66.5,
+    "prs_reviewed": 5, "review_comments": 11, "comments": null,
+    "issues_created": 5, "tasks_created": 2, "sub_issues_created": 1, "issues_solved": 3
+  },
+  "daily": [
+    { "date": "2026-11-17", "commits": 3, "prs_opened": 1, "prs_merged": 0, "reviews": 1, "comments": null, "issues_created": 1, "issues_solved": 0 },
+    { "date": "2026-11-18", "commits": 4, "prs_opened": 1, "prs_merged": 1, "reviews": 0, "comments": null, "issues_created": 1, "issues_solved": 1 },
+    { "date": "2026-11-19", "commits": 2, "prs_opened": 0, "prs_merged": 1, "reviews": 2, "comments": null, "issues_created": 0, "issues_solved": 0 },
+    { "date": "2026-11-20", "commits": 3, "prs_opened": 1, "prs_merged": 0, "reviews": 1, "comments": null, "issues_created": 2, "issues_solved": 1 },
+    { "date": "2026-11-21", "commits": 2, "prs_opened": 1, "prs_merged": 1, "reviews": 0, "comments": null, "issues_created": 0, "issues_solved": 0 },
+    { "date": "2026-11-22", "commits": 0, "prs_opened": 0, "prs_merged": 0, "reviews": 0, "comments": null, "issues_created": 0, "issues_solved": 0 },
+    { "date": "2026-11-23", "commits": 0, "prs_opened": 0, "prs_merged": 0, "reviews": 1, "comments": null, "issues_created": 1, "issues_solved": 1 }
+  ],
+  "history": [
+    { "since": "2026-10-20T00:00:00+01:00", "until": "2026-10-27T00:00:00+00:00", "partial": false, "metrics": { "commits": 10, "lines_added": 900, "lines_removed": 300, "files_changed": 30, "active_days": 5, "prs_opened": 3, "prs_merged": 2, "prs_closed_unmerged": 0, "prs_open": 1, "pr_cycle_time_median_hours": 40, "prs_reviewed": 6, "review_comments": 8, "comments": 7, "issues_created": 3, "tasks_created": 1, "sub_issues_created": 0, "issues_solved": 4 } },
+    { "since": "2026-10-27T00:00:00+00:00", "until": "2026-11-03T00:00:00+00:00", "partial": false, "metrics": { "commits": 12, "lines_added": 1100, "lines_removed": 350, "files_changed": 41, "active_days": 5, "prs_opened": 4, "prs_merged": 3, "prs_closed_unmerged": 1, "prs_open": 1, "pr_cycle_time_median_hours": 52.5, "prs_reviewed": 5, "review_comments": 10, "comments": 9, "issues_created": 4, "tasks_created": 1, "sub_issues_created": 1, "issues_solved": 3 } },
+    { "since": "2026-11-03T00:00:00+00:00", "until": "2026-11-10T00:00:00+00:00", "partial": false, "metrics": { "commits": 9, "lines_added": 700, "lines_removed": 280, "files_changed": 25, "active_days": 4, "prs_opened": 2, "prs_merged": 2, "prs_closed_unmerged": 0, "prs_open": 2, "pr_cycle_time_median_hours": 46, "prs_reviewed": 5, "review_comments": 12, "comments": 6, "issues_created": 4, "tasks_created": 2, "sub_issues_created": 1, "issues_solved": 5 } },
+    { "since": "2026-11-10T00:00:00+00:00", "until": "2026-11-17T00:00:00+00:00", "partial": false, "metrics": { "commits": 13, "lines_added": 1300, "lines_removed": 400, "files_changed": 44, "active_days": 6, "prs_opened": 3, "prs_merged": 3, "prs_closed_unmerged": 0, "prs_open": 1, "pr_cycle_time_median_hours": 49.5, "prs_reviewed": 4, "review_comments": 9, "comments": 8, "issues_created": 5, "tasks_created": 1, "sub_issues_created": 0, "issues_solved": 4 } }
+  ],
+  "breakdowns": {
+    "activity_mix": { "commits": 14, "pull_requests": 4, "reviews": 5, "comments": null, "issues": 5 },
+    "issues_by_type": { "Bug": 1, "Feature": 1, "Task": 2, "Other": 1 },
+    "pr_outcomes": { "merged": 3, "open": 1, "closed": 1 }
+  },
+  "items": {
+    "pull_requests": [
+      { "repository": "example-org/storefront", "number": 101, "title": "Fix cart total when a coupon & a gift card stack", "url": "https://example.com/example-org/storefront/pull/101", "state": "merged", "created_at": "2026-11-14T15:00:00Z", "merged_at": "2026-11-18T09:30:00Z", "additions": 84, "deletions": 31 },
+      { "repository": "example-org/storefront", "number": 104, "title": "Add <ProductCard> skeleton while images load", "url": "https://example.com/example-org/storefront/pull/104", "state": "merged", "created_at": "2026-11-17T16:00:00Z", "merged_at": "2026-11-19T10:30:00Z", "additions": 212, "deletions": 40 },
+      { "repository": "example-org/billing", "number": 57, "title": "Retry webhook delivery on 5xx", "url": "https://example.com/example-org/billing/pull/57", "state": "merged", "created_at": "2026-11-18T09:00:00Z", "merged_at": "2026-11-21T03:30:00Z", "additions": 133, "deletions": 18 },
+      { "repository": "example-org/billing", "number": 58, "title": "Draft: \"net 30\" invoice terms", "url": "https://example.com/example-org/billing/pull/58", "state": "open", "created_at": "2026-11-20T11:00:00Z", "merged_at": null, "additions": 96, "deletions": 4 },
+      { "repository": "example-org/storefront", "number": 106, "title": "Try a lighter image config", "url": "https://example.com/example-org/storefront/pull/106", "state": "closed", "created_at": "2026-11-21T13:00:00Z", "merged_at": null, "additions": 12, "deletions": 9 }
+    ],
+    "reviews": [
+      { "repository": "example-org/storefront", "number": 99, "title": "Move price formatting into one helper", "url": "https://example.com/example-org/storefront/pull/99", "submitted_at": "2026-11-17T14:00:00Z", "state": "APPROVED", "comments": 3 },
+      { "repository": "example-org/billing", "number": 55, "title": "Rename ledger columns", "url": "https://example.com/example-org/billing/pull/55", "submitted_at": "2026-11-19T10:00:00Z", "state": "CHANGES_REQUESTED", "comments": 2 },
+      { "repository": "example-org/storefront", "number": 102, "title": "Cache category pages for 60 s", "url": "https://example.com/example-org/storefront/pull/102", "submitted_at": "2026-11-19T15:00:00Z", "state": "APPROVED", "comments": 0 },
+      { "repository": "example-org/billing", "number": 56, "title": "Add VAT rounding tests", "url": "https://example.com/example-org/billing/pull/56", "submitted_at": "2026-11-20T09:00:00Z", "state": "COMMENTED", "comments": 4 },
+      { "repository": "example-org/storefront", "number": 105, "title": "Debounce search under 300 ms", "url": "https://example.com/example-org/storefront/pull/105", "submitted_at": "2026-11-23T18:00:00Z", "state": "APPROVED", "comments": 2 }
+    ],
+    "issues": [
+      { "repository": "example-org/storefront", "number": 31, "title": "Checkout button overlaps the footer on small screens", "url": "https://example.com/example-org/storefront/issues/31", "type": "Bug", "sub_issue": false, "role": "created", "state": "closed", "created_at": "2026-11-17T08:00:00Z", "closed_at": "2026-11-20T16:00:00Z" },
+      { "repository": "example-org/storefront", "number": 32, "title": "Saved carts", "url": "https://example.com/example-org/storefront/issues/32", "type": "Feature", "sub_issue": false, "role": "created", "state": "open", "created_at": "2026-11-18T12:00:00Z", "closed_at": null },
+      { "repository": "example-org/billing", "number": 12, "title": "Write the refund runbook", "url": "https://example.com/example-org/billing/issues/12", "type": "Task", "sub_issue": true, "role": "created", "state": "open", "created_at": "2026-11-20T10:00:00Z", "closed_at": null },
+      { "repository": "example-org/billing", "number": 13, "title": "Rotate the sandbox signing secret", "url": "https://example.com/example-org/billing/issues/13", "type": "Task", "sub_issue": false, "role": "created", "state": "open", "created_at": "2026-11-20T11:00:00Z", "closed_at": null },
+      { "repository": "example-org/storefront", "number": 33, "title": "How long is the 'returns' window?", "url": "https://example.com/example-org/storefront/issues/33", "type": "Other", "sub_issue": false, "role": "created", "state": "open", "created_at": "2026-11-23T09:00:00Z", "closed_at": null },
+      { "repository": "example-org/billing", "number": 9, "title": "Archive invoices older than 7 years", "url": "https://example.com/example-org/billing/issues/9", "type": "Task", "sub_issue": null, "role": "solved", "state": "closed", "created_at": "2026-11-10T09:00:00Z", "closed_at": "2026-11-18T17:00:00Z" },
+      { "repository": "example-org/storefront", "number": 31, "title": "Checkout button overlaps the footer on small screens", "url": "https://example.com/example-org/storefront/issues/31", "type": "Bug", "sub_issue": false, "role": "solved", "state": "closed", "created_at": "2026-11-17T08:00:00Z", "closed_at": "2026-11-20T16:00:00Z" },
+      { "repository": "example-org/storefront", "number": 28, "title": "Gift card balance page", "url": "https://example.com/example-org/storefront/issues/28", "type": "Feature", "sub_issue": false, "role": "solved", "state": "closed", "created_at": "2026-11-02T09:00:00Z", "closed_at": "2026-11-23T20:00:00Z" }
+    ]
+  }
+}

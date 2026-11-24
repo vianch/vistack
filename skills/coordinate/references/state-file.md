@@ -17,6 +17,7 @@ updates it on every transition.
   "permissions": "Commit and push slice branches. Leave PRs as drafts. Do not merge.",
   "escape_hatch": "Stop with a blocker dossier after the bounded unblock loop",
   "base_branch": "main",
+  "glossary": {"layout": "single", "files": ["GLOSSARY.md"], "adr_dir": "docs/adr"},
   "host": "claude-code",
   "coordinator_session_id": "session_011xyz",
   "monitor": {
@@ -52,7 +53,8 @@ updates it on every transition.
 ```
 
 The fields are additive to the existing schema, so pickup reads older runs, and an update
-preserves every key it does not know.
+preserves every key it does not know. `glossary` is optional and additive; its values
+are in `skills/understanding-with-docs/references/glossary-check.md`.
 
 ## Slice fields
 

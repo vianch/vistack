@@ -119,6 +119,9 @@ These run on their own or mid-run, and return to the open playbook when one exis
 /vistack:understanding why does the refund window skip weekends?
 /vistack:understanding teach me how the event bus retries
 /vistack:understanding recall what did we decide about the cart cache?
+/vistack:understanding grill my plan to split the cart service
+/vistack:understanding-with-docs glossary
+/vistack:understanding-with-docs grill the refund flow
 /vistack:handoff finish the review fixes on the cart branch
 /vistack:handoff pickup
 /vistack:pruning-comments
@@ -129,8 +132,19 @@ These run on their own or mid-run, and return to the open playbook when one exis
 `investigation`. `handoff` writes or resumes a handoff document under
 `~/.claude/handoff-documents/` (`skills/handoff/SKILL.md`). `pruning-comments` removes the
 comments a diff added outside the allowed cases (`skills/pruning-comments/SKILL.md`). On
-Codex the same skills run as `$vistack:understanding`, `$vistack:handoff`, and
-`$vistack:pruning-comments`.
+Codex the same skills run as `$vistack:understanding`, `$vistack:understanding-with-docs`,
+`$vistack:handoff`, and `$vistack:pruning-comments`.
+
+`understanding grill` interviews you about a plan in rounds of numbered questions, each with
+a recommended answer, until no branch is open and you confirm the shared understanding. It
+stays read-only. `understanding-with-docs` is the version that writes: it records the
+project's terms in a `GLOSSARY.md` (or a `GLOSSARY-MAP.md` with one glossary per context) and
+offers an ADR under `docs/adr/` for a hard-to-reverse decision
+(`skills/understanding-with-docs/SKILL.md`). A repository that already keeps a glossary or
+ADRs under another name keeps its own files.
+Every viStack run checks for the glossary at setup and names it in each brief, and one slice
+updates it when the work adds, renames, or retires a term. A run with no glossary creates
+none and suggests `/vistack:understanding-with-docs glossary` in its report.
 
 ## Reports and pages
 
@@ -146,6 +160,21 @@ Claude artifact link on Claude Code. A run with more than one slice, or any unat
 ends with a run report the same way, so the first thing to open after an overnight run is a
 page, not the ledger. "Explain how X works" with a recommendation stays `investigation`; a
 plain question runs `understanding`. Either answer may also render as a page. The contract is `skills/html-report/SKILL.md`.
+
+## Your own activity
+
+```text
+/vistack:user-performance
+/vistack:user-performance last 30 days folder --realm github.com/example-org
+/vistack:user-performance last full week org example-org
+```
+
+`user-performance` reports your own commits, pull requests, reviews, comments, and issues
+for a period as one page of tiles and pie, bar, and line charts, with the trend against the
+periods before (`skills/user-performance/SKILL.md`). With no period named it asks once, and
+with no answer it reports the last 7 days. It reads only repositories inside the realm,
+which comes from `--realm` or your checkout's origin, and on Codex it runs as
+`$vistack:user-performance`.
 
 ## The four fences
 

@@ -9,7 +9,7 @@ cd "$root"
 
 node scripts/check-playbooks.mjs
 python3 -m unittest discover -t .
-node --test skills/html-report/scripts/*.test.mjs skills/pruning-comments/scripts/*.test.mjs skills/qa-video/scripts/*.test.mjs skills/review-pr/scripts/*.test.mjs skills/review-watch/scripts/*.test.mjs skills/token-guard/scripts/*.test.mjs skills/understanding/scripts/*.test.mjs skills/crash-hunt/scripts/*.test.mjs scripts/run-routine.test.mjs scripts/sync-installed.test.mjs
+node --test skills/html-report/scripts/*.test.mjs skills/pruning-comments/scripts/*.test.mjs skills/qa-video/scripts/*.test.mjs skills/review-pr/scripts/*.test.mjs skills/review-watch/scripts/*.test.mjs skills/token-guard/scripts/*.test.mjs skills/understanding/scripts/*.test.mjs skills/user-performance/scripts/*.test.mjs skills/crash-hunt/scripts/*.test.mjs scripts/run-routine.test.mjs scripts/sync-installed.test.mjs scripts/install-aliases.test.mjs
 bash -n skills/handoff/scripts/handoff.sh
 sh -n scripts/run-routine.sh
 bash -n scripts/sync-installed.sh

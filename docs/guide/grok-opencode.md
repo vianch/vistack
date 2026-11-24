@@ -41,7 +41,7 @@ OpenCode reads skills from `~/.config/opencode/skills/<name>/SKILL.md` and a pro
 in step with the checkout and their `scripts/` folders resolve beside them:
 
 ```bash
-for skill in understanding handoff pruning-comments review-pr; do
+for skill in understanding understanding-with-docs handoff pruning-comments review-pr user-performance; do
   ln -sfn /path/to/vistack/skills/$skill ~/.config/opencode/skills/$skill
 done
 ```

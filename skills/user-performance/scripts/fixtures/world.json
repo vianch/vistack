@@ -1,0 +1,106 @@
+{
+  "user": { "login": "sample-dev", "id": 1, "type": "User" },
+  "checkouts": {
+    "billing": {
+      "origin": "https://github.com/example-org/billing.git",
+      "email": "sample-dev@example.com",
+      "log": "\u001eb1\u001fsample-dev@example.com\u001f2026-11-19T14:00:00+01:00\n\n10\t2\tlib/invoice.rb\n3\t0\tlib/{ => tax}/rate.rb\n"
+    },
+    "lookalike": { "origin": "ssh://git@github.com/example-org-evil/storefront.git" },
+    "scratch": { "origin": null },
+    "storefront": {
+      "origin": "git@github.com:example-org/storefront.git",
+      "email": "sample-dev@example.com",
+      "log": "\u001ec6\u001fsample-dev@example.com\u001f2026-11-24T08:00:00+00:00\n\n1\t1\tsrc/late.ts\n\u001ec5\u001fsample-dev@example.com\u001f2026-11-21T08:00:00+00:00\n\n\u001ec3\u001fsomeone-else@example.com\u001f2026-11-20T09:00:00+00:00\n\n5\t5\tsrc/x.ts\n\u001ec2\u001fsample-dev@users.noreply.example.com\u001f2026-11-18T23:30:00-05:00\n1\t0\tsrc/cart.ts\n\u001ec1\u001fSample-Dev@Example.com\u001f2026-11-18T10:15:00+00:00\n\n12\t3\tsrc/cart.ts\n-\t-\tassets/logo.png\n4\t4\tsrc/{old => new}/price.ts\n1\t0\t\"docs/odd\\036name | {x}.md\"\n\n\u001ec4\u001fsample-dev@example.com\u001f2026-11-10T09:00:00+00:00\n\n2\t1\tREADME.md\n"
+    },
+    "tool": { "origin": "git@github.com:other-org/tool.git" }
+  },
+  "searches": {
+    "storefront created": [
+      { "issueCount": 4, "nodes": [
+        { "__typename": "PullRequest", "number": 101, "title": "Add cart badge", "url": "https://github.com/example-org/storefront/pull/101", "state": "MERGED", "createdAt": "2026-11-17T09:00:00Z", "mergedAt": "2026-11-18T05:00:00Z", "closedAt": "2026-11-18T05:00:00Z", "additions": 120, "deletions": 14, "repository": { "nameWithOwner": "example-org/storefront" } },
+        { "__typename": "PullRequest", "number": 102, "title": "Checkout copy for help@example-shop.test", "url": "https://github.com/example-org/storefront/pull/102", "state": "OPEN", "createdAt": "2026-11-19T10:00:00Z", "mergedAt": null, "closedAt": null, "additions": 30, "deletions": 2, "repository": { "nameWithOwner": "example-org/storefront" } }
+      ] },
+      { "nodes": [
+        { "__typename": "PullRequest", "number": 103, "title": "Try a carousel", "url": "https://github.com/example-org/storefront/pull/103", "state": "CLOSED", "createdAt": "2026-11-20T10:00:00Z", "mergedAt": null, "closedAt": "2026-11-21T10:00:00Z", "additions": 50, "deletions": 0, "repository": { "nameWithOwner": "example-org/storefront" } },
+        { "__typename": "PullRequest", "number": 95, "title": "Fix price rounding", "url": "https://github.com/example-org/storefront/pull/95", "state": "MERGED", "createdAt": "2026-11-05T10:00:00Z", "mergedAt": "2026-11-06T10:00:00Z", "closedAt": "2026-11-06T10:00:00Z", "additions": 8, "deletions": 3, "repository": { "nameWithOwner": "example-org/storefront" } }
+      ] }
+    ],
+    "storefront merged": [
+      { "nodes": [
+        { "__typename": "PullRequest", "number": 101, "title": "Add cart badge", "url": "https://github.com/example-org/storefront/pull/101", "state": "MERGED", "createdAt": "2026-11-17T09:00:00Z", "mergedAt": "2026-11-18T05:00:00Z", "closedAt": "2026-11-18T05:00:00Z", "additions": 120, "deletions": 14, "repository": { "nameWithOwner": "example-org/storefront" } },
+        { "__typename": "PullRequest", "number": 90, "title": "Refactor basket", "url": "https://github.com/example-org/storefront/pull/90", "state": "MERGED", "createdAt": "2026-10-01T00:00:00Z", "mergedAt": "2026-11-17T12:00:00Z", "closedAt": "2026-11-17T12:00:00Z", "additions": 400, "deletions": 250, "repository": { "nameWithOwner": "example-org/storefront" } },
+        { "__typename": "PullRequest", "number": 95, "title": "Fix price rounding", "url": "https://github.com/example-org/storefront/pull/95", "state": "MERGED", "createdAt": "2026-11-05T10:00:00Z", "mergedAt": "2026-11-06T10:00:00Z", "closedAt": "2026-11-06T10:00:00Z", "additions": 8, "deletions": 3, "repository": { "nameWithOwner": "example-org/storefront" } }
+      ] }
+    ],
+    "storefront closed": [
+      { "nodes": [
+        { "__typename": "PullRequest", "number": 101, "title": "Add cart badge", "url": "https://github.com/example-org/storefront/pull/101", "state": "MERGED", "createdAt": "2026-11-17T09:00:00Z", "mergedAt": "2026-11-18T05:00:00Z", "closedAt": "2026-11-18T05:00:00Z", "additions": 120, "deletions": 14, "repository": { "nameWithOwner": "example-org/storefront" } },
+        { "__typename": "PullRequest", "number": 103, "title": "Try a carousel", "url": "https://github.com/example-org/storefront/pull/103", "state": "CLOSED", "createdAt": "2026-11-20T10:00:00Z", "mergedAt": null, "closedAt": "2026-11-21T10:00:00Z", "additions": 50, "deletions": 0, "repository": { "nameWithOwner": "example-org/storefront" } },
+        { "__typename": "PullRequest", "number": 80, "title": "Old search experiment", "url": "https://github.com/example-org/storefront/pull/80", "state": "CLOSED", "createdAt": "2026-09-01T10:00:00Z", "mergedAt": null, "closedAt": "2026-11-22T10:00:00Z", "additions": 90, "deletions": 40, "repository": { "nameWithOwner": "example-org/storefront" } }
+      ] }
+    ],
+    "storefront open": [
+      { "nodes": [
+        { "__typename": "PullRequest", "number": 102, "title": "Checkout copy for help@example-shop.test", "url": "https://github.com/example-org/storefront/pull/102", "state": "OPEN", "createdAt": "2026-11-19T10:00:00Z", "mergedAt": null, "closedAt": null, "additions": 30, "deletions": 2, "repository": { "nameWithOwner": "example-org/storefront" } },
+        { "__typename": "PullRequest", "number": 85, "title": "Long-running theme work", "url": "https://github.com/example-org/storefront/pull/85", "state": "OPEN", "createdAt": "2026-08-01T10:00:00Z", "mergedAt": null, "closedAt": null, "additions": 700, "deletions": 120, "repository": { "nameWithOwner": "example-org/storefront" } }
+      ] }
+    ],
+    "billing created": [
+      { "nodes": [
+        { "__typename": "PullRequest", "number": 7, "title": "Tax rates by region", "url": "https://github.com/example-org/billing/pull/7", "state": "MERGED", "createdAt": "2026-11-18T08:00:00Z", "mergedAt": "2026-11-19T08:30:00Z", "closedAt": "2026-11-19T08:30:00Z", "additions": 60, "deletions": 10, "repository": { "nameWithOwner": "example-org/billing" } }
+      ] }
+    ],
+    "storefront reviewed": [
+      { "nodes": [
+        { "__typename": "PullRequest", "number": 200, "title": "Speed up search", "url": "https://github.com/example-org/storefront/pull/200", "repository": { "nameWithOwner": "example-org/storefront" }, "reviews": { "totalCount": 3, "nodes": [
+          { "submittedAt": "2026-11-18T10:00:00Z", "state": "COMMENTED", "author": { "login": "sample-dev" }, "comments": { "totalCount": 2 } },
+          { "submittedAt": "2026-11-19T11:00:00Z", "state": "APPROVED", "author": { "login": "Sample-Dev" }, "comments": { "totalCount": 0 } },
+          { "submittedAt": null, "state": "PENDING", "author": { "login": "sample-dev" }, "comments": { "totalCount": 1 } }
+        ] } },
+        { "__typename": "PullRequest", "number": 201, "title": "Update fonts", "url": "https://github.com/example-org/storefront/pull/201", "repository": { "nameWithOwner": "example-org/storefront" }, "reviews": { "totalCount": 1, "nodes": [
+          { "submittedAt": "2026-11-12T10:00:00Z", "state": "APPROVED", "author": { "login": "sample-dev" }, "comments": { "totalCount": 1 } }
+        ] } },
+        { "__typename": "PullRequest", "number": 202, "title": "Billing webhooks", "url": "https://github.com/example-org/storefront/pull/202", "repository": { "nameWithOwner": "example-org/storefront" }, "reviews": { "totalCount": 1, "nodes": [
+          { "submittedAt": "2026-11-20T15:00:00Z", "state": "CHANGES_REQUESTED", "author": { "login": "sample-dev" }, "comments": { "totalCount": 3 } }
+        ] } }
+      ] }
+    ],
+    "storefront commented": [
+      { "nodes": [
+        { "__typename": "Issue", "number": 50, "repository": { "nameWithOwner": "example-org/storefront" }, "comments": { "totalCount": 4, "nodes": [
+          { "author": { "login": "sample-dev" }, "createdAt": "2026-11-02T09:00:00Z" },
+          { "author": { "login": "sample-dev" }, "createdAt": "2026-11-18T12:00:00Z" },
+          { "author": null, "createdAt": "2026-11-18T13:00:00Z" },
+          { "author": { "login": "other-dev" }, "createdAt": "2026-11-18T14:00:00Z" }
+        ] } },
+        { "__typename": "PullRequest", "number": 200, "repository": { "nameWithOwner": "example-org/storefront" }, "comments": { "totalCount": 1, "nodes": [
+          { "author": { "login": "sample-dev" }, "createdAt": "2026-11-21T09:00:00Z" }
+        ] } }
+      ] }
+    ],
+    "storefront issues-created": [
+      { "nodes": [
+        { "__typename": "Issue", "number": 60, "title": "Cart total wrong for bundles", "url": "https://github.com/example-org/storefront/issues/60", "state": "OPEN", "stateReason": null, "createdAt": "2026-11-18T08:00:00Z", "closedAt": null, "repository": { "nameWithOwner": "example-org/storefront" }, "assignees": { "nodes": [] }, "issueType": { "name": "Task" }, "parent": { "number": 40 } },
+        { "__typename": "Issue", "number": 61, "title": "Coupon field overlaps", "url": "https://github.com/example-org/storefront/issues/61", "state": "CLOSED", "stateReason": "COMPLETED", "createdAt": "2026-11-19T08:00:00Z", "closedAt": "2026-11-20T10:00:00Z", "repository": { "nameWithOwner": "example-org/storefront" }, "assignees": { "nodes": [{ "login": "sample-dev" }] }, "issueType": { "name": "Bug" }, "parent": null },
+        { "__typename": "Issue", "number": 62, "title": "Document cart events", "url": "https://github.com/example-org/storefront/issues/62", "state": "OPEN", "stateReason": null, "createdAt": "2026-11-20T09:00:00Z", "closedAt": null, "repository": { "nameWithOwner": "example-org/storefront" }, "assignees": { "nodes": [] }, "issueType": null, "parent": null },
+        { "__typename": "Issue", "number": 55, "title": "Gift cards", "url": "https://github.com/example-org/storefront/issues/55", "state": "OPEN", "stateReason": null, "createdAt": "2026-11-11T09:00:00Z", "closedAt": null, "repository": { "nameWithOwner": "example-org/storefront" }, "assignees": { "nodes": [] }, "issueType": { "name": "Feature" }, "parent": null }
+      ] }
+    ],
+    "storefront solved-assigned": [
+      { "nodes": [
+        { "__typename": "Issue", "number": 61, "title": "Coupon field overlaps", "url": "https://github.com/example-org/storefront/issues/61", "state": "CLOSED", "stateReason": "COMPLETED", "createdAt": "2026-11-19T08:00:00Z", "closedAt": "2026-11-20T10:00:00Z", "repository": { "nameWithOwner": "example-org/storefront" }, "assignees": { "nodes": [{ "login": "sample-dev" }] }, "issueType": { "name": "Bug" }, "parent": null, "closedByPullRequestsReferences": { "nodes": [] }, "timelineItems": { "nodes": [] } },
+        { "__typename": "Issue", "number": 74, "title": "Old checkout bug", "url": "https://github.com/example-org/storefront/issues/74", "state": "CLOSED", "stateReason": "COMPLETED", "createdAt": "2026-11-01T09:00:00Z", "closedAt": "2026-11-13T09:00:00Z", "repository": { "nameWithOwner": "example-org/storefront" }, "assignees": { "nodes": [{ "login": "sample-dev" }] }, "issueType": { "name": "Bug" }, "parent": null, "closedByPullRequestsReferences": { "nodes": [] }, "timelineItems": { "nodes": [] } },
+        { "__typename": "Issue", "number": 73, "title": "Will not fix", "url": "https://github.com/example-org/storefront/issues/73", "state": "CLOSED", "stateReason": "NOT_PLANNED", "createdAt": "2026-11-02T09:00:00Z", "closedAt": "2026-11-21T09:00:00Z", "repository": { "nameWithOwner": "example-org/storefront" }, "assignees": { "nodes": [{ "login": "sample-dev" }] }, "issueType": null, "parent": null, "closedByPullRequestsReferences": { "nodes": [] }, "timelineItems": { "nodes": [] } }
+      ] }
+    ],
+    "storefront solved-closed": [
+      { "nodes": [
+        { "__typename": "Issue", "number": 70, "title": "Price flicker", "url": "https://github.com/example-org/storefront/issues/70", "state": "CLOSED", "stateReason": "COMPLETED", "createdAt": "2026-11-15T09:00:00Z", "closedAt": "2026-11-21T10:00:00Z", "repository": { "nameWithOwner": "example-org/storefront" }, "assignees": { "nodes": [] }, "issueType": { "name": "Bug" }, "parent": null, "closedByPullRequestsReferences": { "nodes": [{ "state": "MERGED", "author": { "login": "sample-dev" } }] }, "timelineItems": { "nodes": [] } },
+        { "__typename": "Issue", "number": 71, "title": "Stale banner", "url": "https://github.com/example-org/storefront/issues/71", "state": "CLOSED", "stateReason": "COMPLETED", "createdAt": "2026-11-15T09:00:00Z", "closedAt": "2026-11-21T11:00:00Z", "repository": { "nameWithOwner": "example-org/storefront" }, "assignees": { "nodes": [] }, "issueType": null, "parent": { "number": 40 }, "closedByPullRequestsReferences": { "nodes": [] }, "timelineItems": { "nodes": [{ "__typename": "ClosedEvent", "closer": { "__typename": "PullRequest", "author": { "login": "sample-dev" } } }] } },
+        { "__typename": "Issue", "number": 72, "title": "Slow images", "url": "https://github.com/example-org/storefront/issues/72", "state": "CLOSED", "stateReason": "COMPLETED", "createdAt": "2026-11-15T09:00:00Z", "closedAt": "2026-11-22T10:00:00Z", "repository": { "nameWithOwner": "example-org/storefront" }, "assignees": { "nodes": [] }, "issueType": null, "parent": null, "closedByPullRequestsReferences": { "nodes": [{ "state": "MERGED", "author": { "login": "other-dev" } }] }, "timelineItems": { "nodes": [{ "__typename": "ClosedEvent", "closer": { "__typename": "PullRequest", "author": { "login": "other-dev" } } }] } },
+        { "__typename": "Issue", "number": 75, "title": "Linked by an unmerged PR", "url": "https://github.com/example-org/storefront/issues/75", "state": "CLOSED", "stateReason": "COMPLETED", "createdAt": "2026-11-15T09:00:00Z", "closedAt": "2026-11-22T12:00:00Z", "repository": { "nameWithOwner": "example-org/storefront" }, "assignees": { "nodes": [] }, "issueType": null, "parent": null, "closedByPullRequestsReferences": { "nodes": [{ "state": "CLOSED", "author": { "login": "sample-dev" } }] }, "timelineItems": { "nodes": [{ "__typename": "ClosedEvent", "closer": null }] } }
+      ] }
+    ]
+  }
+}

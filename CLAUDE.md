@@ -16,6 +16,7 @@ differ and prints the sync command.
 claude plugin details vistack    # component inventory; count skills/agents to verify loading
 /vistack:vistack <request>       # canonical plugin entry point
 /vistack:run|orchestrator|coordinator <request> # equivalent aliases
+/vistack:aliases install|status|uninstall   # bare-name aliases (/qa-video, /review-pr) in ~/.claude/skills
 codex plugin add vistack@vistack # install from the Codex marketplace
 $vistack:vistack <request>       # canonical Codex skill in a new thread
 $vistack:run|orchestrator|coordinator <request> # equivalent aliases

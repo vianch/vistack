@@ -71,7 +71,9 @@ Publish and give the link. Artifacts start private; sharing is the user's call. 
 holds a credential, token, cookie, or secret value is never published. Keep the local file
 and say why.
 
-On Codex and OpenCode, deliver the local file only.
+On Codex, Grok Build, and OpenCode, deliver the local file. When the user asks for a Claude
+artifact there, also deliver the artifact form as its own file (a script's `--artifact`
+output, or the page without its doctype and meta lines) for them to publish.
 
 `report-writer` renders the file and returns its path; it never publishes and never writes
 the ledger. The main session, which is the coordinator in a coordinated run, records both

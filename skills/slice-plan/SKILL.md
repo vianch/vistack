@@ -21,6 +21,8 @@ without a matrix is a dispatch that will corrupt a file.
 - **One concern each.** The slice boundary is a reason for the change, not a line count.
 - **File-level ownership.** Every slice lists the files it will create, modify, and delete.
   A file with no owning slice does not get touched; a file with two owners is a conflict.
+  Glossary files and ADRs are assigned by `skills/understanding-with-docs/references/glossary-check.md`,
+  In a run.
 - **Complete briefs.** Each slice names its goal, context, acceptance checks, exact verify
   command, timebox, forbidden actions, and report shape before it is dispatched.
 - **Delete first.** Check for unused code before planning a port

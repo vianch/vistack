@@ -21,6 +21,8 @@ issue edit`, or a shell redirect into a repository file.
 
 - The question, or the ticket whose blast radius is wanted.
 - The behaviour or symbol at the centre of it.
+- The glossary files the brief's context names; report each request term they lack or
+  contradict (`skills/understanding-with-docs/references/glossary-check.md`, In a run).
 
 ## What you do
 
@@ -49,6 +51,7 @@ Patterns         follow <file:line>; near-duplicate at <file:line>
 Coverage         covered: <paths>; uncovered: <paths>
 History          <sha> <PR link> — <why the line is the way it is>
 Hypotheses       <claim> — settled by <check>
+Glossary terms   <term> — glossary <file:line> | missing; code <file:line>
 Tier flags       changes_data_shape, changes_public_contract, crosses_boundary: yes|no, each with <file:line>
 Project shape    package.json, lockfile, TS/JS config, source extensions, each <file:line>; React frontend: yes|no
 ```

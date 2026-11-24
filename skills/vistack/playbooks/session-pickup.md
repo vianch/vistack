@@ -7,7 +7,9 @@ ledger and the repository record reality.
 
 1. Resolve the host and slug. If no slug is supplied, list state files with modification
    times and ask which run to resume.
-2. Read `<state-root>/<slug>.json`, preserving unknown fields. Read the ledger from the end
+2. Read `<state-root>/<slug>.json`, preserving unknown fields; a state file without
+   `glossary` runs the check in `skills/understanding-with-docs/references/glossary-check.md`
+   and records it. Read the ledger from the end
    backward until every slice's phase and last decision are clear. A run report under
    `<state-root>/reports/` is a rendering; reconcile from the state file and ledger, never
    from the report.

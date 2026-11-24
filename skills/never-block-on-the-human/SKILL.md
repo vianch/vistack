@@ -18,6 +18,12 @@ continue. Waiting is a cost, not a safety mechanism.
 - A request to state a plan is not permission to execute it. State it and wait for an
   explicit go when the playbook requires one.
 
+## Nobody to answer
+
+An unattended run, a headless session, and a dispatched lane have nobody to answer. A
+question asked there is never answered, so work that needs one returns it for later instead
+of waiting.
+
 ## Test
 
 If the action can be reverted without data loss, force-push, a production change, a secret

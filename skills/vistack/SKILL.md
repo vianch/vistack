@@ -20,8 +20,11 @@ Once this skill starts, every later turn stays inside the open playbook.
 | `babysit <slug>` or a monitor wake | Run one babysit pass, then return to the open playbook. Do not re-match. |
 | A request for a report, chart, diagram, flow, architecture view, or other page about the open run | Run `skills/html-report/SKILL.md` against the run's state and ledger, then return to the open playbook. Do not re-match. |
 | A request to review, comment on, or give feedback on someone else's PR by URL | Run `skills/review-pr/SKILL.md`, then return to the open playbook, or to idle when none is open. Do not re-match. |
-| A how, why, teach, or recall question that needs only an answer in the thread | Run `skills/understanding/SKILL.md`, then return to the open playbook, or to idle when none is open. Do not re-match. |
+| A how, why, teach, or recall question that needs only an answer in the thread, including what a term means or a read-only glossary check, or a request to grill a plan without writing docs | Run `skills/understanding/SKILL.md`, then return to the open playbook, or to idle when none is open. Do not re-match. |
+| A request to build or update the glossary or vocabulary, record an ADR, or grill a plan and write the docs | Run `skills/understanding-with-docs/SKILL.md`, then return to the open playbook, or to idle when none is open. Do not re-match. |
+| A reply to an open grill round | Continue the grill (`skills/understanding/SKILL.md` or `skills/understanding-with-docs/SKILL.md`) until the user confirms or says stop, then return to the open playbook. Do not re-match. |
 | A request for a handoff, or to pick one up | Run `skills/handoff/SKILL.md`, then return to the open playbook, or to idle when none is open. Do not re-match. |
+| A request for the operator's own activity, performance, or contribution report for a period | Run `skills/user-performance/SKILL.md`, then return to the open playbook, or to idle when none is open. Do not re-match. |
 | `/vistack:review-watch` with `on`, `off`, `status`, or `pass`, or its loop firing | Run `skills/review-watch/SKILL.md` with that argument, then return to the open playbook, or to idle when none is open. Do not re-match. |
 | The operator corrects how an agent works, not what the work is | Run the per-correction pass in `skills/improve/SKILL.md`: it routes the fix to the owning role, records and classes the correction, and proposes `/vistack:improve` for a repeated class in the next phase report. Do not re-match. |
 | Any other mid-run input | Continue the next unchecked playbook step. |
@@ -91,7 +94,13 @@ many days is `multi-phase-plan`; it must still state its size and finish predica
 explicit request for an HTML page, chart, diagram, or artifact matches `html-report`. A
 request to understand or explain something that needs a recommendation, several angles, or a
 report matches `investigation`, whose report step renders through `html-report`; one that
-needs only an answer in the thread runs `skills/understanding/SKILL.md` from Step 0. A request
+needs only an answer in the thread runs `skills/understanding/SKILL.md` from Step 0. A first
+request to grill a plan or to document the repository's vocabulary runs from Step 0 too, not
+as `investigation`, `feature`, or `html-report`, and a grill or stress-test is not
+`interrogate` or `architect`, whose object is a diff or a design to produce.
+A first request for the operator's own
+activity, PR stats, or performance charts runs `skills/user-performance/SKILL.md` from Step 0,
+not as `html-report` or `investigation`. A request
 that names its change matches `refactor`, `bug-fix`, or `feature`, and one that leaves the
 pick to the agent is `maintenance` (`skills/maintenance/references/triggers.md`). Fuzzing or
 sending malformed requests until something crashes is `crash-hunt`; a request to fix one

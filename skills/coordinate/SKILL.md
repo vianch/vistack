@@ -71,6 +71,8 @@ the monitor; never start a second one to cover a stale first.
    the request verbatim as `request` and the router's enhanced text as `request_enhanced`
    (`skills/prompt-enhancer/SKILL.md`), and append its `prompt-enhanced` ledger row. Pickup
    resumes from these keys and does not enhance again.
+6. Run the glossary check (`skills/understanding-with-docs/references/glossary-check.md`) and
+   record its result as `glossary` in the state file; every brief's context names it.
 
 ## State file
 
@@ -147,6 +149,8 @@ a ledger row did not happen.
   dispatch stops. A QA lane is not a slice and is not counted.
 - Read the conflict matrix before every wave. Shared files serialize. Disjoint slices may
   run in parallel.
+- The glossary files and any ADR have one owning slice per run; other slices report term
+  changes to it (`skills/understanding-with-docs/references/glossary-check.md`, In a run).
 - A wave or queue of five or more lanes dispatches one pilot lane first. Fan out after the
   pilot's first side effect (a commit, captured artifact, or check delta) proves the brief,
   and record `pilot-passed`. A pilot that fails gets its brief fixed before any other lane

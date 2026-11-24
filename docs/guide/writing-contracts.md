@@ -36,7 +36,8 @@ home and check that the pointers still describe it.
 | Reviewing another author's PR, its modes (post, pending, feedback), the COMMENT-only boundary, and the findings shape | `skills/review-pr/SKILL.md` (Permissions, Modes), `skills/review-pr/references/findings.md` |
 | Making a repeated mistake impossible: the per-correction pass, the fix ladder, the proof, and the rule table | `skills/improve/SKILL.md` |
 | The comment policy: what may be written, what is pruned, and where a deleted comment's meaning goes | `skills/pruning-comments/SKILL.md` (The policy) |
-| How, why, teach, and recall answers, and the transcript search | `skills/understanding/SKILL.md` |
+| How, why, teach, recall, and grill answers, and the transcript search | `skills/understanding/SKILL.md` |
+| The glossary check and when a run updates the glossary; the glossary and ADR formats; the glossary modes and who writes | `skills/understanding-with-docs/references/glossary-check.md` (check, in-run rule), `skills/understanding-with-docs/references/glossary-format.md` and `skills/understanding-with-docs/references/adr-format.md` (formats), `skills/understanding-with-docs/SKILL.md` (modes) |
 | Handoff documents: their folder, template, and pickup | `skills/handoff/SKILL.md` |
 | The review watch's standing grant, its state file, and replying to mentions | `skills/review-watch/SKILL.md` (Permissions), `skills/review-watch/references/data.md` |
 | External naming | `skills/vistack/principles/index.md` |
@@ -49,6 +50,7 @@ home and check that the pointers still describe it.
 | Advisor checkpoints and what each asks | `skills/advisor/SKILL.md` |
 | Ledger columns and decision vocabulary | `docs/guide/ledger-format.md` |
 | Rendering a report page | `skills/html-report/SKILL.md` |
+| Operator activity reports: period, scope, realm gate, metric definitions, and the trend rule | `skills/user-performance/SKILL.md`, `skills/user-performance/scripts/` |
 | Recording QA video, its evidence files, and media edits | `skills/qa-video/SKILL.md` |
 | The OTP login handshake, who asks the user, and the saved session's lifetime | `skills/qa-verify/SKILL.md` (OTP handshake) |
 | The per-file token limit, what it ignores, and the pre-commit hook | `skills/token-guard/SKILL.md` |

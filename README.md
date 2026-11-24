@@ -10,7 +10,7 @@ playbook, one role phase per slice, stopping at merge-ready.
 `vistack` is the identifier you install and invoke. **viStack** is what it is called in
 prose. Same thing. It runs on Claude Code, Codex, Grok Build, and OpenCode.
 
-**Version:** `0.36.0`
+**Version:** `0.39.0`
 
 **Contents:** [install](#install) · [usage](#usage) ·
 [QA evidence: screenshots and video](#qa-evidence-screenshots-and-video) ·
@@ -144,6 +144,32 @@ Keep <behaviour that must not change>.
 
 Omit the finish condition and viStack asks for it before starting an autonomous run. It is
 the one question it blocks on.
+
+#### Bare-name aliases (Claude Code)
+
+Claude Code lists plugin skills only as `/vistack:<name>`. A bare `/<name>` reaches a viStack
+skill only when nothing else claims the name: `/run` is Claude Code's bundled skill, and another
+installed plugin can ship `/qa-video`. An alias makes each bare name, such as `/qa-video` or
+`/review-pr`, always run viStack:
+
+```
+/vistack:aliases install
+```
+
+It writes `~/.claude/skills/<name>/SKILL.md` for every viStack skill and command, each one
+handing off to `/vistack:<name>`, which keeps working. `/vistack:aliases` with no argument
+shows what is installed, and `/vistack:aliases uninstall` removes only the aliases it wrote.
+
+- Claude Code's own command and skill names are skipped: `/run` replaces Claude Code's bundled
+  `/run` only after `/vistack:aliases install --replace run`, and `/advisor` stays the built-in
+  command. Other plugins' names are not checked, and the alias takes the bare name from them.
+- A name used by a skill or command in the `.claude/` of the current directory or a parent is
+  not written, because a personal skill would hide it; an alias already installed stays. A
+  skill or command of your own with that name is never touched.
+- `--replace`, `--skip`, and `--clear` persist, so a later plain `install` keeps your choices.
+- Rerun `/vistack:aliases install` after every plugin update. An alias for a skill that blocks
+  model invocation, such as `/improve`, reads the skill by the plugin's absolute path.
+- Codex is unchanged: invoke `$vistack:<name>`.
 
 ### A bug, with a reproduction required
 
@@ -728,7 +754,9 @@ invokes a principle must name the decision the principle changed.
 [`review-pr`](skills/review-pr/SKILL.md) (one review on another author's PR: posted as comments, left pending for you, or returned as feedback, with one-click suggestions; never approves) ·
 [`maintenance`](skills/maintenance/SKILL.md) (one change picked by production-incident risk, as one draft PR) ·
 [`crash-hunt`](skills/crash-hunt/SKILL.md) (fuzz the real app on loopback until it crashes, prove each crash by replay) ·
-[`understanding`](skills/understanding/SKILL.md) (how, why, teach, and recall answers in the thread, with a cross-host transcript search) ·
+[`understanding`](skills/understanding/SKILL.md) (how, why, teach, recall, and grill: answers and plan interviews in the thread, with a cross-host transcript search) ·
+[`understanding-with-docs`](skills/understanding-with-docs/SKILL.md) (you invoke it: learn a repository's domain language into a glossary and ADRs, by interview or from the code) ·
+[`user-performance`](skills/user-performance/SKILL.md) (your own commits, pull requests, reviews, comments, and issues for a period, as one page of charts with the trend) ·
 [`pruning-comments`](skills/pruning-comments/SKILL.md) (the comment policy and the pass that applies it to a diff) ·
 [`handoff`](skills/handoff/SKILL.md) (write or pick up a handoff document any host can resume) ·
 [`review-watch`](skills/review-watch/SKILL.md) (a 30-minute watch that reviews the PRs requesting you and answers the comments tagging you; never approves) ·
@@ -870,7 +898,8 @@ The equivalent interactive command is `/plugin update vistack`.
 claude plugin details vistack
 ```
 
-Then run `/plugin` and `/vistack` inside Claude Code.
+Then run `/plugin` and `/vistack` inside Claude Code. If you use bare-name aliases, rerun
+`/vistack:aliases install` so they point at the updated copy.
 
 If the marketplace was changed locally or the update is not found, reinstall explicitly:
 
@@ -941,7 +970,10 @@ evidence, and it will not substitute a green build for one.
 
 ## uninstall
 
+Remove the bare-name aliases first, while the plugin that wrote them is still installed:
+
 ```
+/vistack:aliases uninstall
 /plugin uninstall vistack
 ```
 
